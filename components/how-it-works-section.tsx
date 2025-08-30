@@ -34,7 +34,7 @@ const steps = [
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="py-20 bg-background">
+    <section id="how-it-works" className="py-20 bg-background px-6">
       <div className="container">
         <div className="mx-auto max-w-2xl text-center mb-16">
           <h2 className="font-serif text-3xl font-bold tracking-tight text-foreground sm:text-4xl">How LexsGO Works</h2>
