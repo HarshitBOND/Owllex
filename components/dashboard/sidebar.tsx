@@ -56,7 +56,7 @@ const Sidebar = () => {
                     <img className="w-28 h-11 " src="/word-logo.png" alt="Logo" />
                 </div>
             </div>
-            <div className="flex flex-1 flex-col gap-y-2.5 mt-14">
+            <div className="flex flex-col h-[75%] gap-y-2.5 mt-12">
                 {sidebarItems.map((item) => (
                     <div key={item.name} onClick={() => handleNavigation(item.href)}>
                         <div className={cn("flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90", pathname === item.href ? "border-sidebar-primary" : "")}>
@@ -66,20 +66,22 @@ const Sidebar = () => {
                     </div>
                 ))}
             </div>
-            <hr className="mb-4 mt-71" />
-            <Link href="/terms-of-use">
-                <div className="flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90 cursor-pointer">
-                    {!isOpen ? 
-                    <div className="flex items-center gap-x-0.5">
-                    <span className="ms-2">ToU</span>
-                    <ExternalLink size={12} />
-                    </div> :
-                    <div className="flex items-center gap-x-2">
-                    <p className="ms-5 whitespace-nowrap">Terms of Use</p>
-                    <ExternalLink size={16} />
-                    </div>}
-                </div>
-            </Link>
+            <div className="flex flex-col h-[20%] mt-auto">
+                <hr className="mb-4" />
+                <Link href="/terms-of-use">
+                    <div className="flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90 cursor-pointer">
+                        {!isOpen ? 
+                        <div className="flex items-center gap-x-0.5">
+                        <span className="ms-2">ToU</span>
+                        <ExternalLink size={12} />
+                        </div> :
+                        <div className="flex items-center gap-x-2">
+                        <p className="ms-5 whitespace-nowrap">Terms of Use</p>
+                        <ExternalLink size={16} />
+                        </div>}
+                    </div>
+                </Link>
+            </div>
         </div>
     </div>
   )

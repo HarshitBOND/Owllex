@@ -57,7 +57,7 @@ const Dashboard = () => {
                                 <div className="flex md:items-center items-start gap-x-2 md:p-2.5 p-4 border border-gray-200 mb-4 rounded-xl hover:bg-gray-200/90">
                                     <span className={cn("p-3 rounded-lg", `${item.color}`)}>{item.icon}</span>
                                     <div className="flex md:items-center w-full flex-col md:flex-row">
-                                        <div className={cn("flex flex-col items-start", !isOpen ? "md:w-36" : "w-26")}>
+                                        <div className={cn("flex flex-col items-start", !isOpen ? "md:w-30" : "w-26")}>
                                             <p className="font-semibold text-wrap">{item.name}</p>
                                             <p className="text-sm text-wrap">{item.description}</p>
                                         </div>
