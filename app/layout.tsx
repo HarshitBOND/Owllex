@@ -4,6 +4,7 @@ import { DM_Sans, Space_Grotesk } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
+import { SidebarProvider } from "@/contexts/SidebarContext"
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -35,7 +36,9 @@ export default function RootLayout({
     <html lang="en" className={`${dmSans.variable} ${spaceGrotesk.variable} antialiased`}>
       <body>
         <ClerkProvider>
-          {children}
+          <SidebarProvider>
+            {children}
+          </SidebarProvider>
           <Analytics />
         </ClerkProvider>
       </body>
