@@ -44,7 +44,7 @@ export function WhyChooseSection() {
       <div className="container">
         <div className="mx-auto max-w-2xl text-center mb-16">
           <h2 className="font-serif text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Why Legal Professionals Choose LexsGO
+            Why Legal Professionals Choose lexvert
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
             Built by legal experts and tech innovators to solve real problems in the legal industry.

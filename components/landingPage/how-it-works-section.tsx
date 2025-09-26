@@ -37,7 +37,7 @@ export function HowItWorksSection() {
     <section id="how-it-works" className="py-20 bg-background px-6">
       <div className="container">
         <div className="mx-auto max-w-2xl text-center mb-16">
-          <h2 className="font-serif text-3xl font-bold tracking-tight text-foreground sm:text-4xl">How LexsGO Works</h2>
+          <h2 className="font-serif text-3xl font-bold tracking-tight text-foreground sm:text-4xl">How lexvert Works</h2>
           <p className="mt-4 text-lg text-muted-foreground">
             Our integrated platform handles everything from document creation to delivery. One account, unlimited legal
             solutions.

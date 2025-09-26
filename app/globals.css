@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated color palette for LexsGO legal platform */
+  /* Updated color palette for lexvert legal platform */
   --background: #ffffff;
   --foreground: #475569;
   --card: #f8fafc;
@@ -113,7 +113,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Added custom fonts for LexsGO */
+  /* Added custom fonts for lexvert */
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Space Grotesk", ui-serif, Georgia, serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;

@@ -7,10 +7,9 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-                L
-              </div>
-              <span className="font-serif text-xl font-bold text-primary">LexsGO</span>
+              <span className="font-serif text-xl font-bold text-primary">
+                <img src="/logo.png" width={140} alt="" />
+              </span>
             </div>
             <p className="text-sm text-muted-foreground max-w-xs">
               Your complete legal ecosystem. Revolutionizing how you handle legal work with cutting-edge technology.
@@ -97,7 +96,7 @@ export function Footer() {
         </div>
 
         <div className="border-t mt-8 pt-8 flex flex-col sm:flex-row justify-between items-center">
-          <p className="text-sm text-muted-foreground">© 2024 LexsGO. All rights reserved.</p>
+          <p className="text-sm text-muted-foreground">© 2024 lexvert. All rights reserved.</p>
           <div className="flex items-center space-x-4 mt-4 sm:mt-0">
             <Scale className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Trusted Legal Technology</span>
