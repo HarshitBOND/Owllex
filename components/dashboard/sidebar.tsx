@@ -56,7 +56,7 @@ const Sidebar = () => {
                     <img className="w-28 h-11 " src="/word-logo.png" alt="Logo" />
                 </div>
             </div>
-            <div className="flex flex-col h-[75%] gap-y-2.5 mt-12">
+            <div className="flex flex-col h-[75%] gap-y-3 mt-12">
                 {sidebarItems.map((item) => (
                     <div key={item.name} onClick={() => handleNavigation(item.href)}>
                         <div className={cn("flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90", pathname === item.href ? "border-sidebar-primary" : "")}>
