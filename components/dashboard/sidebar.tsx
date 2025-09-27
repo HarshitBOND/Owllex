@@ -68,7 +68,7 @@ const Sidebar = () => {
             </div>
             <div className="flex flex-col h-[20%] mt-auto">
                 <hr className="mb-4" />
-                <Link href="/terms-of-use">
+                <Link href="/terms-of-use" target="_blank">
                     <div className="flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90 cursor-pointer">
                         {!isOpen ? 
                         <div className="flex items-center gap-x-0.5">
