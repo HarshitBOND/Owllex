@@ -45,7 +45,7 @@ const Sidebar = () => {
     }
 
     return (
-    <div className={cn("fixed top-0 left-0 h-screen transition-all duration-300 pt-5 z-50 border-r border-gray-200 group hidden md:block", isOpen ? "md:w-54" : "md:w-13.5")}>
+    <div className={cn("fixed top-0 left-0 h-screen transition-all duration-300 pt-5 z-50 border-r border-gray-200 group hidden lg:block", isOpen ? "lg:w-54" : "lg:w-13.5")}>
         <div className="absolute top-10 -right-2.5 p-1 border-1 shadow-md border-gray-400 bg-white rounded-md z-60 hidden group-hover:block cursor-pointer" onClick={() => toggleSidebar()}>
             <ChevronRight size={11} className={cn(isOpen ? "rotate-180" : "rotate-0")} />
         </div>
