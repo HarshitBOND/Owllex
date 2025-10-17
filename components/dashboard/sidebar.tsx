@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { ChevronRight, FileSearch, FileText, LayoutDashboard, ShieldHalf, ExternalLink } from "lucide-react"
+import { ChevronRight, FileSearch, FileText, LayoutDashboard, ShieldHalf, ExternalLink, UsersRound } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
@@ -22,6 +22,11 @@ const Sidebar = () => {
             name: "Dashboard",
             icon: <LayoutDashboard size={20} />,
             href: "/dashboard"
+        },
+        {
+            name: "My Clients",
+            icon: <UsersRound size={19} />,
+            href: "/my-clients"
         },
         {
             name: "Track Case",
@@ -58,7 +63,7 @@ const Sidebar = () => {
             </div>
             <div className="flex flex-col h-[75%] gap-y-3 mt-12">
                 {sidebarItems.map((item) => (
-                    <div key={item.name} onClick={() => handleNavigation(item.href)}>
+                    <div className="cursor-pointer" key={item.name} onClick={() => handleNavigation(item.href)}>
                         <div className={cn("flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90", pathname === item.href ? "border-sidebar-primary" : "")}>
                             <span className="ms-4.5">{item.icon}</span>
                             <p className="font-semibold ms-2 whitespace-nowrap">{item.name}</p>

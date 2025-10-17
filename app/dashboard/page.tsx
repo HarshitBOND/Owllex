@@ -99,7 +99,7 @@ const Dashboard = () => {
                         <div className="flex md:flex-row lg:flex-col flex-col gap-x-2">
                             {quickActions.map((item) => (
                                 <div key={item.name}>
-                                    <div className="flex md:items-center items-start shadow-md gap-x-2 md:p-2.5 p-4 border border-gray-200 mb-4 rounded-xl hover:bg-gray-200/90">
+                                    <div className="flex md:items-center items-start shadow-md gap-x-2 md:p-2.5 p-4 border border-gray-200 mb-4 rounded-xl hover:bg-gray-200/90 overflow-hidden">
                                         <span className={cn("p-3 rounded-lg", `${item.color}`)}>{item.icon}</span>
                                         <div className="flex md:items-center w-full flex-col lg:flex-row">
                                             <div className={cn("flex flex-col items-start", !isOpen ? "lg:w-30" : "w-26")}>
