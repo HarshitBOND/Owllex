@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { ChevronRight, FileSearch, FileText, LayoutDashboard, ShieldHalf, ExternalLink, UsersRound, ReceiptText } from "lucide-react"
+import { ChevronRight, FileSearch, FileText, LayoutDashboard, ShieldHalf, ExternalLink, UsersRound, ReceiptText, WandSparkles } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
@@ -37,6 +37,11 @@ const Sidebar = () => {
             name: "Invoices",
             icon: <ReceiptText size={20} />,
             href: "/invoices"
+        },
+        {
+            name: "Suggestions",
+            icon: <WandSparkles size={20} />,
+            href: "/suggestions"
         },
         {
             name: "Generate Affidavit",

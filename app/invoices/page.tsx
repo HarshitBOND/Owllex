@@ -7,6 +7,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import Sidebar from "@/components/dashboard/sidebar"
 import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
@@ -199,7 +208,7 @@ const Invoices = () => {
                     </DropdownMenu>
                 </div>
                 <TabsContent value="raised">
-                    <div className="w-full flex flex-col gap-y-2">
+                    <div className="w-full flex flex-col gap-y-2 mb-2">
                         {invoiceData.raised.length > 0 ? invoiceData.raised.map((invoice) => (
                             <div key={invoice.id} className="h-22 w-full bg-background shadow-sm p-4 border rounded-lg">
                                 <div className="flex items-center h-full justify-between">
@@ -229,9 +238,31 @@ const Invoices = () => {
                             </div>
                         )}
                     </div>
+                    <Pagination>
+                    <PaginationContent>
+                        <PaginationItem>
+                        <PaginationPrevious href="#" />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">1</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#" isActive>2</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">3</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationEllipsis />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationNext href="#" />
+                        </PaginationItem>
+                    </PaginationContent>
+                    </Pagination>
                 </TabsContent>
                 <TabsContent value="paid">
-                    <div className="w-full flex flex-col gap-y-2">
+                    <div className="w-full flex flex-col gap-y-2 mb-2">
                         {invoiceData.paid.length > 0 ? invoiceData.paid.map((invoice) => (
                             <div key={invoice.id} className="h-22 w-full bg-background shadow-sm p-4 border rounded-lg">
                                 <div className="flex items-center h-full justify-between">
@@ -261,9 +292,31 @@ const Invoices = () => {
                             </div>
                         )}
                     </div>
+                    <Pagination>
+                    <PaginationContent>
+                        <PaginationItem>
+                        <PaginationPrevious href="#" />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">1</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#" isActive>2</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">3</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationEllipsis />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationNext href="#" />
+                        </PaginationItem>
+                    </PaginationContent>
+                    </Pagination>
                 </TabsContent>
                 <TabsContent value="pending">
-                    <div className="w-full flex flex-col gap-y-2">
+                    <div className="w-full flex flex-col gap-y-2 mb-2">
                         {invoiceData.pending.length > 0 ? invoiceData.pending.map((invoice) => (
                             <div key={invoice.id} className="h-22 w-full bg-background shadow-sm p-4 border rounded-lg">
                                 <div className="flex items-center h-full justify-between">
@@ -293,9 +346,31 @@ const Invoices = () => {
                             </div>
                         )}
                     </div>
+                    <Pagination>
+                    <PaginationContent>
+                        <PaginationItem>
+                        <PaginationPrevious href="#" />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">1</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#" isActive>2</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">3</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationEllipsis />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationNext href="#" />
+                        </PaginationItem>
+                    </PaginationContent>
+                    </Pagination>
                 </TabsContent>
                 <TabsContent value="scheduled">
-                    <div className="w-full flex flex-col gap-y-2">
+                    <div className="w-full flex flex-col gap-y-2 mb-2">
                         {invoiceData.scheduled.length > 0 ? invoiceData.scheduled.map((invoice) => (
                             <div key={invoice.id} className="h-22 w-full bg-background shadow-sm p-4 border rounded-lg">
                                 <div className="flex items-center h-full justify-between">
@@ -325,6 +400,28 @@ const Invoices = () => {
                             </div>
                         )}
                     </div>
+                    <Pagination>
+                    <PaginationContent>
+                        <PaginationItem>
+                        <PaginationPrevious href="#" />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">1</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#" isActive>2</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationLink href="#">3</PaginationLink>
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationEllipsis />
+                        </PaginationItem>
+                        <PaginationItem>
+                        <PaginationNext href="#" />
+                        </PaginationItem>
+                    </PaginationContent>
+                    </Pagination>
                 </TabsContent>
             </Tabs>        
         </div>
