@@ -15,11 +15,11 @@ const Dashboard = () => {
     const router = useRouter()
     const quickActions = [
         {
-            name: "Track A Case",
+            name: "My Cases",
             description: "Track the status of your case",
             icon: <FileSearch className="text-white" size={22} />,
             href: "/case-tracking",
-            cta: "Track Case",
+            cta: "My Cases",
             color: "bg-blue-500"
         },
         {
@@ -90,10 +90,10 @@ const Dashboard = () => {
                 </div>
 
                 <div className="w-full lg:flex gap-x-4"> 
-                    <div className={cn("min-h-107.5 h-fit min-w-10 w-full bg-white p-4 rounded-xl border border-gray-200 shadow-lg mb-6 md:mb-0 overflow-auto", !isOpen ? "lg:w-[68%]" : "lg:w-[66%]")}>
-                        <Calendar />
+                    <div className={cn("min-h-107.5 h-full min-w-10 w-full bg-white p-4 rounded-xl border border-gray-200 shadow-lg mb-6 md:mb-0 overflow-auto", !isOpen ? "lg:w-[68%]" : "lg:w-[66%]")}>
+                        <Calendar isOpen={isOpen} />
                     </div>
-                    <div className={cn("h-fit min-w-10 w-full md:bg-white md:p-4 p-2 rounded-xl md:border border-gray-200 md:shadow-lg overflow-auto mt-5 lg:mt-0", !isOpen ? "lg:w-[32%]" : "lg:w-[34%]")}>
+                    <div className={cn("h-full min-w-10 w-full md:bg-white md:p-4 p-2 rounded-xl md:border border-gray-200 md:shadow-lg overflow-auto mt-5 lg:mt-0", !isOpen ? "lg:w-[32%]" : "lg:w-[34%]")}>
                         <h2 className="text-xl font-semibold">Quick Actions</h2>
                         <p className="text-sm mb-8">Frequently used services</p>
                         <div className="flex md:flex-row lg:flex-col flex-col gap-x-2">

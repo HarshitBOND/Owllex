@@ -4,10 +4,16 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Pagination,
   PaginationContent,
@@ -23,7 +29,7 @@ import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
-import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus } from "lucide-react"
+import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface Client {
@@ -32,6 +38,7 @@ interface Client {
     email: string;
     phone: string;
     address: string;
+    createdAt: Date;
 }
 
 const MyClients = () => {
@@ -68,47 +75,238 @@ const MyClients = () => {
         email: "john.doe@example.com",
         phone: "123-456-7890",
         address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
       },
+            {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      },      {
+        id: "1",
+        name: "John Doe",
+        email: "john.doe@example.com",
+        phone: "123-456-7890",
+        address: "123 Main St, Anytown, USA",
+        createdAt: new Date(),
+      }
     ])
     return (
     <div className="flex">
         <Sidebar />
         <div className={cn("bg-[#F3F5F9] min-h-screen w-full md:p-6 p-2 transition-all duration-300", isOpen ? "md:ml-54" : "md:ml-13.5")}>
             <Navbar location="My Clients" />
-            
-            <div className="w-full gap-4 flex items-center justify-between mb-4 flex-col md:flex-row">
-                {quickOptions.map((item) => (
-                    <div key={item.name} className="flex flex-col md:w-[24%] w-full min-w-38 min-h-36 border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-300 p-5">
-                        <div className="flex w-full items-center justify-between">
-                            <h3>{item.name}</h3>
-                            <span>{item.icon}</span>
-                        </div>
-                        <p className="text-lg font-semibold mt-auto">{item.value}</p>
-                        <p className="text-sm">{item.description}</p>
-                    </div>
-                ))}
-            </div>
-            <div className="bg-background rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 p-4">
-                <div className="flex items-center justify-between">
-                    <p className="whitespace-nowrap text-lg font-semibold">Client Details</p>
-                    <div className="flex items-center gap-x-2">
+                <div className="flex items-center">
+                    <div className="flex items-center gap-x-2 ms-auto">
                       <Input placeholder="Search" className="border border-gray-200 rounded-lg bg-gray-50 w-70" />
-                      <Button variant="outline"><FileUp /></Button>
-                      <Button variant="outline"><FileDown /></Button>
-                      <Button variant="outline"><FunnelPlus /></Button>
-                      <Button variant="outline"><ArrowDownNarrowWide /></Button>
+                      <Button variant="outline"><FileUp /> Export</Button>
+                      <Button variant="outline"><FileDown /> Import</Button>
+                      <Button variant="outline"><FunnelPlus /> Filter</Button>
+                      <Button variant="outline"><ArrowDownNarrowWide /> Sort</Button>
                       <Button variant="secondary">Add New Client</Button>
                     </div>
                 </div>
-                <hr className="my-4" />
-                <Table className="min-h-57">
+                <hr className="my-2" />
+                <Table className="min-h-113">
                   <TableBody>
                       {clients.length > 0 ? clients.map((client) => (
-                      <TableRow key={client.id}>
-                          <TableCell>{client.name}</TableCell>
-                          <TableCell>{client.email}</TableCell>
-                          <TableCell>{client.phone}</TableCell>
-                          <TableCell>{client.address}</TableCell>
+                      <TableRow key={client.id} className="h-24">
+                          <TableCell colSpan={4}>
+                            <div className="flex flex-col mb-2 gap-y-1">
+                              <div className="flex items-center justify-between">
+                                <p>Created On: {client.createdAt.toDateString()}</p>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="outline">Actions <ChevronDown /></Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent>
+                                    <DropdownMenuItem>Edit</DropdownMenuItem>
+                                    <DropdownMenuItem>Delete</DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                              <h2 className="text-2xl font-bold">{client.name}</h2>
+                              <p>{client.email}</p>
+                              <p>Contact Number: {client.phone}</p>
+                            </div>
+                          </TableCell>
                       </TableRow>
                       )) : (
                           <TableRow>
@@ -119,7 +317,7 @@ const MyClients = () => {
                       )}
                   </TableBody>
                 </Table>
-                <hr className="my-4" />
+                <hr className="my-2" />
                 <Pagination>
                   <PaginationContent>
                     <PaginationItem>
@@ -142,7 +340,6 @@ const MyClients = () => {
                     </PaginationItem>
                   </PaginationContent>
                 </Pagination>
-            </div>
         </div>
     </div>
   )

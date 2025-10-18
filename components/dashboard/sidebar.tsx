@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { ChevronRight, FileSearch, FileText, LayoutDashboard, ShieldHalf, ExternalLink, UsersRound } from "lucide-react"
+import { ChevronRight, FileSearch, FileText, LayoutDashboard, ShieldHalf, ExternalLink, UsersRound, ReceiptText } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
@@ -24,14 +24,19 @@ const Sidebar = () => {
             href: "/dashboard"
         },
         {
+            name: "My Cases",
+            icon: <FileSearch size={20} />,
+            href: "/case-tracking"
+        },
+        {
             name: "My Clients",
             icon: <UsersRound size={19} />,
             href: "/my-clients"
         },
         {
-            name: "Track Case",
-            icon: <FileSearch size={20} />,
-            href: "/case-tracking"
+            name: "Invoices",
+            icon: <ReceiptText size={20} />,
+            href: "/invoices"
         },
         {
             name: "Generate Affidavit",
