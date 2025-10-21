@@ -1,15 +1,5 @@
 import mongoose from "mongoose";
 
-const ClientSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true },
-    address: { type: String, required: true },
-  },
-  { _id: false }
-);
-
 const UserSchema = new mongoose.Schema(
   {
     clerkUid: {
@@ -29,11 +19,21 @@ const UserSchema = new mongoose.Schema(
       default: null,
     },
     cases: {
-      type: [String],
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Case",
+        }
+      ],
       default: [],
     },
     clients: {
-      type: [ClientSchema],
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Client",
+        }
+      ],
       default: [],
     },
     signupDate: {
