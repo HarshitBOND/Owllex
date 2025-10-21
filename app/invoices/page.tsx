@@ -160,7 +160,8 @@ const Invoices = () => {
     return (
     <div className="flex">
         <Sidebar />
-        <div className={cn("bg-[#F3F5F9] min-h-screen w-full md:p-6 p-2 transition-all duration-300", isOpen ? "md:ml-54" : "md:ml-13.5")}>
+        <div className={cn("bg-[#F3F5F9] min-h-screen w-full md:p-6 p-2 transition-all duration-300", isOpen ? "lg:ml-54" : "lg:ml-13.5")}>
+            <div className="max-w-[1400px] w-full mx-auto">
             <Navbar location="Invoices" />
 
             <div className="h-35 w-full bg-background border-2 border-[#F3F5F9] rounded-lg mb-4 flex-flex-col">
@@ -423,7 +424,8 @@ const Invoices = () => {
                     </PaginationContent>
                     </Pagination>
                 </TabsContent>
-            </Tabs>        
+            </Tabs>       
+            </div>
         </div>
     </div>
   )
