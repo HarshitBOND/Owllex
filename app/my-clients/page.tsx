@@ -68,9 +68,17 @@ const MyClients = () => {
     const { isOpen } = useSidebar();
     const [clients, setClients] = useState<Client[]>([])
     const [clientsLoading, setClientsLoading] = useState(true)
-    const { user } = useUser()
-    if (!user) {
-        return redirect("/");
+    const { isLoaded, isSignedIn } = useUser()
+    if (!isLoaded) {
+        return (
+          <div className="flex items-center justify-center h-screen">
+            <LoaderCircle className="text-gray-500 animate-spin" size={18} />
+            <p className="text-center text-gray-500">Loading...</p>
+          </div>
+        )
+    }
+    if (!isSignedIn) {
+        return redirect("/")
     }
     const router = useRouter()
     useEffect(() => {

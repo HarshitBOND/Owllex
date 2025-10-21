@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { Calendar1, ChevronDown, NotebookPen } from "lucide-react"
+import { Calendar1, ChevronDown, LoaderCircle, NotebookPen } from "lucide-react"
 import { Calendar22 } from "@/components/common/datePick"
 import { useState } from "react"
 import { useUser } from "@clerk/nextjs"
@@ -53,7 +53,6 @@ interface InvoiceData {
 
 const Invoices = () => {
     const { isOpen } = useSidebar()
-    const { user } = useUser()
     const [invoiceData, setInvoiceData] = useState<InvoiceData>({
         raised: [
             {
@@ -160,8 +159,17 @@ const Invoices = () => {
             }
         ]
     })
-    if (!user) {
-        return redirect("/");
+    const { isLoaded, isSignedIn } = useUser()
+    if (!isLoaded) {
+        return (
+          <div className="flex items-center justify-center h-screen">
+            <LoaderCircle className="text-gray-500 animate-spin" size={18} />
+            <p className="text-center text-gray-500">Loading...</p>
+          </div>
+        )
+    }
+    if (!isSignedIn) {
+        return redirect("/")
     }
 
     return (

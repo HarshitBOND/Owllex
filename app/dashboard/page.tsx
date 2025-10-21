@@ -5,7 +5,7 @@ import Navbar from "@/components/dashboard/navbar"
 import Calendar from "@/components/dashboard/calendar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
-import { FileSearch, FileText, ShieldHalf, Calendar as CalendarIcon, MessageCircle, Truck } from "lucide-react"
+import { FileSearch, FileText, ShieldHalf, Calendar as CalendarIcon, MessageCircle, Truck, LoaderCircle } from "lucide-react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -15,9 +15,17 @@ import { redirect } from "next/navigation"
 const Dashboard = () => {
     const { isOpen } = useSidebar()
     const router = useRouter()
-    const { user } = useUser()
-    if (!user) {
-        return redirect("/");
+    const { isLoaded, isSignedIn } = useUser()
+    if (!isLoaded) {
+        return (
+          <div className="flex items-center justify-center h-screen">
+            <LoaderCircle className="text-gray-500 animate-spin" size={18} />
+            <p className="text-center text-gray-500">Loading...</p>
+          </div>
+        )
+    }
+    if (!isSignedIn) {
+        return redirect("/")
     }
     const quickActions = [
         {

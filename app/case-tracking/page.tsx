@@ -27,7 +27,7 @@ import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
-import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown } from "lucide-react"
+import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
@@ -42,9 +42,17 @@ interface Client {
 }
 
 const CaseTracking = () => {
-    const { user } = useUser();
-    if (!user) {
-        return redirect("/");
+    const { isLoaded, isSignedIn } = useUser()
+    if (!isLoaded) {
+        return (
+          <div className="flex items-center justify-center h-screen">
+            <LoaderCircle className="text-gray-500 animate-spin" size={18} />
+            <p className="text-center text-gray-500">Loading...</p>
+          </div>
+        )
+    }
+    if (!isSignedIn) {
+        return redirect("/")
     }
     const { isOpen } = useSidebar();
     const [quickOptions, setQuickOptions] = useState([
