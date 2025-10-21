@@ -26,6 +26,8 @@ import { Button } from "@/components/ui/button"
 import { Calendar1, ChevronDown, NotebookPen } from "lucide-react"
 import { Calendar22 } from "@/components/common/datePick"
 import { useState } from "react"
+import { useUser } from "@clerk/nextjs"
+import { redirect } from "next/navigation"
 
 interface Case {
     id: string;
@@ -51,6 +53,7 @@ interface InvoiceData {
 
 const Invoices = () => {
     const { isOpen } = useSidebar()
+    const { user } = useUser()
     const [invoiceData, setInvoiceData] = useState<InvoiceData>({
         raised: [
             {
@@ -157,6 +160,10 @@ const Invoices = () => {
             }
         ]
     })
+    if (!user) {
+        return redirect("/");
+    }
+
     return (
     <div className="flex">
         <Sidebar />

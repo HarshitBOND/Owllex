@@ -8,7 +8,7 @@ import { Footer } from "@/components/layout/footer"
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen max-w-[1400px] mx-auto">
       <Header />
       <HeroSection />
       <ServicesGrid />

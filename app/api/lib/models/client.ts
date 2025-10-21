@@ -19,7 +19,7 @@ const CustomFieldSchema = new mongoose.Schema(
   }
 );
 
-const ClientSchema = new mongoose.Schema(
+export const ClientSchema = new mongoose.Schema(
   {
     salutation: { type: String, required: true },
     cases: { type: [{
@@ -32,11 +32,13 @@ const ClientSchema = new mongoose.Schema(
     contact: { type: String, required: true },
     alternateContact: { type: String },
     gstin: { type: String },
-    address: { type: [AddressSchema], default: [] },
+    address: { type: AddressSchema, default: {} },
     customFields: { type: [CustomFieldSchema], default: [] },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   }
 );
 
-const Client = mongoose.model("Client", ClientSchema);
+const Client = mongoose.models.Client || mongoose.model("Client", ClientSchema);
 
 export default Client;

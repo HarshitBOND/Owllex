@@ -75,7 +75,7 @@ const Sidebar = () => {
             <div className="flex flex-col h-[75%] gap-y-3 mt-12">
                 {sidebarItems.map((item) => (
                     <div className="cursor-pointer" key={item.name} onClick={() => handleNavigation(item.href)}>
-                        <div className={cn("flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90", pathname === item.href ? "border-sidebar-primary" : "")}>
+                        <div className={cn("flex items-center gap-x-2 h-10 border-r-2 border-transparent hover:bg-gray-200/90", pathname.includes(item.href) ? "border-sidebar-primary" : "")}>
                             <span className="ms-4.5">{item.icon}</span>
                             <p className="font-semibold ms-2 whitespace-nowrap">{item.name}</p>
                         </div>

@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils"
 import { useState } from "react"
 import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useUser } from "@clerk/nextjs"
+import { redirect } from "next/navigation"
 
 interface Client {
     id: string;
@@ -40,6 +42,10 @@ interface Client {
 }
 
 const CaseTracking = () => {
+    const { user } = useUser();
+    if (!user) {
+        return redirect("/");
+    }
     const { isOpen } = useSidebar();
     const [quickOptions, setQuickOptions] = useState([
         {
@@ -266,6 +272,8 @@ const CaseTracking = () => {
         createdAt: new Date(),
       }
     ])
+
+
     return (
     <div className="flex">
         <Sidebar />

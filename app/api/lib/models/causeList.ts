@@ -15,7 +15,6 @@ const causeListSchema = new mongoose.Schema({
 
 });
 
-const CauseList =
-    mongoose.models.CauseList || mongoose.model("case", causeListSchema);
+const CauseList = mongoose.models.CauseList || mongoose.model("case", causeListSchema);
 
 export default CauseList;

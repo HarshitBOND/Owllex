@@ -9,10 +9,16 @@ import { FileSearch, FileText, ShieldHalf, Calendar as CalendarIcon, MessageCirc
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { useUser } from "@clerk/nextjs"
+import { redirect } from "next/navigation"
 
 const Dashboard = () => {
     const { isOpen } = useSidebar()
     const router = useRouter()
+    const { user } = useUser()
+    if (!user) {
+        return redirect("/");
+    }
     const quickActions = [
         {
             name: "My Cases",

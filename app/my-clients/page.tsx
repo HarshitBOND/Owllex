@@ -26,221 +26,72 @@ import Sidebar from "@/components/dashboard/sidebar"
 import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
-import { useState } from "react"
-import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown } from "lucide-react"
+import { useState, useEffect } from "react"
+import { FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useUser } from "@clerk/nextjs"
+import { redirect } from "next/navigation"
+import { useRouter } from "next/navigation"
+
+interface CustomField {
+    name: string;
+    value: string;
+}
+
+interface Address {
+    building: string;
+    street: string;
+    city: string;
+    district: string;
+    state: string;
+    pincode: string;
+    country: string;
+}
 
 interface Client {
-    id: string;
+    _id: string;
+    salutation: string;
     name: string;
+    company: string;
+    group: string;
     email: string;
-    phone: string;
-    address: string;
+    contact: string;
+    contactAlt: string;
+    gstin: string;
+    address: Address;
+    customFields: CustomField[];
     createdAt: Date;
+    updatedAt: Date;
 }
 
 const MyClients = () => {
     const { isOpen } = useSidebar();
-    const [clients, setClients] = useState<Client[]>([
-      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },
-            {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      },      {
-        id: "1",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        phone: "123-456-7890",
-        address: "123 Main St, Anytown, USA",
-        createdAt: new Date(),
-      }
-    ])
+    const [clients, setClients] = useState<Client[]>([])
+    const [clientsLoading, setClientsLoading] = useState(true)
+    const { user } = useUser()
+    if (!user) {
+        return redirect("/");
+    }
+    const router = useRouter()
+    useEffect(() => {
+        const fetchClients = async () => {
+            const response = await fetch(`/api/userdetails/clients`)
+            const data = await response.json()
+            setClients(data.userClients?.clients ?? [])
+            setClientsLoading(false)
+        }
+        try {
+            fetchClients()
+        } catch (error) {
+            setClientsLoading(false)
+            console.error(error)
+        }
+    }, [])
+
+    const handleAddClient = () => {
+        router.push("/my-clients/add")
+    }
+
     return (
     <div className="flex">
         <Sidebar />
@@ -255,19 +106,22 @@ const MyClients = () => {
                         <Button variant="outline"><FileDown /> Import</Button>
                         <Button variant="outline"><FunnelPlus /> Filter</Button>
                         <Button variant="outline"><ArrowDownNarrowWide /> Sort</Button>
-                        <Button variant="secondary">Add New Client</Button>
+                        <Button onClick={() => handleAddClient()} variant="secondary">
+                          Add New Client
+                        </Button>
                       </div>
                     </div>
                 </div>
                 <hr className="my-2" />
-                <Table className="min-h-113">
+                <div className="min-h-113">
+                <Table>
                   <TableBody>
                       {clients.length > 0 ? clients.map((client) => (
-                      <TableRow key={client.id} className="h-24">
-                          <TableCell colSpan={4}>
+                      <TableRow key={client._id} className="h-24">
+                          <TableCell colSpan={4} className="h-24">
                             <div className="flex flex-col mb-2 gap-y-1">
                               <div className="flex items-center justify-between">
-                                <p>Created On: {client.createdAt.toDateString()}</p>
+                                <p>Created On: {new Date(client.createdAt).toDateString()}</p>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="outline">Actions <ChevronDown /></Button>
@@ -280,19 +134,29 @@ const MyClients = () => {
                               </div>
                               <h2 className="text-2xl font-bold">{client.name}</h2>
                               <p>{client.email}</p>
-                              <p>Contact Number: {client.phone}</p>
+                              <p>Contact Number: {client.contact}</p>
                             </div>
                           </TableCell>
                       </TableRow>
-                      )) : (
-                          <TableRow>
-                              <TableCell colSpan={4} className="h-24 text-center">
-                                  No clients found
-                              </TableCell>
-                          </TableRow>
+                      )) : clientsLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center">
+                            <div className="h-100 flex items-center justify-center gap-x-1">
+                              <LoaderCircle className="text-gray-500 animate-spin" size={18} />
+                              <p className="text-center text-gray-500">Loading...</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center">
+                            No clients found
+                          </TableCell>
+                        </TableRow>
                       )}
                   </TableBody>
                 </Table>
+                </div>
                 <hr className="my-2" />
                 <Pagination>
                   <PaginationContent>
