@@ -21,8 +21,7 @@ export async function POST(req: NextRequest) {
     return new Response("Missing svix headers", { status: 400 });
   }
 
-  const payload = await req.json();
-  const body = JSON.stringify(payload);
+  const body = await req.text();
 
   const wh = new Webhook(WEBHOOK_SECRET);
 
