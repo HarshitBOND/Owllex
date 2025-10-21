@@ -42,17 +42,18 @@ const Sidebar = () => {
             name: "Suggestions",
             icon: <WandSparkles size={20} />,
             href: "/suggestions"
-        },
-        {
-            name: "Generate Affidavit",
-            icon: <FileText size={20} />,
-            href: "/generate-affidavit"
-        },
-        {
-            name: "Report A Fraud",
-            icon: <ShieldHalf size={20} />,
-            href: "/report-fraud"
-        },
+        }
+        // ,
+        // {
+        //     name: "Generate Affidavit",
+        //     icon: <FileText size={20} />,
+        //     href: "/generate-affidavit"
+        // },
+        // {
+        //     name: "Report A Fraud",
+        //     icon: <ShieldHalf size={20} />,
+        //     href: "/report-fraud"
+        // },
     ]
 
     const handleNavigation = (href: string) => {

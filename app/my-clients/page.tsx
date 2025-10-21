@@ -41,31 +41,6 @@ interface Client {
 
 const MyClients = () => {
     const { isOpen } = useSidebar();
-    const [quickOptions, setQuickOptions] = useState([
-        {
-            name: "Active Documents",
-            description: "Documents is progress",
-            value: 0,
-            icon: <FileText color="blue" className="text-white" size={18} />,
-        },
-        {
-            name: "Consultations",
-            description: "Scheduled this week",
-            value: 0,
-            icon: <MessageCircle color="green" className="text-white" size={18} />,
-        },        {
-            name: "Court Dates",
-            description: "Upcoming hearings",
-            value: 0,
-            icon: <CalendarIcon color="orange" className="text-white" size={18} />,
-        },
-        {
-            name: "Deliveries",
-            description: "Completed this month",
-            value: 0,
-            icon: <Truck color="violet" className="text-white" size={18} />,
-        },
-    ])
     const [clients, setClients] = useState<Client[]>([
       {
         id: "1",
@@ -272,13 +247,15 @@ const MyClients = () => {
         <div className={cn("bg-[#F3F5F9] min-h-screen w-full md:p-6 p-2 transition-all duration-300", isOpen ? "md:ml-54" : "md:ml-13.5")}>
             <Navbar location="My Clients" />
                 <div className="flex items-center">
-                    <div className="flex items-center gap-x-2 ms-auto">
-                      <Input placeholder="Search" className="border border-gray-200 rounded-lg bg-gray-50 w-70" />
-                      <Button variant="outline"><FileUp /> Export</Button>
-                      <Button variant="outline"><FileDown /> Import</Button>
-                      <Button variant="outline"><FunnelPlus /> Filter</Button>
-                      <Button variant="outline"><ArrowDownNarrowWide /> Sort</Button>
-                      <Button variant="secondary">Add New Client</Button>
+                    <div className="flex items-center gap-x-2 w-full">
+                      <Input placeholder="Search" className="border border-gray-200 rounded-lg bg-gray-50 w-80" />
+                      <div className="flex items-center gap-x-2 ms-auto">
+                        <Button variant="outline"><FileUp /> Export</Button>
+                        <Button variant="outline"><FileDown /> Import</Button>
+                        <Button variant="outline"><FunnelPlus /> Filter</Button>
+                        <Button variant="outline"><ArrowDownNarrowWide /> Sort</Button>
+                        <Button variant="secondary">Add New Client</Button>
+                      </div>
                     </div>
                 </div>
                 <hr className="my-2" />
