@@ -4,9 +4,22 @@ import Sidebar from "@/components/dashboard/sidebar"
 import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
+import { useUser } from "@clerk/nextjs"
+import { redirect } from "next/navigation"
 
 const Suggestions = () => {
     const { isOpen } = useSidebar()
+    const { isLoaded, isSignedIn } = useUser()
+    if (!isLoaded) {
+        return (
+          <div className="flex items-center justify-center min-h-screen">
+              <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
+          </div>
+        )
+    }
+    if (!isSignedIn) {
+        return redirect("/")
+    }
     return (
     <div className="flex">
         <Sidebar />

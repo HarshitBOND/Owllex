@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 import { useRouter } from "next/navigation"
+import { AlertPopup } from "@/components/common/AlertPopup"
 
 interface CustomField {
     name: string;
@@ -69,18 +70,9 @@ const MyClients = () => {
     const [clients, setClients] = useState<Client[]>([])
     const [clientsLoading, setClientsLoading] = useState(true)
     const { isLoaded, isSignedIn } = useUser()
-    if (!isLoaded) {
-        return (
-          <div className="flex items-center justify-center h-screen">
-            <LoaderCircle className="text-gray-500 animate-spin" size={18} />
-            <p className="text-center text-gray-500">Loading...</p>
-          </div>
-        )
-    }
-    if (!isSignedIn) {
-        return redirect("/")
-    }
+    const [trigger, setTrigger] = useState(0)
     const router = useRouter()
+
     useEffect(() => {
         const fetchClients = async () => {
             const response = await fetch(`/api/userdetails/clients`)
@@ -94,10 +86,45 @@ const MyClients = () => {
             setClientsLoading(false)
             console.error(error)
         }
-    }, [])
+    }, [trigger])
+
+    if (!isLoaded) {
+        return (
+          <div className="flex items-center justify-center min-h-screen">
+              <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
+          </div>
+        )
+    }
+
+    if (!isSignedIn) {
+        return redirect("/")
+    }
+
+    const handleClientView = (clientId: string) => {
+        router.push(`/my-clients/view/${clientId}`)
+    }
 
     const handleAddClient = () => {
         router.push("/my-clients/add")
+    }
+
+    const handleDeleteClient = (clientId: string) => {
+        const deleteClient = async () => {
+            const response = await fetch(`/api/userdetails/clients?id=${clientId}`, {
+                method: "DELETE"
+            })
+            if (!response.ok) {
+                throw new Error("Failed to delete client")
+            }
+            alert("Client deleted successfully")
+            setTrigger((prev) => prev + 1)
+        }
+        try {
+            deleteClient()
+        } catch (error) {
+            console.error(error)
+            alert("Failed to delete client")
+        }
     }
 
     return (
@@ -125,18 +152,20 @@ const MyClients = () => {
                 <Table>
                   <TableBody>
                       {clients.length > 0 ? clients.map((client) => (
-                      <TableRow key={client._id} className="h-24">
-                          <TableCell colSpan={4} className="h-24">
+                      <TableRow key={client._id} className="cursor-pointer">
+                          <TableCell colSpan={4} onClick={() => handleClientView(client._id)}>
                             <div className="flex flex-col mb-2 gap-y-1">
                               <div className="flex items-center justify-between">
                                 <p>Created On: {new Date(client.createdAt).toDateString()}</p>
-                                <DropdownMenu>
+                                <DropdownMenu >
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="outline">Actions <ChevronDown /></Button>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent>
-                                    <DropdownMenuItem>Edit</DropdownMenuItem>
-                                    <DropdownMenuItem>Delete</DropdownMenuItem>
+                                  <DropdownMenuContent onClick={(e) => {e.stopPropagation()}}>
+                                    <DropdownMenuItem onClick={() => {router.push(`/my-clients/edit/${client._id}`)}}>Edit</DropdownMenuItem>
+                                    <AlertPopup  handleDeleteClient={() => handleDeleteClient(client._id)}>
+                                      <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>Delete</DropdownMenuItem>
+                                    </AlertPopup>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>

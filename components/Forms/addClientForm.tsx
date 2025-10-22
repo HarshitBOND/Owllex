@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "../ui/button"
 import { Loader2, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 interface CustomField {
@@ -42,7 +42,7 @@ interface Client {
     updatedAt: Date;
 }
 
-const AddClientForm = () => {
+const AddClientForm = ({ id }: { id?: string }) => {
 
     const [client, setClient] = useState<Client>({
         salutation: "mr",
@@ -69,6 +69,34 @@ const AddClientForm = () => {
     const [loading, setLoading] = useState(false)
     const router = useRouter()
 
+    useEffect(() => {
+        if (id) {
+            const fetchClient = async () => {
+                const response = await fetch(`/api/userdetails/clients?id=${id}`);
+                const data = await response.json();
+                const clientData = data.client
+
+                const cleanedData: Client = {
+                    ...client,
+                    ...clientData,
+                    address: {
+                    ...client.address,
+                    ...(clientData.address || {}),
+                    },
+                    customFields: Array.isArray(clientData.customFields)
+                    ? clientData.customFields.map((f: any) => ({
+                        name: f.name || "",
+                        value: f.value || "",
+                        }))
+                    : [],
+                };
+
+                setClient(cleanedData);
+            }
+            fetchClient()
+        }
+    }, [id])
+
     const handleSaveClient = async () => {
         try {
             setLoading(true)
@@ -88,6 +116,29 @@ const AddClientForm = () => {
         } catch (error) {
             console.error(error)
             alert("Failed to save client")
+            setLoading(false)
+        }
+    }
+
+    const handleUpdateClient = async () => {
+        try {
+            setLoading(true)
+            const response = await fetch(`/api/userdetails/clients?id=${id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(client),
+            })
+            if (!response.ok) {
+                throw new Error("Failed to update client")
+            }
+            alert("Client updated successfully")
+            setLoading(false)
+            router.back()
+        } catch (error) {
+            console.error(error)
+            alert("Failed to update client")
             setLoading(false)
         }
     }
@@ -215,9 +266,9 @@ const AddClientForm = () => {
                 ))
             }
 
-            <Button onClick={handleSaveClient} className="ms-auto" disabled={loading}>
+            <Button onClick={id ? handleUpdateClient : handleSaveClient} className="ms-auto" disabled={loading}>
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {loading ? "Saving..." : "Save Client"}
+                {loading ? "Saving..." : id ? "Update Client" : "Save Client"}
             </Button>
         </div>
     )

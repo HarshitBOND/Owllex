@@ -18,9 +18,8 @@ const Dashboard = () => {
     const { isLoaded, isSignedIn } = useUser()
     if (!isLoaded) {
         return (
-          <div className="flex items-center justify-center h-screen">
-            <LoaderCircle className="text-gray-500 animate-spin" size={18} />
-            <p className="text-center text-gray-500">Loading...</p>
+          <div className="flex items-center justify-center min-h-screen">
+              <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
           </div>
         )
     }
