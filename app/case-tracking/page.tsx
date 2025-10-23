@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useRouter } from "next/navigation"
 
 interface Case {
   _id: string;
@@ -65,6 +66,8 @@ interface Case {
 
 const CaseTracking = () => {
     const { isLoaded, isSignedIn } = useUser()
+    const { isOpen } = useSidebar();
+    const router = useRouter();
     if (!isLoaded) {
         return (
           <div className="flex items-center justify-center min-h-screen">
@@ -75,7 +78,6 @@ const CaseTracking = () => {
     if (!isSignedIn) {
         return redirect("/")
     }
-    const { isOpen } = useSidebar();
     const [quickOptions, setQuickOptions] = useState([
         {
             name: "Active Documents",
@@ -217,7 +219,7 @@ const CaseTracking = () => {
                         <Button variant="outline"><FileUp /> Export</Button>
                         <Button variant="outline"><FunnelPlus /> Filter</Button>
                         <Button variant="outline"><ArrowDownNarrowWide /> Sort</Button>
-                        <Button variant="secondary">Add New Case</Button>
+                        <Button onClick={() => router.push("/case-tracking/add")} variant="secondary">Add New Case</Button>
                       </div>
                     </div>
                 </div>
@@ -227,11 +229,11 @@ const CaseTracking = () => {
                   <TableBody>
                       {cases.length > 0 ? cases.map((c: Case) => (
                       <TableRow key={c._id} className="cursor-pointer">
-                          <TableCell colSpan={4}>
+                          <TableCell colSpan={4} onClick={() => router.push(`/case-tracking/view/${c._id}`)}>
                             <div className="flex flex-col mb-2 gap-y-1 border border-gray-200 rounded-md shadow-sm p-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-x-3">
-                                  <Checkbox className="border border-gray-200 bg-gray-50" />
+                                  <Checkbox className="border border-gray-200 bg-gray-50 cursor-pointer" />
                                   <h2 className="text-lg font-semibold">{c.caseTitle}</h2>
                                 </div>
                                 <p className="px-3 py-0.5 rounded-md border uppercase bg-gray-50">{c.status}</p>
@@ -245,9 +247,14 @@ const CaseTracking = () => {
                                   <p>{c.caseNo.match(/^[A-Za-z().\s-]*\d+\/\d{4}/)?.[0]}</p>
                                 </div>
                                 <div className="grid grid-cols-4 h-20 w-120 gap-x-2">
-                                  <div className="bg-slate-200 rounded-md"></div>
-                                  <div className="col-span-2 bg-slate-200 rounded-md"></div>
-                                  <div className="bg-slate-200 rounded-md"></div>
+                                  <div className="bg-slate-200 rounded-md p-2">
+                                    <span>Previous</span>
+                                  </div>
+                                  <div className="col-span-2 bg-slate-200 rounded-md p-2">
+                                  </div>
+                                  <div className="bg-slate-200 rounded-md p-2">
+                                    <span>Upcoming</span>
+                                  </div>
                                 </div>
                               </div>
 
@@ -272,7 +279,7 @@ const CaseTracking = () => {
 
                                 <div>
                                   <p>Assigned Tasks</p>
-                                  <p>View Tasks</p>
+                                  <p className="text-blue-500 cursor-pointer hover:underline">View Tasks</p>
                                 </div>
                               </div>
                             </div>
