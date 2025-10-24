@@ -49,7 +49,7 @@ interface Address {
     country: string;
 }
 
-interface Client {
+export interface Client {
     _id: string;
     salutation: string;
     name: string;
