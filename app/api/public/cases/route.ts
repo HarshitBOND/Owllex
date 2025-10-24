@@ -128,13 +128,11 @@ export async function POST(req: NextRequest) {
 
         if (!caseNumber && !caseType && forum) {
             const foundCases = await CauseListCase.find({ advocate: {$regex: advocateName, $options: "i"}, case_no: {$regex: caseYear, $options: "i"} })
-            console.log("1", foundCases)
             return NextResponse.json({ cases: foundCases }, { status: 200 })
         } else {
 
             const foundCases = await findCasesByParts(caseType, caseNumber, caseYear);
 
-            console.log("foundCases", foundCases);
             return NextResponse.json({ cases: foundCases }, { status: 200 });
 
         }

@@ -20,6 +20,7 @@ const CaseSchema = new mongoose.Schema(
   {
     fileNo: { type: String },
     caseNo: { type: String, required: true },
+    cnrNo: { type: String },
     caseTitle: {type: String, required: true},
     advocate: {type: String, required: true},
     caseStage: {type: String},
@@ -34,8 +35,8 @@ const CaseSchema = new mongoose.Schema(
     fillingDate: {type: String},
     status: {type: String},
     registrationDate: {type: String}, 
-    filingDetails: {type: FilingSchema},
-    listingDetails: {type: ListingSchema},
+    filingDetails: {type: [FilingSchema], default: []},
+    listingDetails: {type: [ListingSchema], default: []},
   }
 );
 

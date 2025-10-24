@@ -20,8 +20,8 @@ import Sidebar from "@/components/dashboard/sidebar"
 import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
-import { useState } from "react"
-import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown, LoaderCircle } from "lucide-react"
+import { useEffect, useState } from "react"
+import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileDown, FileUp, ArrowDownNarrowWide, FunnelPlus, ChevronDown, LoaderCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
@@ -32,6 +32,7 @@ export interface Case {
   _id: string;
   fileNo: string;
   caseNo: string;
+  cnrNo: string;
   caseTitle: string;
   advocate: string;
   caseStage: string;
@@ -62,16 +63,6 @@ const CaseTracking = () => {
     const { isLoaded, isSignedIn } = useUser()
     const { isOpen } = useSidebar();
     const router = useRouter();
-    if (!isLoaded) {
-        return (
-          <div className="flex items-center justify-center min-h-screen">
-              <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
-          </div>
-        )
-    }
-    if (!isSignedIn) {
-        return redirect("/")
-    }
     const [quickOptions, setQuickOptions] = useState([
         {
             name: "Active Documents",
@@ -97,95 +88,30 @@ const CaseTracking = () => {
             icon: <Truck color="violet" className="text-white" size={18} />,
         },
     ])
-    const [cases, setCases] = useState<Case[]>([
-      {
-        _id: "1",
-        fileNo: "1",
-        caseNo: "CS(OS) - 1626/1999 WITH TEST.CAS. 30/2001 Case history.",
-        caseTitle: "VIJAY ARORA v/s RAMESH KUMAR ARORA AND ORS.",
-        advocate: "VANITA SAHNI, RISHI DEWAN, SK TYAGI, VISHNU MEHRA,  RK SHARMA, RS DEWAN, HARDIK LUTHRA, SAMAR VIJAY SINGH, H S JAGGI, SAMAR VIJAY SINGH, PRASHANT  BATRA, AZEEM A DOST, AZEEM A DOST, POONAM  LAU,  P.P.AHUJA",
-        caseStage: "",
-        remarks: "",
-        links: ["javascript:void(0)", "https://delhihighcourt.nic.in/app/online-cause-history/eyJpdiI6IkFxb0NhUVFGYTJVS3hQc2RHMmNQUmc9PSIsInZhbHVlIjoiOGNvVFBCZU5ORXVYc2ZPWmN0VzJjZz09IiwibWFjIjoiMzVjODdlZGY0NjNmMDNjYTQxZjZiZjYxZjYwYjcyNjE4ZWRkYTdjNjliOGQ2ZGYyZTBjODZmOWJjMGZlNWIxOSIsInRhZyI6IiJ9/eyJpdiI6Inp4Um1ENnRoWXhIVHRoaTdnYnBLcmc9PSIsInZhbHVlIjoiVzZUZGpWQk94bGpiQ1lsQ0ZrWjRBZz09IiwibWFjIjoiYmE4Nzg0MmIwODkyMGU3MmJkNzg2ZDM5NmVmODg4MGY2ZDc5NTFjM2U2MGQ1MzJiMDE2YmIxZjU0OGI5OThhNyIsInRhZyI6IiJ9/eyJpdiI6ImgvY0IyeU9XZVNvVzN2S08rQ20wL3c9PSIsInZhbHVlIjoiMjhDTFN5L2E2V1YxQUFnZ1NmVWdlQT09IiwibWFjIjoiMDk1MTY2NTYxYjg3NTc4NmE1ZDEyNTc0MjA2NGVhNTRlNWQxMjIxZmE2NDE0MjcxOWFjZjE0MzFjZDgwNzk5MCIsInRhZyI6IiJ9"],
-        documents: ["1"],
-        courtName: "HON'BLE MR. JUSTICE JASMEET SINGH (O)",
-        courtValue: "41~O",
-        courtRoom: "41",
-        courtDate: "2025-10-22",
-        fillingAdvocate: "P.P.AHUJA",
-        fillingDate: "2025-10-22",
-        status: "pending",
-        registrationDate: "2025-10-22",
-        filingDetails: [{
-          srlNo: "1",
-          date: "2025-10-22",
-          filingDetails: "1",
-        }],
-        listingDetails: [{
-          srlNo: "1",
-          date: "2025-10-22",
-          listingDetails: "1",
-        }],
-      },
-            {
-        _id: "1",
-        fileNo: "1",
-        caseNo: "CS(OS) - 1626/1999 WITH TEST.CAS. 30/2001 Case history.",
-        caseTitle: "VIJAY ARORA v/s RAMESH KUMAR ARORA AND ORS.",
-        advocate: "VANITA SAHNI, RISHI DEWAN, SK TYAGI, VISHNU MEHRA,  RK SHARMA, RS DEWAN, HARDIK LUTHRA, SAMAR VIJAY SINGH, H S JAGGI, SAMAR VIJAY SINGH, PRASHANT  BATRA, AZEEM A DOST, AZEEM A DOST, POONAM  LAU,  P.P.AHUJA",
-        caseStage: "",
-        remarks: "",
-        links: ["javascript:void(0)", "https://delhihighcourt.nic.in/app/online-cause-history/eyJpdiI6IkFxb0NhUVFGYTJVS3hQc2RHMmNQUmc9PSIsInZhbHVlIjoiOGNvVFBCZU5ORXVYc2ZPWmN0VzJjZz09IiwibWFjIjoiMzVjODdlZGY0NjNmMDNjYTQxZjZiZjYxZjYwYjcyNjE4ZWRkYTdjNjliOGQ2ZGYyZTBjODZmOWJjMGZlNWIxOSIsInRhZyI6IiJ9/eyJpdiI6Inp4Um1ENnRoWXhIVHRoaTdnYnBLcmc9PSIsInZhbHVlIjoiVzZUZGpWQk94bGpiQ1lsQ0ZrWjRBZz09IiwibWFjIjoiYmE4Nzg0MmIwODkyMGU3MmJkNzg2ZDM5NmVmODg4MGY2ZDc5NTFjM2U2MGQ1MzJiMDE2YmIxZjU0OGI5OThhNyIsInRhZyI6IiJ9/eyJpdiI6ImgvY0IyeU9XZVNvVzN2S08rQ20wL3c9PSIsInZhbHVlIjoiMjhDTFN5L2E2V1YxQUFnZ1NmVWdlQT09IiwibWFjIjoiMDk1MTY2NTYxYjg3NTc4NmE1ZDEyNTc0MjA2NGVhNTRlNWQxMjIxZmE2NDE0MjcxOWFjZjE0MzFjZDgwNzk5MCIsInRhZyI6IiJ9"],
-        documents: ["1"],
-        courtName: "HON'BLE MR. JUSTICE JASMEET SINGH (O)",
-        courtValue: "41~O",
-        courtRoom: "41",
-        courtDate: "2025-10-22",
-        fillingAdvocate: "P.P.AHUJA",
-        fillingDate: "2025-10-22",
-        status: "pending",
-        registrationDate: "2025-10-22",
-        filingDetails: [{
-          srlNo: "1",
-          date: "2025-10-22",
-          filingDetails: "1",
-        }],
-        listingDetails: [{
-          srlNo: "1",
-          date: "2025-10-22",
-          listingDetails: "1",
-        }],
-      },
-            {
-        _id: "1",
-        fileNo: "1",
-        caseNo: "CS(OS) - 1626/1999 WITH TEST.CAS. 30/2001 Case history.",
-        caseTitle: "VIJAY ARORA v/s RAMESH KUMAR ARORA AND ORS.",
-        advocate: "VANITA SAHNI, RISHI DEWAN, SK TYAGI, VISHNU MEHRA,  RK SHARMA, RS DEWAN, HARDIK LUTHRA, SAMAR VIJAY SINGH, H S JAGGI, SAMAR VIJAY SINGH, PRASHANT  BATRA, AZEEM A DOST, AZEEM A DOST, POONAM  LAU,  P.P.AHUJA",
-        caseStage: "",
-        remarks: "",
-        links: ["javascript:void(0)", "https://delhihighcourt.nic.in/app/online-cause-history/eyJpdiI6IkFxb0NhUVFGYTJVS3hQc2RHMmNQUmc9PSIsInZhbHVlIjoiOGNvVFBCZU5ORXVYc2ZPWmN0VzJjZz09IiwibWFjIjoiMzVjODdlZGY0NjNmMDNjYTQxZjZiZjYxZjYwYjcyNjE4ZWRkYTdjNjliOGQ2ZGYyZTBjODZmOWJjMGZlNWIxOSIsInRhZyI6IiJ9/eyJpdiI6Inp4Um1ENnRoWXhIVHRoaTdnYnBLcmc9PSIsInZhbHVlIjoiVzZUZGpWQk94bGpiQ1lsQ0ZrWjRBZz09IiwibWFjIjoiYmE4Nzg0MmIwODkyMGU3MmJkNzg2ZDM5NmVmODg4MGY2ZDc5NTFjM2U2MGQ1MzJiMDE2YmIxZjU0OGI5OThhNyIsInRhZyI6IiJ9/eyJpdiI6ImgvY0IyeU9XZVNvVzN2S08rQ20wL3c9PSIsInZhbHVlIjoiMjhDTFN5L2E2V1YxQUFnZ1NmVWdlQT09IiwibWFjIjoiMDk1MTY2NTYxYjg3NTc4NmE1ZDEyNTc0MjA2NGVhNTRlNWQxMjIxZmE2NDE0MjcxOWFjZjE0MzFjZDgwNzk5MCIsInRhZyI6IiJ9"],
-        documents: ["1"],
-        courtName: "HON'BLE MR. JUSTICE JASMEET SINGH (O)",
-        courtValue: "41~O",
-        courtRoom: "41",
-        courtDate: "2025-10-22",
-        fillingAdvocate: "P.P.AHUJA",
-        fillingDate: "2025-10-22",
-        status: "pending",
-        registrationDate: "2025-10-22",
-        filingDetails: [{
-          srlNo: "1",
-          date: "2025-10-22",
-          filingDetails: "1",
-        }],
-        listingDetails: [{
-          srlNo: "1",
-          date: "2025-10-22",
-          listingDetails: "1",
-        }],
-      },
-    ])
+    const [cases, setCases] = useState<Case[]>([])
+    const [loading, setLoading] = useState<boolean>(false)
+
+    useEffect(() => {
+        const fetchCases = async () => {
+            setLoading(true)
+            const response = await fetch(`/api/userdetails/cases`)
+            const data = await response.json()
+            setCases(data.userCases.cases)
+            setLoading(false)
+        }
+        fetchCases()
+    }, [])
+
+    if (!isLoaded) {
+        return (
+          <div className="flex items-center justify-center min-h-screen">
+              <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
+          </div>
+        )
+    }
+    if (!isSignedIn) {
+        return redirect("/")
+    }
 
     return (
     <div className="flex">
@@ -221,7 +147,17 @@ const CaseTracking = () => {
                 <div className="min-h-113">
                 <Table>
                   <TableBody>
-                      {cases.length > 0 ? cases.map((c: Case) => (
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-24">
+                          <div className="flex items-center justify-center">
+                            <Loader2 className="animate-spin" />
+                            <p className="ms-2">Loading cases...</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      cases && cases.length > 0 ? cases.map((c: Case) => (
                       <TableRow key={c._id} className="cursor-pointer">
                           <TableCell colSpan={4} onClick={() => router.push(`/case-tracking/view/${c._id}`)}>
                             <div className="flex flex-col mb-2 gap-y-1 border border-gray-200 rounded-md shadow-sm p-4">
@@ -285,7 +221,8 @@ const CaseTracking = () => {
                                   No cases found
                               </TableCell>
                           </TableRow>
-                      )}
+                      )
+                    )}
                   </TableBody>
                 </Table>
                 </div>
