@@ -99,7 +99,12 @@ const CaseTracking = () => {
             setCases(data.userCases.cases)
             setLoading(false)
         }
-        fetchCases()
+        try {
+            fetchCases()
+        } catch (error) {
+            console.log(error)
+            setLoading(false)
+        }
     }, [])
 
     if (!isLoaded) {

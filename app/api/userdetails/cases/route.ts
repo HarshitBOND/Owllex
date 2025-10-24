@@ -61,6 +61,7 @@ async function scrapeData(url: string) {
       }
     });
 
+    console.log(caseData)
     // 🧩 4. Combine results
     const result = {
       case_details: caseData,
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
             
             const formattedCase = {
                 fileNo: caseData.fileNumber || Math.random().toString(36).substring(2, 9).toUpperCase(),
-                caseNo: data?.["case_no"],
+                caseNo: data?.["case_no"] || caseFound.case_no,
                 cnrNo: data?.["cnr_no"],
                 caseTitle: caseFound.case_title,
                 advocate: caseFound.advocate,
