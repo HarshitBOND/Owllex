@@ -3,12 +3,14 @@ import Client from "../../lib/models/client"
 import User from "../../lib/models/user"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
 import { auth } from "@clerk/nextjs/server";
-import mongoose from "mongoose";
+import Case from "../../lib/models/case";
+import Note from "../../lib/models/note";
 
 export async function GET(req: NextRequest) {
     try {
         await connectMongoWithRetry()
         const { userId } = await auth();
+
         const userClients = await User.findOne( {clerkUid: userId} ).populate("clients")
 
         const clientId = req.nextUrl.searchParams.get("id")

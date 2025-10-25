@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import path from "path";
+import fs from "fs";
 
 const connectMongo = async () => {
   try {
@@ -15,9 +17,30 @@ const connectMongo = async () => {
     console.log("Attempting to connect to MongoDB...");
     await mongoose.connect(uri);
     console.log("MongoDB connection successful.");
+    
+    // Register all models on first connection
+    await registerModels();
   } catch (error) {
     console.error("MongoDB connection error:", error);
     throw error;
+  }
+};
+
+const registerModels = async () => {
+  try {
+    
+    // Import all your model files
+    await import("../models/case");
+    await import("../models/causelist-cases");
+    await import("../models/client");
+    await import("../models/invoice");
+    await import("../models/note");
+    await import("../models/task");
+    await import("../models/user");
+
+    console.log("All models registered successfully.");
+  } catch (error) {
+    console.error("Error registering models:", error);
   }
 };
 
