@@ -42,6 +42,6 @@ const CaseSchema = new mongoose.Schema(
   }
 );
 
-const Case = mongoose.models.Case || mongoose.model("Case", CaseSchema);
+const Case = mongoose.models["Case"] || mongoose.model("Case", CaseSchema);
 
 export default Case;
