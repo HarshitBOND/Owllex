@@ -7,6 +7,7 @@ import { auth } from "@clerk/nextjs/server";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import Client from "../../lib/models/client"
+import mongoose from "mongoose"
 
 
 function toSnakeCase(str: string): string {
@@ -82,7 +83,7 @@ export async function GET(req: NextRequest) {
         const userCases = await User.findOne( {clerkUid: userId} ).populate("cases")
         const caseId = req.nextUrl.searchParams.get("id")
         if (caseId) {
-            const caseFound = await Case.findById(caseId).populate("notes")
+            const caseFound = await Case.findById(caseId).populate("notes").populate("clients")
             return NextResponse.json({ caseFound })
         }
         return NextResponse.json({ userCases })
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
                 filingDetails:  filingDetails,
                 listingDetails: listingDetails,
                 notes: [],
-                client: client._id,
+                clients: [client._id],
             }
 
             const caseCreated = await Case.create(formattedCase)
@@ -159,8 +160,8 @@ export async function DELETE(req: NextRequest) {
         if (caseId && clientId) {
             const caseFound = await Case.findById(caseId)
             const clientFound = await Client.findById(clientId)
-            if (caseFound && clientFound && caseFound.client.toString() === clientFound._id.toString()) {
-                caseFound.client = null
+            if (caseFound && clientFound && caseFound.clients.filter((client: mongoose.Schema.Types.ObjectId) => client.toString() === clientId).length > 0) {
+                caseFound.clients.pull(clientId)
                 clientFound.cases.pull(caseId)
                 await caseFound.save()
                 await clientFound.save()
