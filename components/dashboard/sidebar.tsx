@@ -1,8 +1,7 @@
 "use client"
 
-import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { ChevronRight, FileSearch, FileText, LayoutDashboard, ShieldHalf, ExternalLink, UsersRound, ReceiptText, WandSparkles } from "lucide-react"
+import { ChevronRight, FileSearch, LayoutDashboard, ExternalLink, UsersRound, ReceiptText, WandSparkles, Scale } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
@@ -42,7 +41,12 @@ const Sidebar = () => {
             name: "Suggestions",
             icon: <WandSparkles size={20} />,
             href: "/suggestions"
-        }
+        },
+        {
+            name: "Acts",
+            icon: <Scale size={20} />,
+            href: "/acts"
+        },
         // ,
         // {
         //     name: "Generate Affidavit",

@@ -141,13 +141,13 @@ const ClientView = ({id}: {id: string}) => {
         <hr className="my-4" />
 
         <Tabs defaultValue="notes" className="w-full">
-          <TabsList>
+          <TabsList className='gap-x-2'>
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="cases">Cases</TabsTrigger>
           </TabsList>
           <TabsContent value="notes">
-            <RichTextEditor id={id} setTrigger={setTrigger} />
-            <DisplayNotes id={id} setTrigger={setTrigger} notes={notes} />
+            <RichTextEditor id={id} setTrigger={setTrigger} source="client" />
+            <DisplayNotes id={id} setTrigger={setTrigger} notes={notes} source="client" />
           </TabsContent>
           <TabsContent value="cases">
             <CasesListView cases={cases} loading={loading} clientView clientId={id} setTrigger={setTrigger} />

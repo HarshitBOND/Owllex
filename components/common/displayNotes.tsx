@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Button } from "../ui/button"
 import { Loader2, Trash2 } from "lucide-react"
 import { Note } from "../client/clientView"
 
-const DisplayNotes = ({id, setTrigger, notes}: {id: string, setTrigger: React.Dispatch<React.SetStateAction<number>>, notes: Note[]}) => {
+const DisplayNotes = ({id, setTrigger, notes, source}: {id: string, setTrigger: React.Dispatch<React.SetStateAction<number>>, notes: Note[], source: string}) => {
     const [deleting, setDeleting] = useState<boolean>(false)
     const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
 
@@ -13,7 +13,7 @@ const DisplayNotes = ({id, setTrigger, notes}: {id: string, setTrigger: React.Di
         setDeleting(true)
         setDeletingNoteId(noteId)
         const deleteNote = async () => {
-            const response = await fetch(`/api/userdetails/clients/add-notes?id=${noteId}&clientId=${id}`, {
+            const response = await fetch(`/api/userdetails/${source}s/add-notes?id=${noteId}&${source}Id=${id}`, {
                 method: "DELETE"
             })
             if (!response.ok) {

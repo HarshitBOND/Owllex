@@ -47,7 +47,7 @@ const lowlight = createLowlight(common);
 
 type Visibility = "public" | "private";
 
-export default function RichTextEditor({id, setTrigger}: {id: string, setTrigger: React.Dispatch<React.SetStateAction<number>>}) {
+export default function RichTextEditor({id, setTrigger, source}: {id: string, setTrigger: React.Dispatch<React.SetStateAction<number>>, source: string}) {
   const [isMounted, setIsMounted] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -209,7 +209,7 @@ export default function RichTextEditor({id, setTrigger}: {id: string, setTrigger
         loadingMsg.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow-lg z-50';
         document.body.appendChild(loadingMsg);
         
-        const response = await fetch('/api/userdetails/clients/add-notes', {
+        const response = await fetch(`/api/userdetails/${source}s/add-notes`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -223,17 +223,16 @@ export default function RichTextEditor({id, setTrigger}: {id: string, setTrigger
         }),
         });
         
-        if (!response.ok) {
+        const data = await response.json()
+        if (!data.success) {
         throw new Error('Failed to save content');
         }
         
-        editor?.chain().focus().setContent('')
-        await response.json();
         
-        // Success message
         loadingMsg.textContent = 'Saved successfully!';
         loadingMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
         setTimeout(() => document.body.removeChild(loadingMsg), 2000);
+        editor?.chain().focus().setContent('').run();
         
     } catch (error) {
         console.error('Save error:', error);
