@@ -131,6 +131,8 @@ export async function POST(req: NextRequest) {
                 registrationDate: data?.["date_of_registration"],
                 filingDetails:  filingDetails,
                 listingDetails: listingDetails,
+                notes: [],
+                client: client._id,
             }
 
             const caseCreated = await Case.create(formattedCase)
@@ -140,6 +142,30 @@ export async function POST(req: NextRequest) {
             await client.save()
 
             return NextResponse.json({ success: true })
+        }
+        return NextResponse.json({ success: false })
+    } catch (error) {
+        console.error(error)
+        return NextResponse.json({ error: "Failed to connect to database" }, { status: 500 })
+    }
+}
+
+export async function DELETE(req: NextRequest) {
+    try {
+        await connectMongoWithRetry()
+        const caseId = req.nextUrl.searchParams.get("caseId")
+        const clientId = req.nextUrl.searchParams.get("clientId")
+
+        if (caseId && clientId) {
+            const caseFound = await Case.findById(caseId)
+            const clientFound = await Client.findById(clientId)
+            if (caseFound && clientFound && caseFound.client.toString() === clientFound._id.toString()) {
+                caseFound.client = null
+                clientFound.cases.pull(caseId)
+                await caseFound.save()
+                await clientFound.save()
+                return NextResponse.json({ success: true })
+            }
         }
         return NextResponse.json({ success: false })
     } catch (error) {

@@ -22,10 +22,7 @@ const CustomFieldSchema = new mongoose.Schema(
 export const ClientSchema = new mongoose.Schema(
   {
     salutation: { type: String, required: true },
-    cases: { type: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Case",
-    }], default: [] },
+    cases: [{ type: mongoose.Schema.Types.ObjectId, ref: "Case", default: [] }],
     name: { type: String, required: true },
     company: { type: String },
     email: { type: String, required: true },
@@ -36,6 +33,7 @@ export const ClientSchema = new mongoose.Schema(
     customFields: { type: [CustomFieldSchema], default: [] },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
+    notes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Note", default: [] }]
   }
 );
 

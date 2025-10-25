@@ -37,6 +37,8 @@ const CaseSchema = new mongoose.Schema(
     registrationDate: {type: String}, 
     filingDetails: {type: [FilingSchema], default: []},
     listingDetails: {type: [ListingSchema], default: []},
+    notes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Note", default: [] }],
+    client: {type: mongoose.Schema.Types.ObjectId, ref: "Client", default: null},
   }
 );
 

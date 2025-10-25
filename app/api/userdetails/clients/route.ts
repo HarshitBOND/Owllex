@@ -3,6 +3,7 @@ import Client from "../../lib/models/client"
 import User from "../../lib/models/user"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
 import { auth } from "@clerk/nextjs/server";
+import mongoose from "mongoose";
 
 export async function GET(req: NextRequest) {
     try {
@@ -12,7 +13,8 @@ export async function GET(req: NextRequest) {
 
         const clientId = req.nextUrl.searchParams.get("id")
         if (clientId) {
-            const client = await Client.findById(clientId)
+            let client = await Client.findById(clientId).populate("cases").populate("notes")
+
             return NextResponse.json({ client })
         }
         return NextResponse.json({ userClients })
