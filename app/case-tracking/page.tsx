@@ -6,7 +6,7 @@ import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import { useEffect, useState } from "react"
-import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileUp, ArrowDownNarrowWide, FunnelPlus } from "lucide-react"
+import { FileText, MessageCircle, Calendar as CalendarIcon, Truck, FileUp, ArrowDownNarrowWide, FunnelPlus, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
@@ -77,7 +77,8 @@ const CaseTracking = () => {
         },
     ])
     const [cases, setCases] = useState<Case[]>([])
-    const [loading, setLoading] = useState<boolean>(false)
+    const [loading, setLoading] = useState<boolean>(false);
+    const [addingCase, setAddingCase] = useState(false);
 
     useEffect(() => {
         const fetchCases = async () => {
@@ -132,7 +133,10 @@ const CaseTracking = () => {
                         <Button variant="outline"><FileUp /> Export</Button>
                         <Button variant="outline"><FunnelPlus /> Filter</Button>
                         <Button variant="outline"><ArrowDownNarrowWide /> Sort</Button>
-                        <Button onClick={() => router.push("/case-tracking/add")} variant="secondary">Add New Case</Button>
+                        <Button onClick={() => {setAddingCase(true); router.push("/case-tracking/add")}} disabled={addingCase} variant="secondary">
+                            {addingCase && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {addingCase ? "Adding..." : "Add New Case"}
+                        </Button>
                       </div>
                     </div>
                 </div>

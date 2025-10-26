@@ -332,6 +332,7 @@ const AddCaseForm = () => {
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [addingCase, setAddingCase] = useState(false);
   const [caseType, setCaseType] = useState("");
   const [caseNumber, setCaseNumber] = useState("");
   const [caseYear, setCaseYear] = useState("");
@@ -445,19 +446,20 @@ const AddCaseForm = () => {
           <TableBody>
               {foundCases.length > 0 ? foundCases.map((c: Partial<Case>) => (
               <TableRow key={c._id} className="cursor-pointer">
-                  <TableCell colSpan={4} onClick={() => router.push(`/case-tracking/view/${c._id}`)}>
+                  <TableCell colSpan={4} onClick={() => router.push(`/case-tracking/view/${c._id}?unregistered=true`) }>
                     <div className="flex flex-col mb-2 gap-y-1 border border-gray-200 rounded-md shadow-sm p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-x-3">
                           <Checkbox className="border border-gray-200 bg-gray-50 cursor-pointer" />
                           <h2 className="text-lg font-semibold">{c.caseTitle}</h2>
                         </div>
-                        <Button onClick={(e) => {
+                        <Button disabled={addingCase} onClick={(e) => {
                           e.stopPropagation();
+                          setAddingCase(true);
                           router.push(`/case-tracking/add/${c._id}`);
                         }} variant="primary">
-                          <Plus />
-                          Add Case
+                          {addingCase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus />}
+                          {addingCase ? "Adding" : "Add Case"}
                         </Button>
                       </div>
 

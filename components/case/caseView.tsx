@@ -15,22 +15,37 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import RichTextEditor from '../common/richTextEditor';
 import DisplayNotes from '../common/displayNotes';
 import { Note } from '../client/clientView';
+import FilingsList from './filingsList';
+import { Client } from '@/app/my-clients/page';
+import ContactsList from './contactsList';
+
+export interface Filing {
+    srlNo: string;
+    date: string;
+    filingDetails: string;
+    _id: string;
+}
 
 const CaseView = ({id}: {id: string}) => {
     const [caseData, setCaseData] = useState<Case | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<{message: string} | null>(null);
     const [trigger, setTrigger] = useState<number>(0);
     const [notes, setNotes] = useState<Note[]>([]);
+    const [filings, setFilings] = useState<Filing[]>([]);
+    const [contacts, setContacts] = useState<Client[]>([]);
 
     useEffect(() => {
         const fetchCaseData = async () => {
             try {
+                setLoading(true);
                 const response = await fetch(`/api/userdetails/cases?id=${id}`);
                 const data = await response.json();
                 console.log(data)
                 setCaseData(data.caseFound);
                 setNotes(data.caseFound.notes);
+                setFilings(data.caseFound.filingDetails);
+                setContacts(data.caseFound.clients);
             } catch (error) {
                 setError(error as {message: string});
             } finally {
@@ -179,10 +194,12 @@ const CaseView = ({id}: {id: string}) => {
                 <DisplayNotes id={id} setTrigger={setTrigger} notes={notes} source="case" />
             </TabsContent>
             <TabsContent value="filings">
+                <FilingsList filings={filings} />
             </TabsContent>
             <TabsContent value="listings">
             </TabsContent>
             <TabsContent value="contacts">
+                <ContactsList contacts={contacts} loading={loading} setTrigger={setTrigger} id={id} />
             </TabsContent>
             <TabsContent value="invoices">
             </TabsContent>

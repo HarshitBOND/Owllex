@@ -174,3 +174,26 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ error: "Failed to connect to database" }, { status: 500 })
     }
 }
+
+export async function PUT(req: NextRequest) {
+    try {
+        await connectMongoWithRetry()
+        const caseId = req.nextUrl.searchParams.get("caseId")
+        const clientId = req.nextUrl.searchParams.get("clientId")
+        if (caseId && clientId) {
+            const caseFound = await Case.findById(caseId)
+            const clientFound = await Client.findById(clientId)
+            if (caseFound && clientFound) {
+                caseFound.clients.push(clientId)
+                clientFound.cases.push(caseId)
+                await caseFound.save()
+                await clientFound.save()
+                return NextResponse.json({ success: true })
+            }
+        }
+        return NextResponse.json({ success: false })
+    } catch (error) {
+        console.error(error)
+        return NextResponse.json({ error: "Failed to connect to database" }, { status: 500 })
+    }
+}

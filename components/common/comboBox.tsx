@@ -45,16 +45,16 @@ export default function ComboBox({ className, dropdownItems, type, value, setVal
       </PopoverTrigger>
       <PopoverContent className="w-[200px] p-0">
         <Command>
-          <CommandInput defaultValue={value} placeholder={"Search " + type + "..."} className="h-9" />
+          <CommandInput placeholder={"Search " + type + "..."} className="h-9" />
           <CommandList>
             <CommandEmpty>No {type} found.</CommandEmpty>
             <CommandGroup>
               {dropdownItems.map((Item: DropdownItem) => (
                 <CommandItem
                   key={Item.value}
-                  value={Item.value}
+                  value={`${Item.value}---${Item.label}`}
                   onSelect={(currentValue) => {
-                    setValue(currentValue)
+                    setValue(currentValue === value ? "" : currentValue.split('---')[0])
                     setOpen(false)
                   }}
                 >
