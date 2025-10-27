@@ -64,7 +64,7 @@ const CasesListView = ({cases, loading, clientView, clientId, setTrigger}: {case
                             <div className="flex items-center justify-between">
                             <div className="flex items-center gap-x-3">
                                 <Checkbox className="border border-gray-200 bg-gray-50 cursor-pointer" />
-                                <h2 className="text-lg font-semibold">{c.caseTitle}</h2>
+                                <h2 className="text-lg font-semibold break-words whitespace-pre-wrap me-2">{c.caseTitle}</h2>
                             </div>
                             <div className="flex items-center">
                                 <p className="px-3 py-0.5 rounded-md border uppercase bg-gray-50">{c.status}</p>

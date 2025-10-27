@@ -83,7 +83,7 @@ const ClientView = ({id}: {id: string}) => {
     }
 
     return (
-    <div>
+    <div className='flex flex-col'>
         <div className='flex gap-x-35 px-2'>
           <div className='flex flex-col gap-y-3'>
             <div className='flex flex-col'>
@@ -140,8 +140,8 @@ const ClientView = ({id}: {id: string}) => {
 
         <hr className="my-4" />
 
-        <Tabs defaultValue="notes" className="w-full">
-          <TabsList className='gap-x-2'>
+        <Tabs defaultValue="notes">
+          <TabsList className='gap-x-2 flex-wrap'>
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="cases">Cases</TabsTrigger>
           </TabsList>

@@ -112,7 +112,7 @@ const CaseTracking = () => {
         <Sidebar />
         <div className={cn("bg-[#F3F5F9] min-h-screen w-full md:p-6 p-2 transition-all duration-300", isOpen ? "lg:ml-54" : "lg:ml-13.5")}>
             <div className="max-w-[1400px] w-full mx-auto">
-            <Navbar location="Cases" />
+                <Navbar location="Cases" />
                 <div className="w-full gap-4 flex items-center justify-between mb-4 flex-col md:flex-row">
                     {quickOptions.map((item) => (
                         <div key={item.name} className="flex flex-col md:w-[24%] w-full min-w-38 min-h-36 border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-300 p-5">
