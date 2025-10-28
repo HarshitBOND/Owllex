@@ -20,8 +20,10 @@ const InvoiceParticularsSchema = new mongoose.Schema(
 const InvoiceSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
-    case: [{ type: mongoose.Schema.Types.ObjectId, ref: "Case", required: true }],
     client: { type: mongoose.Schema.Types.ObjectId, ref: "Client", required: true },
+    case: { type: mongoose.Schema.Types.ObjectId, ref: "Case" },
+    resourceType: { type: String, required: true },
+    resourceName: { type: String, required: true },
     currency: { type: String, required: true },
     totalAmount: { type: Number, required: true },
     particulars: { type: [InvoiceParticularsSchema], required: true },

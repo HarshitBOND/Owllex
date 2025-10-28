@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { ChevronRight, FileSearch, LayoutDashboard, ExternalLink, UsersRound, ReceiptText, WandSparkles, Scale } from "lucide-react"
+import { ChevronRight, FileSearch, LayoutDashboard, ExternalLink, UsersRound, ReceiptText, WandSparkles, Scale, ListTodo } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
@@ -36,6 +36,11 @@ const Sidebar = () => {
             name: "Invoices",
             icon: <ReceiptText size={20} />,
             href: "/invoices"
+        },
+        {
+            name: "Tasks",
+            icon: <ListTodo size={20} />,
+            href: "/tasks"
         },
         {
             name: "Suggestions",
