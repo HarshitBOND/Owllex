@@ -66,7 +66,7 @@ const ClientListView = ({clients, clientsLoading, setTrigger}: {clients: Client[
                             </DropdownMenuTrigger>
                             <DropdownMenuContent onClick={(e) => {e.stopPropagation()}}>
                             <DropdownMenuItem onClick={() => {router.push(`/my-clients/edit/${client._id}`)}}>Edit</DropdownMenuItem>
-                            <AlertPopup  handleDeleteClient={() => handleDeleteClient(client._id)}>
+                            <AlertPopup type="delete" handleFunction={() => handleDeleteClient(client._id)}>
                                 <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>Delete</DropdownMenuItem>
                             </AlertPopup>
                             </DropdownMenuContent>

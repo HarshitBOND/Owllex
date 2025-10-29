@@ -18,6 +18,8 @@ import { Note } from '../client/clientView';
 import FilingsList from './filingsList';
 import { Client } from '@/app/my-clients/page';
 import ContactsList from './contactsList';
+import { Task } from '@/app/tasks/page';
+import TasksListView from '../task/tasksListView';
 
 export interface Filing {
     srlNo: string;
@@ -34,6 +36,8 @@ const CaseView = ({id}: {id: string}) => {
     const [notes, setNotes] = useState<Note[]>([]);
     const [filings, setFilings] = useState<Filing[]>([]);
     const [contacts, setContacts] = useState<Client[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [taskStatus, setTaskStatus] = useState("pending");
 
     useEffect(() => {
         const fetchCaseData = async () => {
@@ -46,6 +50,7 @@ const CaseView = ({id}: {id: string}) => {
                 setNotes(data.caseFound.notes);
                 setFilings(data.caseFound.filingDetails);
                 setContacts(data.caseFound.clients);
+                setTasks(data.caseFound.tasks);
             } catch (error) {
                 setError(error as {message: string});
             } finally {
@@ -168,7 +173,7 @@ const CaseView = ({id}: {id: string}) => {
                             <DropdownMenuContent onClick={(e) => {e.stopPropagation()}}>
                             <DropdownMenuItem >Update</DropdownMenuItem>
                             <DropdownMenuItem >Edit</DropdownMenuItem>
-                            <AlertPopup  handleDeleteClient={() => handleDeleteCase(id)}>
+                            <AlertPopup type="delete"  handleFunction={() => handleDeleteCase(id)}>
                                 <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>Delete</DropdownMenuItem>
                             </AlertPopup>
                             </DropdownMenuContent>
@@ -204,6 +209,19 @@ const CaseView = ({id}: {id: string}) => {
             <TabsContent value="invoices">
             </TabsContent>
             <TabsContent value="tasks">
+                <hr className='mt-2 mb-4' />
+                <Tabs defaultValue="pending" value={taskStatus} onValueChange={(value) => setTaskStatus(value)} className="w-full">
+                    <TabsList>
+                        <TabsTrigger value="pending">Pending</TabsTrigger>
+                        <TabsTrigger value="completed">Completed</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="pending">
+                        <TasksListView status={taskStatus} tasks={tasks.filter(task => task.status === "pending")} loading={loading} caseDetails={{fileNo: caseData?.fileNo || "", caseTitle: caseData?.caseTitle || "", caseNo: caseData?.caseNo || ""}} setTrigger={setTrigger}/>
+                    </TabsContent>
+                    <TabsContent value="completed">
+                        <TasksListView status={taskStatus} tasks={tasks.filter(task => task.status === "completed")} loading={loading} caseDetails={{fileNo: caseData?.fileNo || "", caseTitle: caseData?.caseTitle || "", caseNo: caseData?.caseNo || ""}} setTrigger={setTrigger}/>
+                    </TabsContent>
+                </Tabs>
             </TabsContent>
             <TabsContent value="documents">
             </TabsContent>

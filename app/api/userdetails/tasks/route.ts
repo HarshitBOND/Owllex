@@ -52,3 +52,64 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: "Failed to add task" }, { status: 500 });
     }
 }
+
+export async function PUT(request: NextRequest) {
+    try {
+        const { userId } = await auth();
+
+        if (!userId) {
+            return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+        }
+
+        const formData = await request.json()
+
+        const task = await Task.findById(formData._id);
+
+        if (!task) {
+            return NextResponse.json({ success: false, message: "Task not found" }, { status: 404 })
+        }
+
+        await task.updateOne({clerkUid: userId, ...formData})
+
+        return NextResponse.json({ success: true, message: "Task added successfully" });
+    } catch (error) {
+        console.error("Error adding task:", error);
+        return NextResponse.json({ success: false, message: "Failed to add task" }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: NextRequest) {
+    try {
+        const { userId } = await auth();
+
+        if (!userId) {
+            return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+        }
+
+        const formData = await request.json()
+
+        const task = await Task.findById(formData._id);
+        const caseId = task?.caseId;
+
+        if (caseId) {
+            const caseFound = await Case.findById(caseId)
+            if (!caseFound) {
+                return NextResponse.json({ success: false, message: "Case not found" }, { status: 404 })
+            }
+            caseFound.tasks.pull(task._id)
+            await caseFound.save()
+        }
+
+        if (!task) {
+            return NextResponse.json({ success: false, message: "Task not found" }, { status: 404 })
+        }
+
+        await task.deleteOne({clerkUid: userId})
+
+
+        return NextResponse.json({ success: true, message: "Task deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting task:", error);
+        return NextResponse.json({ success: false, message: "Failed to delete task" }, { status: 500 });
+    }
+}

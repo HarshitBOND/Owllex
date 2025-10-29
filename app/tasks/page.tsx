@@ -14,26 +14,27 @@ import AddTaskForm from "@/components/Forms/addTaskForm"
 import { Case } from "../case-tracking/page"
 
 export interface Task {
-  task: string;
-  caseId: Case | null;
-  dueDate: string;
-  dueTime: string;
-  reminder: string;
-  resourceType: string;
-  resourceName: string | null;
-  fieldToShow: string;
-  referenceFile: string;
-  status: string;
-  taskCompletedRemarks: string | null;
-  createdAt: string;
-  updatedAt: string;
+    _id: string;
+    task: string;
+    caseId: Case | null;
+    dueDate: string;
+    dueTime: string;
+    reminder: string;
+    resourceType: string;
+    resourceName: string | null;
+    fieldToShow: string;
+    referenceFile: string;
+    status: string;
+    taskCompletedRemarks: string | null;
+    createdAt: string;
+    updatedAt: string;
 }
 
 const Tasks = () => {
     const { isOpen } = useSidebar()
     const [showTaskForm, setShowTaskForm] = useState(false);
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [taskStatus, setTaskStatus] = useState("pending");
+    const [taskStatus, setTaskStatus] = useState<"pending" | "completed">("pending");
     const [updateTrigger, setUpdateTrigger] = useState(0);
     const [loading, setLoading] = useState(false);
 
@@ -71,16 +72,16 @@ const Tasks = () => {
                     </div>
                 </div>
                 <hr className="my-2" />
-                <Tabs defaultValue="pending" className="w-full">
+                <Tabs defaultValue="pending" value={taskStatus} onValueChange={(value) => setTaskStatus(value as "pending" | "completed")} className="w-full">
                     <TabsList>
-                        <TabsTrigger value="pending" onClick={() => {setTaskStatus("pending")}}>Pending</TabsTrigger>
-                        <TabsTrigger value="completed" onClick={() => {setTaskStatus("completed")}}>Completed</TabsTrigger>
+                        <TabsTrigger value="pending">Pending</TabsTrigger>
+                        <TabsTrigger value="completed">Completed</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pending">
-                        <TasksListView status={taskStatus} tasks={tasks} loading={loading} />
+                        <TasksListView status={taskStatus} tasks={tasks} loading={loading} setTrigger={setUpdateTrigger} />
                     </TabsContent>
                     <TabsContent value="completed">
-                        <TasksListView status={taskStatus} tasks={tasks} loading={loading} />
+                        <TasksListView status={taskStatus} tasks={tasks} loading={loading} setTrigger={setUpdateTrigger} />
                     </TabsContent>
                 </Tabs>
                 {showTaskForm && <AddTaskForm  setShowTaskForm={setShowTaskForm} setUpdateTrigger={setUpdateTrigger} />}

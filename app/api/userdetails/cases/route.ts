@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
         const userCases = await User.findOne( {clerkUid: userId} ).populate("cases")
         const caseId = req.nextUrl.searchParams.get("id")
         if (caseId) {
-            const caseFound = await Case.findById(caseId).populate("notes").populate("clients")
+            const caseFound = await Case.findById(caseId).populate("notes").populate("clients").populate("tasks")
             return NextResponse.json({ caseFound })
         }
         return NextResponse.json({ userCases })

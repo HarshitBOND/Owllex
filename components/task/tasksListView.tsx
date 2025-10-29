@@ -21,14 +21,54 @@ import { ChevronDown,  LoaderCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { AlertPopup } from "../common/AlertPopup"
 import { Task } from "@/app/tasks/page"
+import { useState } from "react"
 
-const TasksListView = ({status, tasks, loading}: {status: string, tasks: Task[], loading: boolean}) => {
-  const router = useRouter()
+const TasksListView = ({status, tasks, loading, caseDetails, setTrigger}: {status: string, tasks: Task[], loading: boolean, caseDetails?: {fileNo: string, caseTitle: string, caseNo: string}, setTrigger: React.Dispatch<React.SetStateAction<number>>}) => {
+  const router = useRouter();
+  const [remark, setRemark] = useState<string>("")
 
-  const handleDeleteClient = (task: string) => {
-    console.log(task)
+  const handleDeleteTask = async (_id: string) => {
+    const response = await fetch(`/api/userdetails/tasks`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({_id}),
+    });
+    const data = await response.json();
+    console.log(data)
+    if (data.success) {
+      alert("Task deleted successfully");
+      setTrigger((prev) => prev + 1);
+    }
   }
-  
+
+  const handleTaskMark = async (task: Task, taskStatus: string) => {
+    const taskData = taskStatus === "completed" ? {
+      ...task,
+      status: taskStatus,
+      taskCompletedRemarks: remark
+    } : {
+      ...task,
+      status: taskStatus,
+      taskCompletedRemarks: ""
+    }
+
+    const response = await fetch(`/api/userdetails/tasks`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(taskData),
+    });
+    const data = await response.json();
+    console.log(data)
+    if (data.success) {
+      alert("Task marked successfully");
+      setTrigger((prev) => prev + 1);
+    }
+  }
+
   return (
         <>
         <div>
@@ -45,14 +85,19 @@ const TasksListView = ({status, tasks, loading}: {status: string, tasks: Task[],
                             <Button variant="outline">Actions <ChevronDown /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent onClick={(e) => {e.stopPropagation()}}>
-                            <AlertPopup  handleDeleteClient={() => handleDeleteClient(task.task)}>
-                                <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>{status === "Completed" ? "Mark as Pending" : "Mark as Completed"}</DropdownMenuItem>
-                            </AlertPopup>
-                            <DropdownMenuItem onClick={() => {router.push(`/tasks/edit/${task.task}`)}}>Edit</DropdownMenuItem>
-                            <AlertPopup  handleDeleteClient={() => handleDeleteClient(task.task)}>
+                            {status === "pending" 
+                            ? 
+                            <AlertPopup type="mark" remark={remark} setRemark={setRemark} handleFunction={() => handleTaskMark(task, "completed")}>
+                                <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>Mark as Completed</DropdownMenuItem>
+                            </AlertPopup> 
+                            : 
+                            <DropdownMenuItem onClick={(e) => {e.stopPropagation(); handleTaskMark(task, "pending")}} onSelect={(e) => e.preventDefault()}>Mark as Pending</DropdownMenuItem>
+                            }
+                            <DropdownMenuItem onClick={() => {router.push(`/tasks/edit/${task._id}`)}}>Edit</DropdownMenuItem>
+                            <AlertPopup type="delete" handleFunction={() => handleDeleteTask(task._id)}>
                                 <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>Delete</DropdownMenuItem>
                             </AlertPopup>
-                            <AlertPopup  handleDeleteClient={() => handleDeleteClient(task.task)}>
+                            <AlertPopup type="documents" handleFunction={() => handleDeleteTask(task._id)}>
                                 <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>Documents</DropdownMenuItem>
                             </AlertPopup>
                             </DropdownMenuContent>
@@ -60,7 +105,7 @@ const TasksListView = ({status, tasks, loading}: {status: string, tasks: Task[],
                         </div>
                         <h2 className="text-xl font-bold break-words whitespace-pre-wrap w-4/5">{task.task}</h2>
                         {task.caseId && <p className="mt-2 break-words whitespace-pre-wrap max-w-4/5">Linked to: 
-                            <a href={`/case-tracking/view/${task.caseId._id}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ms-2">F.No. {task.caseId.fileNo} | {task.caseId.caseTitle} | {task.caseId.caseNo}</a>
+                            <a href={`/case-tracking/view/${task.caseId._id}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ms-2">F.No. {task.caseId.fileNo || caseDetails?.fileNo} | {task.caseId.caseTitle || caseDetails?.caseTitle} | {task.caseId.caseNo || caseDetails?.caseNo}</a>
                         </p>}
                         {task.resourceName && <p className="mt-2">Resource: {task.resourceName}</p>}
                         <p>Due on: {new Date(task.dueDate).toDateString()}, {task.dueTime}</p>
