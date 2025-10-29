@@ -19,6 +19,7 @@ const InvoiceParticularsSchema = new mongoose.Schema(
 
 const InvoiceSchema = new mongoose.Schema(
   {
+    clerkUid: { type: String, required: true },
     name: { type: String, required: true },
     client: { type: mongoose.Schema.Types.ObjectId, ref: "Client", required: true },
     case: { type: mongoose.Schema.Types.ObjectId, ref: "Case" },

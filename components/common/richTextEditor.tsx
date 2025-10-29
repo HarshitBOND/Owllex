@@ -157,7 +157,7 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
         const formData = new FormData();
         formData.append('image', file);
         
-        const response = await fetch('/api/image/upload', {
+        const response = await fetch('/api/upload/image', {
             method: 'POST',
             body: formData,
         });

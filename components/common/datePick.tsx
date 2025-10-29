@@ -1,8 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Label } from "@/components/ui/label"
@@ -11,10 +9,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { CalendarDays } from "lucide-react"
+import { startOfToday } from "date-fns"
 
-export function Calendar22({ refDate }: { refDate: Date }) {
+export function Calendar22({ date, setDate, buttonVariant="link" }: { date: Date | undefined, setDate: React.Dispatch<React.SetStateAction<Date | undefined>>, buttonVariant?: "link" | "outline" }) {
   const [open, setOpen] = React.useState(false)
-  const [date, setDate] = React.useState<Date | undefined>(refDate)
 
   return (
     <div className="flex flex-col gap-3">
@@ -24,23 +23,25 @@ export function Calendar22({ refDate }: { refDate: Date }) {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
-            variant="link"
+            variant={buttonVariant}
             id="date"
-            className="w-fit justify-between font-normal border-none shadow-none hover:none"
+            className={buttonVariant === "link" ? "w-fit justify-between font-normal border-none shadow-none hover:none" : ""}
           >
             {date ? date.toLocaleDateString("en-GB") : "Select date"}
+            {buttonVariant === "outline" && <CalendarDays className="ms-auto" />}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto overflow-hidden p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={date}
-            captionLayout="dropdown"
-            onSelect={(date) => {
-              setDate(date)
-              setOpen(false)
-            }}
-          />
+        <Calendar
+          mode="single"
+          selected={date}
+          captionLayout="dropdown"
+          onSelect={(date) => {
+            setDate(date)
+            setOpen(false)
+          }}
+          disabled={buttonVariant === "outline" ? { before: startOfToday() } : undefined}
+        />
         </PopoverContent>
       </Popover>
     </div>

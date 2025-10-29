@@ -39,6 +39,7 @@ const CaseSchema = new mongoose.Schema(
     listingDetails: {type: [ListingSchema], default: []},
     notes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Note", default: [] }],
     clients: [{type: mongoose.Schema.Types.ObjectId, ref: "Client", default: []}],
+    tasks: [{type: mongoose.Schema.Types.ObjectId, ref: "Task", default: []}],
   }
 );
 

@@ -34,7 +34,7 @@ export default function ComboBox({ className, dropdownItems, type, value, setVal
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-[200px] justify-between", className)}
+          className={cn("w-[200px] justify-between truncate", className)}
         >
           {value
             ? dropdownItems.find((Item: DropdownItem) => Item.value === value)?.label
@@ -43,7 +43,7 @@ export default function ComboBox({ className, dropdownItems, type, value, setVal
           {dropdownItems.length > 0 && (open ? <ChevronUp className="opacity-50" /> : <ChevronDown className="opacity-50" />)}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0">
+      <PopoverContent className={cn("w-[200px] p-0", className)}>
         <Command>
           <CommandInput placeholder={"Search " + type + "..."} className="h-9" />
           <CommandList>

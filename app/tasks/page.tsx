@@ -7,20 +7,52 @@ import { cn } from "@/lib/utils"
 import TasksListView from "@/components/task/tasksListView"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ArrowDownNarrowWide, Loader2 } from "lucide-react"
-import { useState } from "react"
+import { ArrowDownNarrowWide } from "lucide-react"
+import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import AddTaskForm from "@/components/Forms/addTaskForm"
+import { Case } from "../case-tracking/page"
+
+export interface Task {
+  task: string;
+  caseId: Case | null;
+  dueDate: string;
+  dueTime: string;
+  reminder: string;
+  resourceType: string;
+  resourceName: string | null;
+  fieldToShow: string;
+  referenceFile: string;
+  status: string;
+  taskCompletedRemarks: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 const Tasks = () => {
     const { isOpen } = useSidebar()
-    const [addingTask, setAddingTask] = useState(false)
+    const [showTaskForm, setShowTaskForm] = useState(false);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [taskStatus, setTaskStatus] = useState("pending");
+    const [updateTrigger, setUpdateTrigger] = useState(0);
+    const [loading, setLoading] = useState(false);
+
     const handleAddTask = () => {
-        setAddingTask(true)
-        new Promise((resolve) => setTimeout(resolve, 1000))
-        .then(() => {
-        setAddingTask(false)
-    })
+        setShowTaskForm(true)
     }
+
+    useEffect(() => {
+        setTasks([])
+        setLoading(true)
+        const fetchTasks = async () => {
+            const response = await fetch(`/api/userdetails/tasks?status=${taskStatus}`)
+            const data = await response.json()
+            setTasks(data.tasks)
+            setLoading(false)
+        }
+        fetchTasks()
+    }, [taskStatus, updateTrigger])
+
     return (
     <div className="flex">
         <Sidebar />
@@ -32,9 +64,8 @@ const Tasks = () => {
                         <Input placeholder="Search" className="border border-gray-200 rounded-lg bg-gray-50 w-80" />
                         <div className="flex items-center gap-x-2 ms-auto">
                             <Button variant="outline"><ArrowDownNarrowWide /> Sort</Button>
-                            <Button onClick={() => {setAddingTask(true); handleAddTask()}} disabled={addingTask} variant="secondary">
-                            {addingTask && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {addingTask ? "Adding..." : "Add New Task"}
+                            <Button onClick={() => {handleAddTask()}} variant="secondary">
+                            Add New Task
                             </Button>
                         </div>
                     </div>
@@ -42,16 +73,17 @@ const Tasks = () => {
                 <hr className="my-2" />
                 <Tabs defaultValue="pending" className="w-full">
                     <TabsList>
-                        <TabsTrigger value="pending">Pending</TabsTrigger>
-                        <TabsTrigger value="completed">Completed</TabsTrigger>
+                        <TabsTrigger value="pending" onClick={() => {setTaskStatus("pending")}}>Pending</TabsTrigger>
+                        <TabsTrigger value="completed" onClick={() => {setTaskStatus("completed")}}>Completed</TabsTrigger>
                     </TabsList>
                     <TabsContent value="pending">
-                        <TasksListView status="pending" />
+                        <TasksListView status={taskStatus} tasks={tasks} loading={loading} />
                     </TabsContent>
                     <TabsContent value="completed">
-                        <TasksListView status="completed" />
+                        <TasksListView status={taskStatus} tasks={tasks} loading={loading} />
                     </TabsContent>
                 </Tabs>
+                {showTaskForm && <AddTaskForm  setShowTaskForm={setShowTaskForm} setUpdateTrigger={setUpdateTrigger} />}
             </div>
         </div>
     </div>

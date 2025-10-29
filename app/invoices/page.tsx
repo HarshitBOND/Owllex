@@ -158,7 +158,10 @@ const Invoices = () => {
                 dueOn: new Date()
             }
         ]
-    })
+    });
+    const [dateType, setDateType] = useState("raisedOn");
+    const [startDate, setStartDate] = useState<Date | undefined>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    const [endDate, setEndDate] = useState<Date | undefined>(new Date());
     const { isLoaded, isSignedIn } = useUser()
     if (!isLoaded) {
         return (
@@ -181,9 +184,9 @@ const Invoices = () => {
             <div className="h-35 w-full bg-background border-2 border-[#F3F5F9] rounded-lg mb-4 flex-flex-col">
                 <div className="flex items-center bg-gray-200 px-4 py-1 rounded-t-lg">
                     <span className="me-2">Select Date Type</span>
-                    <Select>
+                    <Select value={dateType} onValueChange={setDateType}>
                         <SelectTrigger className="bg-background">
-                            <SelectValue defaultValue="raisedOn" placeholder="Raised On" />
+                            <SelectValue placeholder="Raised On" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="raisedOn">Raised On</SelectItem>
@@ -191,7 +194,7 @@ const Invoices = () => {
                         </SelectContent>
                     </Select>
                     <div className="flex items-center ms-4 bg-background rounded-md border pe-4">
-                        <Calendar22 refDate={new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)} />  -  <Calendar22 refDate={new Date()} /> <Calendar1 size={16} />
+                        <Calendar22 date={startDate} setDate={setStartDate} buttonVariant="outline" />  -  <Calendar22 date={endDate} setDate={setEndDate} buttonVariant="outline" /> <Calendar1 size={16} />
                     </div>
                 </div>
                 <div className="flex gap-x-2 flex-1 h-22.5 rounded-b-lg">

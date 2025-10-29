@@ -1,5 +1,12 @@
 import mongoose from "mongoose";
 
+const ReminderSchema = new mongoose.Schema(
+  {
+    reminderTime: { type: String, required: true },
+    reminderTimeUnit: { type: String, required: true },
+  }
+)
+
 export const FieldsSchema = new mongoose.Schema(
   {
     caseInfo: { type: Boolean, required: true },
@@ -9,16 +16,18 @@ export const FieldsSchema = new mongoose.Schema(
 
 const TaskSchema = new mongoose.Schema(
   {
+    clerkUid: { type: String, required: true },
     task: { type: String, required: true },
-    case: { type: mongoose.Schema.Types.ObjectId, ref: "Case" },
+    caseId: { type: mongoose.Schema.Types.ObjectId, ref: "Case", default: null },
     dueDate: { type: String, required: true },
-    dueTime: { type: String, required: true },
-    reminder: { type: String, required: true },
+    dueTime: { type: String },
+    reminder: { type: ReminderSchema },
     resourceType: { type: String, required: true },
     resourceName: { type: String },
     fieldToShow: { type: FieldsSchema },
-    referenceFile: { type: String },
+    referenceFiles: { type: [String], default: [] },
     status: { type: String },
+    taskCompletedRemarks: { type: String },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   }

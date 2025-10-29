@@ -210,3 +210,19 @@
   height: auto;
   border-radius: 8px;
 }
+
+/* Hide the native clock icon in time inputs */
+.no-time-indicator::-webkit-calendar-picker-indicator {
+  display: none;
+  -webkit-appearance: none;
+}
+
+.no-time-indicator::-webkit-clear-button,
+.no-time-indicator::-webkit-inner-spin-button {
+  display: none;
+}
+
+.no-time-indicator {
+  appearance: none;
+  -moz-appearance: textfield;
+}

@@ -14,7 +14,7 @@ type SidebarProviderProps = {
   defaultOpen?: boolean;
 };
 
-export function SidebarProvider({ children, defaultOpen = false }: SidebarProviderProps) {
+export function SidebarProvider({ children, defaultOpen = true }: SidebarProviderProps) {
   const [isOpen, setIsOpen] = useState<boolean>(defaultOpen);
 
   return (
