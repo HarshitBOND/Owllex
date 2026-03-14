@@ -22,6 +22,7 @@ const AssignAddCaseForm = ({ id }: { id: string }) => {
     const [selectedClient, setSelectedClient] = useState<string>("")
     const [fileNumber, setFileNumber] = useState<string>("")
     const [loading, setLoading] = useState<boolean>(false)
+    const [error, setError] = useState<string>("")
     const router = useRouter()
     
     useEffect(() => {
@@ -35,7 +36,7 @@ const AssignAddCaseForm = ({ id }: { id: string }) => {
             const data = await response.json()
             const clients = (data.userClients?.clients ?? []).map((client: Client) => {
                 return {
-                    label: `${capitalize(client.salutation)} ${client.name}`,
+                    label: `${client.salutation ? capitalize(client.salutation) + ' ' : ''}${client.name}`,
                     value: client._id
                 }
             })
@@ -47,25 +48,30 @@ const AssignAddCaseForm = ({ id }: { id: string }) => {
 
     const handleRegisterCase = async () => {
         setLoading(true)
-        const response = await fetch(`/api/userdetails/cases`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                caseId: id,
-                client: selectedClient,
-                fileNumber: fileNumber,
-            }),
-        })
-        const data = await response.json()
-        if (data.success) {
-            alert("Case registered successfully")
-            router.push("/case-tracking")
-        } else {
-            alert("Failed to register case")
+        setError("")
+        try {
+            const response = await fetch(`/api/userdetails/cases`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    caseId: id,
+                    client: selectedClient || null,
+                    fileNumber: fileNumber,
+                }),
+            })
+            const data = await response.json()
+            if (data.success) {
+                router.push("/case-tracking")
+            } else {
+                setError(data.error || "Failed to register case. Please try again.")
+                setLoading(false)
+            }
+        } catch (err) {
+            setError("Network error. Please check your connection and try again.")
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     return (
@@ -91,7 +97,7 @@ const AssignAddCaseForm = ({ id }: { id: string }) => {
             <hr className="my-6" />
 
             <div className="flex gap-x-8">
-                <Label>Assign To Client</Label>
+                <Label>Assign To Client <span className="text-muted-foreground text-xs">(optional)</span></Label>
                 <ComboBox 
                     dropdownItems={clients}
                     type="Client"
@@ -102,10 +108,16 @@ const AssignAddCaseForm = ({ id }: { id: string }) => {
 
             <div className="flex gap-x-3 mt-4">
                 <Label>Assign File Number</Label>
-                <Input value={fileNumber} placeholder="Leave blank to automatically generate one" className="w-1/3 border border-gray-200 bg-gray-50 placeholder:text-gray-400" onChange={(e) => setFileNumber(e.target.value)}/>
+                <Input value={fileNumber} placeholder="Leave blank to automatically generate one" className="w-1/3 border-2 border-gray-200 bg-gray-50 placeholder:text-gray-400" onChange={(e) => setFileNumber(e.target.value)}/>
             </div>
 
             <hr className="my-6" />
+
+            {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-600">
+                    {error}
+                </div>
+            )}
 
             <div className="flex gap-x-8">
                 <Button onClick={handleRegisterCase} className="w-1/6 mb-3" disabled={loading}>

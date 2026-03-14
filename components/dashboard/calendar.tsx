@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, X } from "lucide-react";
 
 interface Event {
     title: string;
@@ -14,16 +14,23 @@ interface Event {
 export default function Calendar({ isOpen }: { isOpen: boolean }) {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalDate, setModalDate] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleDateClick = (info: any) => {
-    const event = events.find((event) => event.date === info.dateStr);
-    if (event) {
-      alert(`Event on ${info.dateStr}: ${event.title}`);
+    setModalDate(info.dateStr);
+    setNewTitle("");
+    setShowModal(true);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleAddEvent = () => {
+    if (newTitle.trim()) {
+      setEvents([...events, { title: newTitle.trim(), date: modalDate }]);
     }
-    const title = prompt("Enter an event title:");
-    if (title) {
-      setEvents([...events, { title, date: info.dateStr }]);
-    }
+    setShowModal(false);
   };
 
   useEffect(() => {
@@ -34,7 +41,7 @@ export default function Calendar({ isOpen }: { isOpen: boolean }) {
   }, [isOpen]);
 
   return (
-    <div>
+    <div className="relative">
       {loading ? (
         <div className="h-100 flex items-center justify-center gap-x-1">
           <LoaderCircle className="text-gray-500 animate-spin" size={18} />
@@ -53,6 +60,31 @@ export default function Calendar({ isOpen }: { isOpen: boolean }) {
           right: "dayGridMonth,dayGridWeek,dayGridDay",
         }}
       />
+      )}
+
+      {/* Add Event Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
+          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Add Event — {modalDate}</h3>
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-md"><X size={18} /></button>
+            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAddEvent()}
+              placeholder="Event title..."
+              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sidebar-primary/30 focus:border-sidebar-primary mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+              <button onClick={handleAddEvent} className="px-4 py-2 text-sm bg-sidebar-primary text-white rounded-lg hover:bg-sidebar-primary/90">Add Event</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

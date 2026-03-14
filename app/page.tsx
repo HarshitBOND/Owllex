@@ -3,6 +3,7 @@ import { HeroSection } from "@/components/landingPage/hero-section"
 import { ServicesGrid } from "@/components/landingPage/services-grid"
 import { WhyChooseSection } from "@/components/landingPage/why-choose-section"
 import { HowItWorksSection } from "@/components/landingPage/how-it-works-section"
+import { PricingSection } from "@/components/landingPage/pricing-section"
 import { WaitlistSection } from "@/components/landingPage/waitlist-section"
 import { Footer } from "@/components/layout/footer"
 
@@ -14,6 +15,7 @@ export default function HomePage() {
       <ServicesGrid />
       <WhyChooseSection />
       <HowItWorksSection />
+      <PricingSection />
       <WaitlistSection />
       <Footer />
     </main>

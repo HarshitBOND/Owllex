@@ -47,7 +47,7 @@ export function AlertPopup({ children, type, remark, setRemark, handleFunction }
             <AlertDialogDescription>
               <div className="flex flex-col gap-y-2">
                 <Label>Remarks</Label>
-                <Input value={remark} onChange={(e) => setRemark?.(e.target.value)} className="border border-gray-200 bg-gray-50" />
+                <Input value={remark} onChange={(e) => setRemark?.(e.target.value)} className="border-2 border-gray-200 bg-gray-50" />
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

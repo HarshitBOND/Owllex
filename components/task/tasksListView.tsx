@@ -36,9 +36,7 @@ const TasksListView = ({status, tasks, loading, caseDetails, setTrigger}: {statu
       body: JSON.stringify({_id}),
     });
     const data = await response.json();
-    console.log(data)
     if (data.success) {
-      alert("Task deleted successfully");
       setTrigger((prev) => prev + 1);
     }
   }
@@ -62,9 +60,7 @@ const TasksListView = ({status, tasks, loading, caseDetails, setTrigger}: {statu
       body: JSON.stringify(taskData),
     });
     const data = await response.json();
-    console.log(data)
     if (data.success) {
-      alert("Task marked successfully");
       setTrigger((prev) => prev + 1);
     }
   }
@@ -133,28 +129,11 @@ const TasksListView = ({status, tasks, loading, caseDetails, setTrigger}: {statu
         </div>
         {tasks && tasks.length > 25 && <>
         <hr className="my-2" />
-        <Pagination>
-            <PaginationContent>
-            <PaginationItem>
-                <PaginationPrevious href="#" />
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationLink href="#">1</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationLink href="#" isActive>2</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationLink href="#">3</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationEllipsis />
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationNext href="#" />
-            </PaginationItem>
-            </PaginationContent>
-        </Pagination>
+        <div className="flex items-center justify-center gap-2 py-2">
+          <Button variant="outline" size="sm" disabled>Previous</Button>
+          <Button variant="outline" size="sm" className="bg-sidebar-primary text-white">1</Button>
+          <Button variant="outline" size="sm" disabled>Next</Button>
+        </div>
         </>}
         </>
   )

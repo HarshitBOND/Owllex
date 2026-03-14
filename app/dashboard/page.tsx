@@ -1,136 +1,440 @@
 "use client"
 
+import { Suspense, useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import Sidebar from "@/components/dashboard/sidebar"
 import Navbar from "@/components/dashboard/navbar"
-import Calendar from "@/components/dashboard/calendar"
+const Calendar = dynamic(() => import("@/components/lexvert-calendar").then(mod => ({ default: mod.Calendar })), { ssr: false })
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
-import { FileSearch, FileText, ShieldHalf, Calendar as CalendarIcon, MessageCircle, Truck, LoaderCircle } from "lucide-react"
-import { useState } from "react"
+import {
+  FileSearch, FileText, ShieldHalf, Calendar as CalendarIcon,
+  Users, Briefcase, CheckSquare, Clock, ArrowRight,
+  TrendingUp, LoaderCircle, BarChart3, Plus
+} from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 
+interface DashboardData {
+  stats: {
+    totalCases: number
+    totalClients: number
+    pendingTasks: number
+    completedTasks: number
+    upcomingHearings: number
+  }
+  recentCases: any[]
+  recentClients: any[]
+  recentTasks: any[]
+  upcomingHearings: any[]
+}
+
 const Dashboard = () => {
-    const { isOpen } = useSidebar()
-    const router = useRouter()
-    const { isLoaded, isSignedIn } = useUser()
-    if (!isLoaded) {
-        return (
-          <div className="flex items-center justify-center min-h-screen">
-              <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
-          </div>
-        )
-    }
-    if (!isSignedIn) {
-        return redirect("/")
-    }
-    const quickActions = [
-        {
-            name: "My Cases",
-            description: "Track the status of your case",
-            icon: <FileSearch className="text-white" size={22} />,
-            href: "/case-tracking",
-            cta: "My Cases",
-            color: "bg-blue-500"
-        },
-        {
-            name: "New Affidavit",
-            description: "Create a new affidavit with AI",
-            icon: <FileText className="text-white" size={22} />,
-            href: "/generate-affidavit",
-            cta: "New Affidavit",
-            color: "bg-green-500"
-        },
-        {
-            name: "Report A Fraud",
-            description: "Report a fraud to respective authorities",
-            icon: <ShieldHalf className="text-white" size={22} />,
-            href: "/report-fraud",
-            cta: "Report Fraud",
-            color: "bg-orange-500"
-        },
-    ]
+  const { isOpen } = useSidebar()
+  const router = useRouter()
+  const { isLoaded, isSignedIn, user } = useUser()
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-    const [quickOptions, setQuickOptions] = useState([
-        {
-            name: "Active Documents",
-            description: "Documents is progress",
-            value: 0,
-            icon: <FileText color="blue" className="text-white" size={18} />,
-        },
-        {
-            name: "Consultations",
-            description: "Scheduled this week",
-            value: 0,
-            icon: <MessageCircle color="green" className="text-white" size={18} />,
-        },        {
-            name: "Court Dates",
-            description: "Upcoming hearings",
-            value: 0,
-            icon: <CalendarIcon color="orange" className="text-white" size={18} />,
-        },
-        {
-            name: "Deliveries",
-            description: "Completed this month",
-            value: 0,
-            icon: <Truck color="violet" className="text-white" size={18} />,
-        },
-    ])
+  useEffect(() => {
+    if (isSignedIn) {
+      fetch("/api/userdetails/dashboard")
+        .then(res => res.json())
+        .then(d => { setData(d); setLoading(false) })
+        .catch(() => setLoading(false))
+    }
+  }, [isSignedIn])
 
+  if (!isLoaded) {
     return (
-        <div className="flex">
-            <Sidebar />
-            <div className={cn("bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full md:p-6 p-2 transition-all duration-300", isOpen ? "lg:ml-54" : "lg:ml-13.5")}>
-                <div className="max-w-[1400px] w-full mx-auto">
-                <Navbar location="Dashboard" />
-                <div className="w-full lg:hidden">
-                    <h2 className="text-xl font-semibold">Dashboard</h2>
-                    <p className="text-sm mb-8">Welcome to your dashboard</p>
-                </div>
-                
-                <div className="w-full gap-4 flex items-center justify-between mb-4 flex-col md:flex-row">
-                    {quickOptions.map((item) => (
-                        <div key={item.name} className="flex flex-col md:w-[24%] w-full min-w-38 min-h-36 border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-300 p-5">
-                            <div className="flex w-full items-center justify-between">
-                                <h3>{item.name}</h3>
-                                <span>{item.icon}</span>
-                            </div>
-                            <p className="text-lg font-semibold mt-auto">{item.value}</p>
-                            <p className="text-sm">{item.description}</p>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="w-full lg:flex gap-x-4"> 
-                    <div className={cn("min-h-107.5 h-full min-w-10 w-full bg-white p-4 rounded-xl border border-gray-200 shadow-lg mb-6 md:mb-0 overflow-auto", !isOpen ? "lg:w-[68%]" : "lg:w-[66%]")}>
-                        <Calendar isOpen={isOpen} />
-                    </div>
-                    <div className={cn("h-full min-w-10 w-full md:bg-white md:p-4 p-2 rounded-xl md:border border-gray-200 md:shadow-lg overflow-auto mt-5 lg:mt-0", !isOpen ? "lg:w-[32%]" : "lg:w-[34%]")}>
-                        <h2 className="text-xl font-semibold">Quick Actions</h2>
-                        <p className="text-sm mb-8">Frequently used services</p>
-                        <div className="flex md:flex-row lg:flex-col flex-col gap-x-2">
-                            {quickActions.map((item) => (
-                                <div key={item.name}>
-                                    <div className="flex md:items-center items-start shadow-md gap-x-2 md:p-2.5 p-4 border border-gray-200 mb-4 rounded-xl hover:bg-gray-200/90 overflow-hidden">
-                                        <span className={cn("p-3 rounded-lg", `${item.color}`)}>{item.icon}</span>
-                                        <div className="flex md:items-center w-full flex-col lg:flex-row">
-                                            <div className={cn("flex flex-col items-start", !isOpen ? "lg:w-30" : "w-26")}>
-                                                <p className="font-semibold text-wrap lg:text-base text-sm">{item.name}</p>
-                                                <p className="lg:text-sm text-wrap text-xs">{item.description}</p>
-                                            </div>
-                                            <Button variant="outline" className="cursor-pointer mt-4 md:mt-0 ms-auto" onClick={() => router.push(item.href)}>{item.cta}</Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                </div>
-            </div>
+      <div className="flex items-center justify-center min-h-screen bg-[#F3F5F9]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-t-transparent border-sidebar-primary rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading your workspace...</p>
         </div>
+      </div>
+    )
+  }
+  if (!isSignedIn) {
+    return redirect("/")
+  }
+
+  const stats = data?.stats || { totalCases: 0, totalClients: 0, pendingTasks: 0, completedTasks: 0, upcomingHearings: 0 }
+
+  const statCards = [
+    {
+      name: "Active Cases",
+      value: stats.totalCases,
+      icon: Briefcase,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-200",
+      description: "Total cases in your portfolio"
+    },
+    {
+      name: "Total Clients",
+      value: stats.totalClients,
+      icon: Users,
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-50",
+      borderColor: "border-emerald-200",
+      description: "Clients under management"
+    },
+    {
+      name: "Pending Tasks",
+      value: stats.pendingTasks,
+      icon: CheckSquare,
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      borderColor: "border-orange-200",
+      description: "Tasks awaiting completion"
+    },
+    {
+      name: "Upcoming Hearings",
+      value: stats.upcomingHearings,
+      icon: Clock,
+      color: "text-violet-600",
+      bgColor: "bg-violet-50",
+      borderColor: "border-violet-200",
+      description: "Hearings on schedule"
+    },
+  ]
+
+  const quickActions = [
+    {
+      name: "My Cases",
+      description: "Track and manage all your cases",
+      icon: <FileSearch className="text-white" size={20} />,
+      href: "/case-tracking",
+      color: "bg-blue-600 hover:bg-blue-700"
+    },
+    {
+      name: "Add Client",
+      description: "Register a new client",
+      icon: <Users className="text-white" size={20} />,
+      href: "/my-clients/add",
+      color: "bg-emerald-600 hover:bg-emerald-700"
+    },
+    {
+      name: "New Affidavit",
+      description: "Generate affidavit with AI assistance",
+      icon: <FileText className="text-white" size={20} />,
+      href: "/generate-affidavit",
+      color: "bg-teal-600 hover:bg-teal-700"
+    },
+    {
+      name: "View Invoices",
+      description: "Billing and payment tracking",
+      icon: <BarChart3 className="text-white" size={20} />,
+      href: "/invoices",
+      color: "bg-violet-600 hover:bg-violet-700"
+    },
+    {
+      name: "Report Fraud",
+      description: "Report to authorities",
+      icon: <ShieldHalf className="text-white" size={20} />,
+      href: "/report-fraud",
+      color: "bg-orange-600 hover:bg-orange-700"
+    },
+  ]
+
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return "Good Morning"
+    if (hour < 17) return "Good Afternoon"
+    return "Good Evening"
+  }
+
+  return (
+    <div className="flex">
+      <Sidebar />
+      <div className={cn("bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+        <div className="w-full">
+          {/* Header Section */}
+          <div className="bg-white border-b border-gray-200 w-full">
+            <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-4">
+              <Navbar location="Dashboard" />
+              <div className="mb-2">
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+                  {getGreeting()}, {user?.firstName || "Counselor"} 👋
+                </h2>
+                <p className="text-sm md:text-base text-muted-foreground mt-1">
+                  Here&apos;s an overview of your legal workspace
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-6">
+            {/* Upcoming Hearings - Primary Focus at Top */}
+            <div className="bg-white rounded-xl border border-violet-200 shadow-sm mb-6">
+              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-violet-100 rounded-lg">
+                    <Clock className="h-5 w-5 text-violet-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Upcoming Hearings</h3>
+                    <p className="text-sm text-muted-foreground">Your next scheduled court dates</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => router.push("/case-tracking/add")} className="text-violet-600 border-violet-200 hover:bg-violet-50">
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Case
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/case-tracking")} className="text-sidebar-primary hover:text-sidebar-primary/80">
+                    View All <ArrowRight className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+              </div>
+              <div className="p-4">
+                {loading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <LoaderCircle className="animate-spin text-gray-400" size={24} />
+                  </div>
+                ) : data?.upcomingHearings && data.upcomingHearings.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                    {data.upcomingHearings.slice(0, 5).map((hearing: any, i: number) => (
+                      <div key={hearing._id || i} className="flex items-start gap-3 p-3 rounded-lg bg-violet-50/50 border border-violet-100 hover:border-violet-200 hover:shadow-sm transition-all cursor-pointer" onClick={() => hearing._id && router.push(`/case-tracking/view/${hearing._id}`)}>
+                        <div className="flex flex-col items-center justify-center bg-violet-100 rounded-lg px-3 py-2 min-w-[52px]">
+                          <span className="text-xs font-medium text-violet-600">
+                            {hearing.courtDate ? new Date(hearing.courtDate).toLocaleDateString('en-US', { month: 'short' }) : '—'}
+                          </span>
+                          <span className="text-lg font-bold text-violet-700">
+                            {hearing.courtDate ? new Date(hearing.courtDate).getDate() : '—'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-gray-900 truncate">{hearing.caseTitle || hearing.caseNo}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{hearing.courtName || 'Court not specified'}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">Case No: {hearing.caseNo}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <CalendarIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-gray-600">No upcoming hearings</p>
+                    <p className="text-xs text-gray-400 mt-1">Add cases to see hearing dates here</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 text-violet-600 border-violet-200 hover:bg-violet-50"
+                      onClick={() => router.push("/case-tracking/add")}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Your First Case
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+              {statCards.map((item) => (
+                <div
+                  key={item.name}
+                  className={cn(
+                    "bg-white rounded-xl border p-4 md:p-5 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer group",
+                    item.borderColor
+                  )}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={cn("p-2 rounded-lg", item.bgColor)}>
+                      <item.icon className={cn("h-5 w-5", item.color)} />
+                    </div>
+                    {loading ? (
+                      <div className="w-6 h-6 border-2 border-t-transparent border-gray-300 rounded-full animate-spin" />
+                    ) : (
+                      <TrendingUp className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                    )}
+                  </div>
+                  <p className="text-2xl md:text-3xl font-bold text-gray-900">
+                    {loading ? "—" : item.value}
+                  </p>
+                  <p className="text-sm font-medium text-gray-700 mt-1">{item.name}</p>
+                  <p className="text-xs text-gray-500 hidden md:block">{item.description}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Main Content Grid */}
+            <div className="grid lg:grid-cols-3 gap-6 mb-6">
+              {/* Calendar - takes 2 columns, no upcoming events sidebar */}
+              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-sidebar-primary" />
+                    Calendar
+                  </h3>
+                  <p className="text-sm text-muted-foreground">Your scheduled events and hearings</p>
+                </div>
+                <div className="p-2 md:p-4">
+                  <Suspense fallback={
+                    <div className="flex items-center justify-center h-80">
+                      <LoaderCircle className="animate-spin text-sidebar-primary" size={32} />
+                    </div>
+                  }>
+                    <Calendar embedded />
+                  </Suspense>
+                </div>
+              </div>
+
+              {/* Quick Actions - 1 column */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="p-4 border-b border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
+                  <p className="text-sm text-muted-foreground">Frequently used services</p>
+                </div>
+                <div className="p-4 flex flex-col gap-3">
+                  {quickActions.map((item) => (
+                    <button
+                      key={item.name}
+                      onClick={() => router.push(item.href)}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all duration-200 text-left group cursor-pointer"
+                    >
+                      <span className={cn("p-2 rounded-lg flex-shrink-0 transition-transform group-hover:scale-105", item.color)}>
+                        {item.icon}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-gray-900">{item.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{item.description}</p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Pending Tasks - Full Width */}
+            <div className="mb-6">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <CheckSquare className="h-5 w-5 text-orange-600" />
+                      Pending Tasks
+                    </h3>
+                    <p className="text-sm text-muted-foreground">Tasks requiring your attention</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/tasks")} className="text-sidebar-primary hover:text-sidebar-primary/80">
+                    View All <ArrowRight className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+                <div className="p-4">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <LoaderCircle className="animate-spin text-gray-400" size={24} />
+                    </div>
+                  ) : data?.recentTasks && data.recentTasks.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {data.recentTasks.slice(0, 6).map((task: any, i: number) => (
+                        <div key={task._id || i} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <div className={cn(
+                            "w-2 h-2 rounded-full flex-shrink-0",
+                            task.dueDate && new Date(task.dueDate) < new Date() ? "bg-red-500" : "bg-orange-400"
+                          )} />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-gray-900 truncate">{task.task}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'}
+                            </p>
+                          </div>
+                          {task.dueDate && new Date(task.dueDate) < new Date() && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-medium">Overdue</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <CheckSquare className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-gray-600">No pending tasks</p>
+                      <p className="text-xs text-gray-400 mt-1">You&apos;re all caught up!</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => router.push("/tasks")}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Create Task
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Clients & Cases */}
+            {!loading && (data?.recentCases?.length || data?.recentClients?.length) ? (
+              <div className="grid lg:grid-cols-2 gap-6 mt-6">
+                {data?.recentCases && data.recentCases.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                    <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <Briefcase className="h-5 w-5 text-blue-600" />
+                        Recent Cases
+                      </h3>
+                      <Button variant="ghost" size="sm" onClick={() => router.push("/case-tracking")} className="text-sidebar-primary hover:text-sidebar-primary/80">
+                        View All <ArrowRight className="h-3 w-3 ml-1" />
+                      </Button>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {data.recentCases.slice(0, 4).map((c: any, i: number) => (
+                        <div key={c._id || i} className="p-4 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => router.push(`/case-tracking/view/${c._id}`)}>
+                          <p className="font-medium text-sm text-gray-900 truncate">{c.caseTitle || c.caseNo}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-xs text-gray-500">{c.caseNo}</span>
+                            <span className="text-xs text-gray-400">|</span>
+                            <span className="text-xs text-gray-500">{c.courtName || 'N/A'}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {data?.recentClients && data.recentClients.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                    <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <Users className="h-5 w-5 text-emerald-600" />
+                        Recent Clients
+                      </h3>
+                      <Button variant="ghost" size="sm" onClick={() => router.push("/my-clients")} className="text-sidebar-primary hover:text-sidebar-primary/80">
+                        View All <ArrowRight className="h-3 w-3 ml-1" />
+                      </Button>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {data.recentClients.slice(0, 4).map((client: any, i: number) => (
+                        <div key={client._id || i} className="p-4 hover:bg-gray-50 transition-colors cursor-pointer flex items-center gap-3" onClick={() => router.push(`/my-clients/view/${client._id}`)}>
+                          <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-semibold text-emerald-700">
+                              {(client.name || 'U')[0].toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-gray-900 truncate">{client.name}</p>
+                            <p className="text-xs text-gray-500">{client.email || client.contact || 'No contact info'}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 export default Dashboard

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import CauseListCase from "../../lib/models/causelist-cases"
+import ScrapedCase from "../../lib/models/scraped-case"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
 
 function escapeRegexLiteral(s: string) {
@@ -7,102 +8,111 @@ function escapeRegexLiteral(s: string) {
 }
 
 function buildFlexibleCaseTypePattern(caseType: string) {
-  // We'll iterate characters and build a pattern allowing flexible whitespace around punctuation.
-  const special = new Set(['.', '(', ')', '-', ',', '&', '/']);
   let out = '';
 
   for (let i = 0; i < caseType.length; i++) {
     const ch = caseType[i];
 
     if (/\s/.test(ch)) {
-      // a space in input -> allow one or more whitespace in DB
       out += '\\s+';
       continue;
     }
-
     if (ch === '.') {
-      // require the dot but allow spaces around it:  \s*\.\s*
       out += '\\s*\\.\\s*';
       continue;
     }
-
     if (ch === '(') {
-      out += '\\s*\\(\\s*'; // allow spaces before/after '('
+      out += '\\s*\\(\\s*';
       continue;
     }
-
     if (ch === ')') {
-      out += '\\s*\\)\\s*'; // allow spaces before/after ')'
+      out += '\\s*\\)\\s*';
       continue;
     }
-
     if (ch === '-') {
-      out += '\\s*-\\s*'; // allow spaces around hyphen
+      out += '\\s*-\\s*';
       continue;
     }
-
     if (ch === ',') {
       out += '\\s*,\\s*';
       continue;
     }
-
     if (ch === '&') {
       out += '\\s*&\\s*';
       continue;
     }
-
     if (ch === '/') {
-      // In caseType it's uncommon but be safe
       out += '\\s*/\\s*';
       continue;
     }
-
-    // default: escape the char if needed
     out += escapeRegexLiteral(ch);
   }
 
-  // collapse multiple \s+ or \s* sequences (optional but tidy)
   out = out.replace(/(\\s\+){2,}/g, '\\s+').replace(/(\\s\*\.)/g, '\\s*\\.');
-
   return out;
 }
 
+// Transform a ScrapedCase document to match CauseListCase format for the frontend
+function normalizeScrapedCase(sc: any) {
+  return {
+    _id: sc._id,
+    item_no: sc.item_no || "",
+    case_no: sc.main_case_no,
+    case_title: sc.petitioner && sc.respondent
+      ? `${sc.petitioner} VS. ${sc.respondent}`
+      : sc.petitioner || sc.respondent || sc.raw_parties || sc.main_case_no,
+    advocate: sc.advocate_petitioner || "",
+    case_stage: sc.section || "",
+    remarks: "",
+    links: [],
+    court_name: "DELHI HIGH COURT",
+    court_value: sc.court_no || "",
+    cause_list_date: sc.list_date || "",
+    scrapped_at: sc.parsed_at || null,
+    uid: sc.source_pdf || "",
+    _source: "scraped_cases",
+  };
+}
+
 async function findCasesByParts(caseType: string, caseNumber: string, caseYear: string) {
-  // normalized inputs (trim)
   caseType = String(caseType || '').trim();
   caseNumber = String(caseNumber || '').trim();
   caseYear = String(caseYear || '').trim();
 
-  // 1) build the flexible case-type pattern (dots required but with spaces allowed)
   const patternStrict = buildFlexibleCaseTypePattern(caseType);
-
-  // We want to ensure we match the intended caseNumber/caseYear (not later numbers).
-  // Use [^0-9]* between caseType and the desired number to avoid jumping to later numeric groups.
   const numAndYear = `${escapeRegexLiteral(caseNumber)}\\s*/\\s*${escapeRegexLiteral(caseYear)}`;
-
-  // final strict regex string
   const regexStrict = `${patternStrict}[^0-9]*${numAndYear}`;
 
-  // 2) relaxed pattern: allow dots to be optional (if strict fails)
-  // We make dots optional by replacing `\\s*\\.\\s*` with `\\s*\\.?\\s*`
   const patternRelaxed = patternStrict.replace(/\\s*\\.\\s*/g, '\\s*\\.?\\s*');
   const regexRelaxed = `${patternRelaxed}[^0-9]*${numAndYear}`;
 
-  // Try strict first
+  // Search CauseListCase collection first (strict then relaxed)
   let foundCases = await CauseListCase.find({
     case_no: { $regex: regexStrict, $options: 'i' }
   });
+  if (foundCases && foundCases.length > 0) return foundCases;
 
-  if (foundCases && foundCases.length > 0) {
-    return foundCases;
-  }
-
-  // fallback to relaxed (more permissive)
   foundCases = await CauseListCase.find({
     case_no: { $regex: regexRelaxed, $options: 'i' }
   });
+  if (foundCases && foundCases.length > 0) return foundCases;
 
-  return foundCases || [];
+  // Fallback: search ScrapedCase collection (main_case_no field)
+  let scrapedCases = await ScrapedCase.find({
+    main_case_no: { $regex: regexStrict, $options: 'i' }
+  });
+  if (scrapedCases && scrapedCases.length > 0) {
+    return scrapedCases.map(normalizeScrapedCase);
+  }
+
+  scrapedCases = await ScrapedCase.find({
+    main_case_no: { $regex: regexRelaxed, $options: 'i' }
+  });
+  if (scrapedCases && scrapedCases.length > 0) {
+    return scrapedCases.map(normalizeScrapedCase);
+  }
+
+  return [];
 }
 
 export async function GET(req: NextRequest) {
@@ -110,8 +120,16 @@ export async function GET(req: NextRequest) {
         await connectMongoWithRetry()
         const caseId = req.nextUrl.searchParams.get("id")
         if (caseId) {
+            // Try CauseListCase first, then ScrapedCase
             const caseFound = await CauseListCase.findById(caseId)
-            return NextResponse.json({ caseFound })
+            if (caseFound) {
+                return NextResponse.json({ caseFound })
+            }
+            const scrapedCase = await ScrapedCase.findById(caseId)
+            if (scrapedCase) {
+                return NextResponse.json({ caseFound: normalizeScrapedCase(scrapedCase) })
+            }
+            return NextResponse.json({ error: "Case not found" }, { status: 404 })
         }
         return NextResponse.json({ error: "CaseId not found" }, { status: 404 })
     } catch (error) {
@@ -127,14 +145,22 @@ export async function POST(req: NextRequest) {
         await connectMongoWithRetry()
 
         if (!caseNumber && !caseType && forum) {
-            const foundCases = await CauseListCase.find({ advocate: {$regex: advocateName, $options: "i"}, case_no: {$regex: caseYear, $options: "i"} })
+            // Advocate name search — search both collections
+            let foundCases = await CauseListCase.find({
+                advocate: { $regex: advocateName, $options: "i" },
+                case_no: { $regex: caseYear, $options: "i" }
+            })
+            if (!foundCases || foundCases.length === 0) {
+                const scrapedCases = await ScrapedCase.find({
+                    advocate_petitioner: { $regex: advocateName, $options: "i" },
+                    main_case_no: { $regex: caseYear, $options: "i" }
+                })
+                foundCases = scrapedCases.map(normalizeScrapedCase)
+            }
             return NextResponse.json({ cases: foundCases }, { status: 200 })
         } else {
-
             const foundCases = await findCasesByParts(caseType, caseNumber, caseYear);
-
             return NextResponse.json({ cases: foundCases }, { status: 200 });
-
         }
 
     } catch (error) {

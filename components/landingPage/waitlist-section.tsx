@@ -12,9 +12,15 @@ export function WaitlistSection() {
   const [email, setEmail] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle waitlist signup
+    try {
+      await fetch('/api/complaints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Waitlist Signup', email, subject: 'Waitlist', message: `Waitlist signup: ${email}` })
+      })
+    } catch { /* silent */ }
     setIsSubmitted(true)
     setEmail("")
   }

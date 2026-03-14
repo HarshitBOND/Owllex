@@ -182,8 +182,12 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
         // Remove loading toast
         document.body.removeChild(loadingToast);
         
-        // Show error message
-        alert('Failed to upload image. Please try again.');
+        // Show error message using DOM toast
+        const errorToast = document.createElement('div');
+        errorToast.textContent = 'Failed to upload image. Please try again.';
+        errorToast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50';
+        document.body.appendChild(errorToast);
+        setTimeout(() => document.body.removeChild(errorToast), 3000);
         }
     };
     
@@ -197,7 +201,6 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
         const htmlContent = editor.getHTML();
 
         if (htmlContent === "<p></p>") {
-            alert("Content is empty")
             setSavingContent(false)
             return
         }
@@ -236,7 +239,11 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
         
     } catch (error) {
         console.error('Save error:', error);
-        alert('Failed to save content');
+        const errToast = document.createElement('div');
+        errToast.textContent = 'Failed to save content';
+        errToast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50';
+        document.body.appendChild(errToast);
+        setTimeout(() => document.body.removeChild(errToast), 3000);
     }
     setSavingContent(false)
     setTrigger((prev) => prev + 1)

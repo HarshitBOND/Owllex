@@ -19,7 +19,6 @@ const DisplayNotes = ({id, setTrigger, notes, source}: {id: string, setTrigger: 
             if (!response.ok) {
                 throw new Error("Failed to delete note")
             }
-            alert("Note deleted successfully")
             setTrigger((prev) => prev + 1)
             setDeleting(false)
             setDeletingNoteId(null)
@@ -28,7 +27,6 @@ const DisplayNotes = ({id, setTrigger, notes, source}: {id: string, setTrigger: 
             deleteNote()
         } catch (error) {
             console.error(error)
-            alert("Failed to delete note")
             setDeleting(false)
             setDeletingNoteId(null)
         }

@@ -1,3 +1,5 @@
+"use client"
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { FileText, MessageCircle, Calendar, Users, Truck, PenTool, Scale, Clock } from "lucide-react"
@@ -89,7 +91,7 @@ export function ServicesGrid() {
                 </CardHeader>
                 <CardContent>
                   <CardDescription className="text-sm leading-relaxed mb-4">{service.description}</CardDescription>
-                  <Button variant="link" size="sm" className="py-0 mt-auto text-primary">
+                  <Button variant="link" size="sm" className="py-0 mt-auto text-primary" onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}>
                     Learn more →
                   </Button>
                 </CardContent>

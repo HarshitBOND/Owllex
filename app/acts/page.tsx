@@ -1,21 +1,226 @@
 "use client"
 
+import { useEffect, useState, useCallback } from "react"
 import Sidebar from "@/components/dashboard/sidebar"
 import Navbar from "@/components/dashboard/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
+import { useUser } from "@clerk/nextjs"
+import { redirect } from "next/navigation"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import {
+  Search, BookOpen, ExternalLink, ChevronLeft, ChevronRight,
+  Scale, Filter, Loader2, AlertCircle, BookMarked
+} from "lucide-react"
+
+type Act = {
+  _id: string
+  actName: string
+  actYear?: string
+  actNo?: string
+  category?: string
+  url?: string
+}
+
+const PAGE_SIZE = 30
 
 const Acts = () => {
-    const { isOpen } = useSidebar()
+  const { isOpen } = useSidebar()
+  const { isLoaded, isSignedIn } = useUser()
+  const [acts, setActs] = useState<Act[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+
+  const fetchActs = useCallback(async (skip: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/public/acts?skip=${skip}&limit=${PAGE_SIZE}`)
+      if (!res.ok) throw new Error("Failed to fetch")
+      const data = await res.json()
+      const items = Array.isArray(data) ? data : data.acts || data.data || []
+      setActs(items)
+      setHasMore(items.length === PAGE_SIZE)
+    } catch {
+      setError("Unable to load acts. Please try again.")
+      setActs([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchActs(page * PAGE_SIZE)
+  }, [page, fetchActs])
+
+  if (!isLoaded) {
     return (
+      <div className="flex items-center justify-center min-h-screen bg-[#F3F5F9]">
+        <div className="w-12 h-12 border-4 border-t-transparent border-sidebar-primary rounded-full animate-spin" />
+      </div>
+    )
+  }
+  if (!isSignedIn) return redirect("/")
+
+  const filtered = search.trim()
+    ? acts.filter(a => a.actName?.toLowerCase().includes(search.toLowerCase()))
+    : acts
+
+  return (
     <div className="flex">
-        <Sidebar />
-        <div className={cn("bg-[#F3F5F9] min-h-screen w-full md:p-6 p-2 transition-all duration-300", isOpen ? "lg:ml-54" : "lg:ml-13.5")}>
-            <div className="max-w-[1400px] w-full mx-auto">
-            <Navbar location="Acts" />
-            
+      <Sidebar />
+      <div className={cn("bg-[#F3F5F9] min-h-screen w-full transition-all duration-300", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 w-full">
+          <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-4">
+            <Navbar location="Acts & Statutes" />
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 rounded-lg">
+                  <Scale className="h-6 w-6 text-indigo-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Acts & Statutes</h2>
+                  <p className="text-sm text-gray-500">Browse Indian bare acts and legislation</p>
+                </div>
+              </div>
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search acts..."
+                  className="pl-10 h-10"
+                />
+              </div>
             </div>
+          </div>
         </div>
+
+        {/* Content */}
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-6">
+          {/* Quick Category Tags */}
+          <div className="flex flex-wrap gap-2 mb-5">
+            {["IPC", "CrPC", "CPC", "Constitution", "Evidence", "Contract", "Company", "Property"].map(tag => (
+              <button
+                key={tag}
+                onClick={() => setSearch(tag)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer",
+                  search === tag
+                    ? "bg-sidebar-primary text-white border-sidebar-primary"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                )}
+              >
+                {tag}
+              </button>
+            ))}
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="px-3 py-1.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 cursor-pointer"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
+
+          {/* Loading State */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 text-sidebar-primary animate-spin mb-3" />
+              <p className="text-sm text-gray-500">Loading acts...</p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !loading && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
+              <p className="text-sm text-gray-600 mb-3">{error}</p>
+              <Button variant="outline" size="sm" onClick={() => fetchActs(page * PAGE_SIZE)}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <BookMarked className="h-10 w-10 text-gray-300 mb-3" />
+              <p className="text-sm text-gray-500">
+                {search ? `No acts found for "${search}"` : "No acts available"}
+              </p>
+            </div>
+          )}
+
+          {/* Acts Grid */}
+          {!loading && !error && filtered.length > 0 && (
+            <>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filtered.map((act, idx) => (
+                  <div
+                    key={act._id || idx}
+                    className="bg-white rounded-xl border-2 border-gray-200 p-4 hover:shadow-md hover:border-gray-300 transition-all group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-indigo-50 rounded-lg flex-shrink-0 mt-0.5">
+                        <BookOpen className="h-4 w-4 text-indigo-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 group-hover:text-sidebar-primary transition-colors">
+                          {act.actName}
+                        </h3>
+                        {act.actYear && (
+                          <p className="text-xs text-gray-400 mt-1">Year: {act.actYear}</p>
+                        )}
+                        {act.actNo && (
+                          <p className="text-xs text-gray-400">Act No: {act.actNo}</p>
+                        )}
+                      </div>
+                    </div>
+                    {act.url && (
+                      <a
+                        href={act.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 flex items-center text-xs text-sidebar-primary font-medium hover:underline"
+                      >
+                        Read Full Act <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-center gap-4 mt-8">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <span className="text-sm text-gray-500">Page {page + 1}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!hasMore}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -31,12 +31,10 @@ export async function GET(request: NextRequest) {
     const skip = request.nextUrl.searchParams.get("skip") || "0";
     const limit = request.nextUrl.searchParams.get("limit") || "50";
 
-    await axios.request(config(skip, limit))
-    .then((response) => {
-    return NextResponse.json(response.data);
-    })
-    .catch((error) => {
-    return NextResponse.json(error);
-    });
-
+    try {
+        const response = await axios.request(config(skip, limit));
+        return NextResponse.json(response.data);
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message || "Failed to fetch acts" }, { status: 500 });
+    }
 }

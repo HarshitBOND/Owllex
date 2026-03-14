@@ -1,30 +1,21 @@
 "use client"
 
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table"
-import { AlertPopup } from "../common/AlertPopup"
 import { Button } from "../ui/button"
-import { ChevronDown } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { LoaderCircle } from "lucide-react"
+import { AlertPopup } from "../common/AlertPopup"
+import { LoaderCircle, Eye, Pencil, Trash2, Phone, Mail, Building, Scale, MoreHorizontal, ChevronRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Client } from "@/app/my-clients/page"
 
-const ClientListView = ({clients, clientsLoading, setTrigger}: {clients: Client[], clientsLoading: boolean, setTrigger: React.Dispatch<React.SetStateAction<number>>}) => {
+interface ClientListViewProps {
+    clients?: Client[];
+    contacts?: Client[];
+    clientsLoading: boolean;
+    setTrigger: React.Dispatch<React.SetStateAction<number>>;
+}
+
+const ClientListView = ({ clients, contacts, clientsLoading, setTrigger }: ClientListViewProps) => {
     const router = useRouter()
+    const data = clients || contacts || []
 
     const handleClientView = (clientId: string) => {
         router.push(`/my-clients/view/${clientId}`)
@@ -32,97 +23,114 @@ const ClientListView = ({clients, clientsLoading, setTrigger}: {clients: Client[
 
     const handleDeleteClient = (clientId: string) => {
         const deleteClient = async () => {
-            const response = await fetch(`/api/userdetails/clients?id=${clientId}`, {
-                method: "DELETE"
-            })
-            if (!response.ok) {
-                throw new Error("Failed to delete client")
-            }
-            alert("Client deleted successfully")
+            const response = await fetch(`/api/userdetails/clients?id=${clientId}`, { method: "DELETE" })
+            if (!response.ok) throw new Error("Failed to delete client")
             setTrigger((prev) => prev + 1)
         }
-        try {
-            deleteClient()
-        } catch (error) {
-            console.error(error)
-            alert("Failed to delete client")
-        }
+        deleteClient().catch(console.error)
+    }
+
+    if (clientsLoading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <div className="flex flex-col items-center gap-2">
+                    <LoaderCircle className="text-primary animate-spin" size={24} />
+                    <p className="text-sm text-muted-foreground">Loading clients...</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (data.length === 0) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                    <Scale className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">No clients found</p>
+                </div>
+            </div>
+        )
     }
 
     return (
-        <>
-        <div>
-        <Table>
-            <TableBody>
-                {clients.length > 0 ? clients.map((client) => (
-                <TableRow key={client._id} className="cursor-pointer">
-                    <TableCell colSpan={4} onClick={() => handleClientView(client._id)}>
-                    <div className="flex flex-col mb-2 gap-y-1">
-                        <div className="flex items-center justify-between">
-                        <p>Created On: {new Date(client.createdAt).toDateString()}</p>
-                        <DropdownMenu >
-                            <DropdownMenuTrigger asChild>
-                            <Button variant="outline">Actions <ChevronDown /></Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent onClick={(e) => {e.stopPropagation()}}>
-                            <DropdownMenuItem onClick={() => {router.push(`/my-clients/edit/${client._id}`)}}>Edit</DropdownMenuItem>
-                            <AlertPopup type="delete" handleFunction={() => handleDeleteClient(client._id)}>
-                                <DropdownMenuItem onClick={(e) => {e.stopPropagation()}} onSelect={(e) => e.preventDefault()}>Delete</DropdownMenuItem>
-                            </AlertPopup>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+        <div className="space-y-2">
+            {data.map((client) => {
+                const initials = (client.name || "U").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+                const caseCount = (client as any).cases?.length || 0;
+
+                return (
+                    <div
+                        key={client._id}
+                        onClick={() => handleClientView(client._id)}
+                        className="group bg-card rounded-lg border border-border p-4 cursor-pointer hover:border-primary/40 hover:shadow-sm transition-all"
+                    >
+                        <div className="flex items-center gap-4">
+                            {/* Avatar */}
+                            <div className="shrink-0 w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                                <span className="text-sm font-semibold text-primary">{initials}</span>
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                                        {client.salutation ? `${client.salutation.charAt(0).toUpperCase() + client.salutation.slice(1)}. ` : ""}
+                                        {client.name}
+                                    </h3>
+                                    {caseCount > 0 && (
+                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
+                                            {caseCount} case{caseCount !== 1 ? "s" : ""}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+                                    {client.email && (
+                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <Mail className="h-3 w-3" /> {client.email}
+                                        </span>
+                                    )}
+                                    {client.contact && (
+                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <Phone className="h-3 w-3" /> {client.contact}
+                                        </span>
+                                    )}
+                                    {client.company && (
+                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <Building className="h-3 w-3" /> {client.company}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                    onClick={() => handleClientView(client._id)}
+                                    className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                                    title="View"
+                                >
+                                    <Eye className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                                <button
+                                    onClick={() => router.push(`/my-clients/edit/${client._id}`)}
+                                    className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                                    title="Edit"
+                                >
+                                    <Pencil className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                                <AlertPopup type="delete" handleFunction={() => handleDeleteClient(client._id)}>
+                                    <button className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors" title="Delete">
+                                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-red-500" />
+                                    </button>
+                                </AlertPopup>
+                            </div>
+
+                            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                         </div>
-                        <h2 className="text-2xl font-bold">{client.name}</h2>
-                        <p>{client.email}</p>
-                        <p>Contact Number: {client.contact}</p>
                     </div>
-                    </TableCell>
-                </TableRow>
-                )) : clientsLoading ? (
-                <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                    <div className="h-100 flex items-center justify-center gap-x-1">
-                        <LoaderCircle className="text-gray-500 animate-spin" size={18} />
-                        <p className="text-center text-gray-500">Loading...</p>
-                    </div>
-                    </TableCell>
-                </TableRow>
-                ) : (
-                <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                    No clients found
-                    </TableCell>
-                </TableRow>
-                )}
-            </TableBody>
-        </Table>
+                )
+            })}
         </div>
-        {clients && clients.length > 25 && <>
-        <hr className="my-2" />
-        <Pagination>
-            <PaginationContent>
-            <PaginationItem>
-                <PaginationPrevious href="#" />
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationLink href="#">1</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationLink href="#" isActive>2</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationLink href="#">3</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationEllipsis />
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationNext href="#" />
-            </PaginationItem>
-            </PaginationContent>
-        </Pagination>
-        </>}
-        </>
     )
 }
 export default ClientListView

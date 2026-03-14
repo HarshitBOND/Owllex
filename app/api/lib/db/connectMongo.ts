@@ -15,7 +15,13 @@ const connectMongo = async () => {
     }
 
     console.log("Attempting to connect to MongoDB...");
-    await mongoose.connect(uri);
+    await mongoose.connect(uri, {
+      dbName: process.env.MONGODB_DB || "LexVert",
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+    });
     console.log("MongoDB connection successful.");
     
     // Register all models on first connection
@@ -37,6 +43,12 @@ const registerModels = async () => {
     await import("../models/note");
     await import("../models/task");
     await import("../models/user");
+    await import("../models/downloaded-pdf");
+    await import("../models/scraped-case");
+    await import("../models/scraper-log");
+    await import("../models/transaction");
+    await import("../models/document");
+    await import("../models/admin-log");
 
     console.log("All models registered successfully.");
   } catch (error) {

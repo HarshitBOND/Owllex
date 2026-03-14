@@ -18,6 +18,14 @@ const UserSchema = new mongoose.Schema(
       required: false,
       default: null,
     },
+    passwordHash: {
+      type: String,
+      default: null,
+    },
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
     cases: {
       type: [
         {
@@ -45,6 +53,11 @@ const UserSchema = new mongoose.Schema(
       type: Date,
       default: null,
       index: true,
+    },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
     },
   },
   {

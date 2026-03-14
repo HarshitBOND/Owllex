@@ -7,24 +7,8 @@ import { Input } from "../ui/input"
 import { Button } from "../ui/button"
 import { Loader2, Plus, Search } from "lucide-react"
 import { useState } from "react"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
 import { useRouter } from "next/navigation"
 import { Case } from "@/app/case-tracking/page"
-import { Checkbox } from "../ui/checkbox"
 
 const forumList = [
   {
@@ -218,6 +202,7 @@ const caseTypeList = [
 ];
 
 const caseYearList = [
+  { value: "2026", label: "2026" },
   { value: "2025", label: "2025" },
   { value: "2024", label: "2024" },
   { value: "2023", label: "2023" },
@@ -339,202 +324,223 @@ const AddCaseForm = () => {
   const [advocateName, setAdvocateName] = useState("");
   const [forum, setForum] = useState("delhi-high-court");
   const [foundCases, setFoundCases] = useState<Partial<Case>[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const handleByCaseNumberSearch = async () => {
-    setLoading(true);
-    if (!caseNumber || !caseType || !forum || !caseYear) {
+    if (!caseNumber || !caseType || !forum || !caseYear) return;
+    try {
+      setLoading(true);
+      setSearchError(null);
+      setHasSearched(true);
+      const caseData = { caseNumber, caseType, forum, caseYear }
+      const response = await fetch("/api/public/cases", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(caseData),
+      })
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.cases && Array.isArray(data.cases)) {
+        setFoundCases(parseCases(data.cases));
+      } else {
+        setFoundCases([]);
+      }
+    } catch (error) {
+      console.error("Case search error:", error);
+      setSearchError("Failed to search cases. Please try again.");
+      setFoundCases([]);
+    } finally {
       setLoading(false);
-      return;
     }
-    const caseData = { caseNumber, caseType, forum, caseYear }
-    const cases = await fetch("/api/public/cases", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(caseData),
-    })
-    const data = await cases.json();
-    setFoundCases(parseCases(data.cases));
-    setLoading(false);
   };
 
   const handleByAdvocateNameSearch = async () => {
-    setLoading(true);
-    if (!advocateName || !forum || !caseYear) {
+    if (!advocateName || !forum || !caseYear) return;
+    try {
+      setLoading(true);
+      setSearchError(null);
+      setHasSearched(true);
+      const caseData = { advocateName, forum, caseYear }
+      const response = await fetch("/api/public/cases", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(caseData),
+      })
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.cases && Array.isArray(data.cases)) {
+        setFoundCases(parseCases(data.cases));
+      } else {
+        setFoundCases([]);
+      }
+    } catch (error) {
+      console.error("Case search error:", error);
+      setSearchError("Failed to search cases. Please try again.");
+      setFoundCases([]);
+    } finally {
       setLoading(false);
-      return;
     }
-    const caseData = { advocateName, forum, caseYear }
-    const cases = await fetch("/api/public/cases", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(caseData),
-    })
-    const data = await cases.json();
-    setFoundCases(parseCases(data.cases));
-    setLoading(false);
   };
 
   return (
-    <>
-    <div className="flex flex-col gap-y-4 bg-background px-4 py-8 rounded-md shadow-sm">
-      <div className="flex items-center gap-x-4">
-        <h1>Case Forum</h1>
+    <div className="max-w-4xl mx-auto">
+      {/* Step 1: Select Forum */}
+      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-sidebar-primary text-white flex items-center justify-center text-sm font-bold">1</div>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Select Court</h2>
+            <p className="text-sm text-gray-500">Choose which court the case belongs to</p>
+          </div>
+        </div>
         <ComboBox dropdownItems={forumList} type="forum" value={forum} setValue={setForum} />
       </div>
 
-      <div className="mt-4">
+      {/* Step 2: Search for Case */}
+      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-6 mb-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-full bg-sidebar-primary text-white flex items-center justify-center text-sm font-bold">2</div>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Find Your Case</h2>
+            <p className="text-sm text-gray-500">Search by case number or advocate name</p>
+          </div>
+        </div>
+
         <Tabs defaultValue="caseNumber" className="w-full">
-          <TabsList className="w-full">
-            <TabsTrigger className="py-5 font-semibold cursor-pointer" value="caseNumber">By Case Number</TabsTrigger>
-            <TabsTrigger className="py-5 font-semibold cursor-pointer" value="advocateName">By Advocate Name</TabsTrigger>
+          <TabsList className="w-full mb-6 h-12 bg-gray-100 rounded-xl p-1">
+            <TabsTrigger className="py-2.5 font-semibold cursor-pointer rounded-lg data-[state=active]:shadow-md text-sm" value="caseNumber">
+              <Search className="h-4 w-4 mr-2" />
+              By Case Number
+            </TabsTrigger>
+            <TabsTrigger className="py-2.5 font-semibold cursor-pointer rounded-lg data-[state=active]:shadow-md text-sm" value="advocateName">
+              <Search className="h-4 w-4 mr-2" />
+              By Advocate Name
+            </TabsTrigger>
           </TabsList>
+
           <TabsContent value="caseNumber">
-            <div className="mt-6 flex flex-col items-center">
-              <div className="flex gap-x-4 w-full">
-                <div className="flex flex-col gap-y-2 w-1/3">
-                  <Label>Case Type</Label>
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-y-2">
+                  <Label className="font-semibold text-gray-700">Case Type <span className="text-red-500">*</span></Label>
                   <ComboBox className="w-full" dropdownItems={caseTypeList} type="case Type" value={caseType} setValue={setCaseType} />
+                  <p className="text-xs text-gray-400">e.g. W.P.(C), CS(OS), CRL.A.</p>
                 </div>
-                <div className="flex flex-col gap-y-2 w-1/3">
-                  <Label>Case Number</Label>
-                  <Input placeholder="Enter Case Number" className="bg-background border border-gray-200" value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)} />
+                <div className="flex flex-col gap-y-2">
+                  <Label className="font-semibold text-gray-700">Case Number <span className="text-red-500">*</span></Label>
+                  <Input placeholder="e.g. 1234" className="bg-white border-2 border-gray-200 focus:border-sidebar-primary h-10" value={caseNumber} onChange={(e) => setCaseNumber(e.target.value)} />
+                  <p className="text-xs text-gray-400">Enter the case number only</p>
                 </div>
-                <div className="flex flex-col gap-y-2 w-1/3">
-                  <Label>Case Year</Label>
+                <div className="flex flex-col gap-y-2">
+                  <Label className="font-semibold text-gray-700">Year <span className="text-red-500">*</span></Label>
                   <ComboBox className="w-full" dropdownItems={caseYearList} type="case Year" value={caseYear} setValue={setCaseYear} />
+                  <p className="text-xs text-gray-400">Year of filing</p>
                 </div>
               </div>
 
-              <Button onClick={handleByCaseNumberSearch} className="mt-8" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search />}
-                {loading ? "Searching..." : foundCases.length === 0 ? "Search For Case" : "Search Other Case"}
-              </Button>
+              <div className="flex justify-center pt-2">
+                <Button onClick={handleByCaseNumberSearch} size="lg" className="px-8 h-11 text-base shadow-md" disabled={loading || !caseNumber || !caseType || !caseYear}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
+                  {loading ? "Searching..." : "Search Case"}
+                </Button>
+              </div>
             </div>
           </TabsContent>
+
           <TabsContent value="advocateName">
-            <div className="mt-6 flex flex-col items-center">
-              <div className="flex gap-x-4 w-full">
-                <div className="flex flex-col gap-y-2 w-1/2">
-                  <Label>Advocate Name</Label>
-                  <Input placeholder="Enter Advocate Name" className="bg-background border border-gray-200" value={advocateName} onChange={(e) => setAdvocateName(e.target.value)} />
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-y-2">
+                  <Label className="font-semibold text-gray-700">Advocate Name <span className="text-red-500">*</span></Label>
+                  <Input placeholder="e.g. Rohit Sharma" className="bg-white border-2 border-gray-200 focus:border-sidebar-primary h-10" value={advocateName} onChange={(e) => setAdvocateName(e.target.value)} />
+                  <p className="text-xs text-gray-400">Full name of the advocate</p>
                 </div>
-                <div className="flex flex-col gap-y-2 w-1/2">
-                  <Label>Case Year</Label>
+                <div className="flex flex-col gap-y-2">
+                  <Label className="font-semibold text-gray-700">Year <span className="text-red-500">*</span></Label>
                   <ComboBox className="w-full" dropdownItems={caseYearList} type="case Year" value={caseYear} setValue={setCaseYear} />
+                  <p className="text-xs text-gray-400">Year of filing</p>
                 </div>
               </div>
 
-              <Button onClick={handleByAdvocateNameSearch} className="mt-8" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search />}
-                {loading ? "Searching..." : foundCases.length === 0 ? "Search For Case" : "Search Other Case"}
-              </Button>
+              <div className="flex justify-center pt-2">
+                <Button onClick={handleByAdvocateNameSearch} size="lg" className="px-8 h-11 text-base shadow-md" disabled={loading || !advocateName || !caseYear}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
+                  {loading ? "Searching..." : "Search Cases"}
+                </Button>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
       </div>
 
-    </div>
+      {/* Error Display */}
+      {searchError && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-6 text-red-700">
+          <p className="font-medium">{searchError}</p>
+        </div>
+      )}
 
-    <div className="mt-6">
-      <h1 className="text-lg font-semibold">Found Cases</h1>
-      <div>
-        <Table>
-          <TableBody>
-              {foundCases.length > 0 ? foundCases.map((c: Partial<Case>) => (
-              <TableRow key={c._id} className="cursor-pointer">
-                  <TableCell colSpan={4} onClick={() => router.push(`/case-tracking/view/${c._id}?unregistered=true`) }>
-                    <div className="flex flex-col mb-2 gap-y-1 border border-gray-200 rounded-md shadow-sm p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-x-3">
-                          <Checkbox className="border border-gray-200 bg-gray-50 cursor-pointer" />
-                          <h2 className="text-lg font-semibold">{c.caseTitle}</h2>
-                        </div>
-                        <Button disabled={addingCase} onClick={(e) => {
-                          e.stopPropagation();
-                          setAddingCase(true);
-                          router.push(`/case-tracking/add/${c._id}`);
-                        }} variant="primary">
-                          {addingCase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus />}
-                          {addingCase ? "Adding" : "Add Case"}
-                        </Button>
+      {/* Step 3: Results */}
+      {hasSearched && (
+        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-8 h-8 rounded-full bg-sidebar-primary text-white flex items-center justify-center text-sm font-bold">3</div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                {foundCases.length > 0 ? `Found ${foundCases.length} Case${foundCases.length > 1 ? 's' : ''}` : 'No Cases Found'}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {foundCases.length > 0 ? 'Click "Add Case" to add it to your portfolio' : 'Try different search terms or check the spelling'}
+              </p>
+            </div>
+          </div>
+
+          {foundCases.length > 0 ? (
+            <div className="space-y-4">
+              {foundCases.map((c: Partial<Case>) => (
+                <div key={c._id} className="border-2 border-gray-200 rounded-xl p-5 hover:border-sidebar-primary/30 hover:shadow-md transition-all">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-bold text-gray-900 leading-snug">{c.caseTitle}</h3>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">{c.caseNo}</span>
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-gray-50 text-gray-600 border-2 border-gray-200">Delhi High Court</span>
                       </div>
-
-                      <hr className="my-2" />
-
-                      <div className="flex items-center justify-between my-6 w-full">
-                        <div>
-                          <p>Delhi High Court</p>
-                          <p>{c.caseNo}</p>
-                          <p className="text-muted-foreground w-full break-words whitespace-normal mt-2">{c.advocate}</p>
-                        </div>
-                      </div>
-
-                      <hr className="my-2" />
-
-                      <div className="flex items-center gap-x-35">
-                        <div className="flex gap-x-6">
-                          <div className="text-muted-foreground">
-                            <p>Court Jurisdiction</p>
-                            <p>(State)</p>
-                          </div>
-                          <p className="text-black">Delhi</p>
-                        </div>
-
-                        <div className="flex gap-x-6">
-                          <div className="text-muted-foreground">
-                            <p>Court Jurisdiction</p>
-                            <p>(District)</p>
-                          </div>
-                          <p className="text-black">Delhi</p>
-                        </div>
-
-                      </div>
+                      {c.advocate && (
+                        <p className="text-sm text-gray-500 mt-2">Advocate: {c.advocate}</p>
+                      )}
                     </div>
-                  </TableCell>
-              </TableRow>
-              )) : (
-                  <TableRow>
-                      <TableCell colSpan={4} className="h-24 text-center">
-                          No cases found
-                      </TableCell>
-                  </TableRow>
-              )}
-          </TableBody>
-        </Table>
-      </div>
-      {foundCases.length > 25 && (
-        <>
-        <hr className="my-2" />
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious href="#" />
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationLink href="#">1</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationLink href="#" isActive>2</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationLink href="#">3</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationEllipsis />
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationNext href="#" />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-        </>
+                    <Button disabled={addingCase} onClick={(e) => {
+                      e.stopPropagation();
+                      setAddingCase(true);
+                      router.push(`/case-tracking/add/${c._id}`);
+                    }} className="shrink-0 shadow-md h-10 px-5">
+                      {addingCase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
+                      {addingCase ? "Adding..." : "Add Case"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10">
+              <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-base font-semibold text-gray-600">No matching cases found</p>
+              <p className="text-sm text-gray-400 mt-1">Double-check the case number, type, and year</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
-    </>
   )
 }
 export default AddCaseForm

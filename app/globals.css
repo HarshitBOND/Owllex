@@ -1,19 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Amethysta&family=Outfit:wght@100..900&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
+/* Font utility classes */
+@layer utilities {
+  .font-amethysta {
+    font-family: 'Amethysta', serif;
+  }
+  
+  .font-outfit {
+    font-family: 'Outfit', sans-serif;
+  }
+}
+
 :root {
   /* Updated color palette for lexvert legal platform */
   --background: #ffffff;
   --foreground: #475569;
-  --card: #f8fafc;
-  --card-foreground: #374151;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
   --popover: #ffffff;
   --popover-foreground: #475569;
   --primary: #164e63;
   --primary-foreground: #ffffff;
-  --secondary: #84cc16;
+  --secondary: #16cc34;
   --secondary-foreground: #ffffff;
   --muted: #f0fdf4;
   --muted-foreground: #374151;
@@ -21,7 +33,7 @@
   --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border: #d1d5db;
+  --border: #94a3b8;
   --input: #ffffff;
   --ring: rgba(22, 78, 99, 0.5);
   --chart-1: #15803d;
@@ -36,7 +48,7 @@
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #84cc16;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #d1d5db;
+  --sidebar-border: #cbd5e1;
   --sidebar-ring: rgba(22, 78, 99, 0.3);
 }
 
