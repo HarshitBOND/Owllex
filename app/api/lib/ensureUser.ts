@@ -30,6 +30,12 @@ export async function ensureUser(clerkUserId: string) {
         email: clerkUser.emailAddresses?.[0]?.emailAddress || null,
         cases: [],
         clients: [],
+        subscription: {
+          plan: "free",
+          status: "active",
+          billingCycle: "monthly",
+          cancelAtPeriodEnd: false,
+        },
       });
 
       console.log(`[ENSURE_USER] Auto-created MongoDB user for clerkUid: ${clerkUser.id}, MongoID: ${user._id}`);
@@ -43,6 +49,12 @@ export async function ensureUser(clerkUserId: string) {
         email: null,
         cases: [],
         clients: [],
+        subscription: {
+          plan: "free",
+          status: "active",
+          billingCycle: "monthly",
+          cancelAtPeriodEnd: false,
+        },
       });
       console.log(`[ENSURE_USER] Created minimal MongoDB user for clerkUid: ${clerkUserId}, MongoID: ${user._id}`);
     }

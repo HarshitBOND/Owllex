@@ -17,7 +17,7 @@ export const Calendar = ({ embedded = false }: CalendarProps) => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const { events, addEvent, deleteEvent, getEventsForDate } = useCalendarEvents();
+  const { events, addEvent, updateEvent, deleteEvent, getEventsForDate } = useCalendarEvents();
 
   const handlePreviousMonth = () => {
     setCurrentDate((prev) => subMonths(prev, 1));
@@ -68,6 +68,7 @@ export const Calendar = ({ embedded = false }: CalendarProps) => {
           selectedDate={selectedDate}
           events={selectedDateEvents}
           onAddEvent={addEvent}
+          onUpdateEvent={updateEvent}
           onDeleteEvent={deleteEvent}
         />
       </div>
@@ -135,6 +136,7 @@ export const Calendar = ({ embedded = false }: CalendarProps) => {
           selectedDate={selectedDate}
           events={selectedDateEvents}
           onAddEvent={addEvent}
+          onUpdateEvent={updateEvent}
           onDeleteEvent={deleteEvent}
         />
       </div>

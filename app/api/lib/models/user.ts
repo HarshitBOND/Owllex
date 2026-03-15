@@ -1,5 +1,118 @@
 import mongoose from "mongoose";
 
+const SubscriptionSchema = new mongoose.Schema(
+  {
+    plan: {
+      type: String,
+      enum: ["free", "starter", "professional", "enterprise"],
+      default: "free",
+    },
+    status: {
+      type: String,
+      enum: ["active", "cancelled", "expired", "past_due", "trial"],
+      default: "active",
+    },
+    billingCycle: {
+      type: String,
+      enum: ["monthly", "yearly"],
+      default: "monthly",
+    },
+    currentPeriodStart: {
+      type: Date,
+      default: Date.now,
+    },
+    currentPeriodEnd: {
+      type: Date,
+      default: null,
+    },
+    renewalDate: {
+      type: Date,
+      default: null,
+    },
+    cancelAtPeriodEnd: {
+      type: Boolean,
+      default: false,
+    },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    stripeCustomerId: {
+      type: String,
+      default: null,
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: null,
+    },
+    stripePriceId: {
+      type: String,
+      default: null,
+    },
+    lastPaymentError: {
+      type: String,
+      default: "",
+    },
+  },
+  { _id: false },
+);
+
+const notificationOffsetsValidator = (values: number[]) =>
+  Array.isArray(values) && values.every((value) => [1, 3, 7].includes(value));
+
+const NotificationPreferencesSchema = new mongoose.Schema(
+  {
+    emailEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    timezone: {
+      type: String,
+      default: "Asia/Kolkata",
+    },
+    sendWindowStartHour: {
+      type: Number,
+      min: 0,
+      max: 23,
+      default: 8,
+    },
+    sendWindowEndHour: {
+      type: Number,
+      min: 1,
+      max: 24,
+      default: 20,
+    },
+    reminderOffsets: {
+      type: [Number],
+      default: [7, 3, 1],
+      validate: {
+        validator: notificationOffsetsValidator,
+        message: "reminderOffsets must use supported day windows",
+      },
+    },
+  },
+  { _id: false },
+);
+
+const AccountPreferencesSchema = new mongoose.Schema(
+  {
+    defaultLandingPage: {
+      type: String,
+      enum: ["/dashboard", "/case-tracking", "/tasks", "/invoices"],
+      default: "/dashboard",
+    },
+    weeklyDigestEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    showBillingSummary: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  { _id: false },
+);
+
 const UserSchema = new mongoose.Schema(
   {
     clerkUid: {
@@ -56,8 +169,20 @@ const UserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["user", "admin"],
+      enum: ["user", "admin", "support"],
       default: "user",
+    },
+    subscription: {
+      type: SubscriptionSchema,
+      default: () => ({}),
+    },
+    notificationPreferences: {
+      type: NotificationPreferencesSchema,
+      default: () => ({}),
+    },
+    accountPreferences: {
+      type: AccountPreferencesSchema,
+      default: () => ({}),
     },
   },
   {

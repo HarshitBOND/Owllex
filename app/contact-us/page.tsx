@@ -125,7 +125,7 @@ const ContactUs = () => {
               <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm p-6">
                 <h3 className="font-semibold text-gray-900 mb-3">Common Topics</h3>
                 <div className="space-y-2">
-                  {["Subscription & Billing", "Case Management", "Technical Issues", "Feature Requests", "Account Settings"].map((topic) => (
+                  {["General Support", "Case Management", "Technical Issues", "Feature Requests", "Account Settings"].map((topic) => (
                     <button key={topic} onClick={() => setFormData({ ...formData, subject: topic })} className="w-full text-left text-sm text-gray-600 hover:text-sidebar-primary hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
                       {topic}
                     </button>
@@ -207,7 +207,7 @@ const ContactUs = () => {
                       className="w-full h-11 rounded-md border-2 border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-sidebar-primary/30 focus:border-sidebar-primary"
                     >
                       <option value="">Select a topic</option>
-                      <option value="billing">Subscription & Billing</option>
+                      <option value="general">General Support</option>
                       <option value="technical">Technical Issue</option>
                       <option value="feature">Feature Request</option>
                       <option value="cases">Case Management</option>

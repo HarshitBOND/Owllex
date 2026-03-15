@@ -1,96 +1,147 @@
-import { useState, useEffect, useMemo } from 'react';
-import { format } from 'date-fns';
-import { parseCourtDate } from '@/lib/utils';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export interface CalendarEvent {
   id: string;
   title: string;
-  date: string; // ISO date string YYYY-MM-DD
-  description?: string;
-  color?: string;
-  isHearing?: boolean; // true if this event came from a case hearing
-  caseId?: string; // link back to case
+  date: string;
+  description?: string | null;
+  color?: 'blue' | 'violet' | 'emerald' | 'amber' | 'rose';
+  sourceType?: 'manual' | 'task' | 'hearing';
+  isHearing?: boolean;
+  isTask?: boolean;
+  isManual?: boolean;
+  caseId?: string | null;
+  taskId?: string | null;
+  reminderEnabled?: boolean;
+  reminderOffsets?: number[];
+  canEdit?: boolean;
+  canDelete?: boolean;
+  resourceUrl?: string | null;
 }
 
-const STORAGE_KEY = 'calendar-events';
+type CalendarResponse = {
+  success: boolean;
+  events?: CalendarEvent[];
+  event?: CalendarEvent;
+  error?: string;
+};
+
+const normalizeEvent = (event: CalendarEvent): CalendarEvent => ({
+  ...event,
+  description: event.description || undefined,
+  isHearing: Boolean(event.isHearing || event.sourceType === 'hearing'),
+  isTask: Boolean(event.isTask || event.sourceType === 'task'),
+  isManual: Boolean(event.isManual || event.sourceType === 'manual'),
+  canEdit: typeof event.canEdit === 'boolean' ? event.canEdit : event.sourceType === 'manual',
+  canDelete: typeof event.canDelete === 'boolean' ? event.canDelete : event.sourceType === 'manual',
+});
 
 export const useCalendarEvents = () => {
-  const [userEvents, setUserEvents] = useState<CalendarEvent[]>([]);
-  const [hearingEvents, setHearingEvents] = useState<CalendarEvent[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
 
-  // Load user events from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setUserEvents(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to parse stored events:', e);
+  const fetchEvents = useCallback(async () => {
+    try {
+      const response = await fetch('/api/userdetails/calendar', { cache: 'no-store' });
+      const data = (await response.json()) as CalendarResponse;
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load calendar events');
       }
+
+      setEvents((data.events || []).map((event) => normalizeEvent(event)));
+    } catch (error) {
+      console.error('Failed to fetch calendar events:', error);
     }
   }, []);
 
-  // Fetch hearing dates from API
   useEffect(() => {
-    fetch('/api/userdetails/dashboard')
-      .then((res) => res.json())
-      .then((data) => {
-        const hearings = data?.upcomingHearings || [];
-        const mapped: CalendarEvent[] = hearings
-          .filter((h: any) => h.courtDate && parseCourtDate(h.courtDate))
-          .map((h: any) => ({
-            id: `hearing-${h._id}`,
-            title: h.caseTitle || h.caseNo || 'Hearing',
-            date: format(parseCourtDate(h.courtDate)!, 'yyyy-MM-dd'),
-            description: [h.courtName, h.courtRoom ? `Room ${h.courtRoom}` : ''].filter(Boolean).join(' · '),
-            color: 'violet',
-            isHearing: true,
-            caseId: h._id,
-          }));
-        setHearingEvents(mapped);
-      })
-      .catch(() => {});
+    void fetchEvents();
+  }, [fetchEvents]);
+
+  const addEvent = useCallback(
+    async (event: Omit<CalendarEvent, 'id'>) => {
+      const payload = {
+        title: event.title,
+        description: event.description || '',
+        date: event.date,
+        color: event.color || 'blue',
+        reminderEnabled: Boolean(event.reminderEnabled),
+        reminderOffsets: event.reminderOffsets || [],
+      };
+
+      const response = await fetch('/api/userdetails/calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json()) as CalendarResponse;
+      if (!response.ok || !data.success || !data.event) {
+        throw new Error(data.error || 'Failed to create calendar event');
+      }
+
+      const normalizedEvent = normalizeEvent(data.event);
+      setEvents((previousEvents) => [...previousEvents, normalizedEvent]);
+      return normalizedEvent;
+    },
+    [],
+  );
+
+  const updateEvent = useCallback(async (id: string, updates: Partial<Omit<CalendarEvent, 'id'>>) => {
+    const response = await fetch(`/api/userdetails/calendar/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: updates.title,
+        description: updates.description,
+        date: updates.date,
+        color: updates.color,
+        reminderEnabled: updates.reminderEnabled,
+        reminderOffsets: updates.reminderOffsets,
+      }),
+    });
+
+    const data = (await response.json()) as CalendarResponse;
+    if (!response.ok || !data.success || !data.event) {
+      throw new Error(data.error || 'Failed to update calendar event');
+    }
+
+    const normalizedEvent = normalizeEvent(data.event);
+
+    setEvents((previousEvents) =>
+      previousEvents.map((event) => (event.id === id ? normalizedEvent : event)),
+    );
   }, []);
 
-  // Save user events to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userEvents));
-  }, [userEvents]);
+  const deleteEvent = useCallback(async (id: string) => {
+    const response = await fetch(`/api/userdetails/calendar/${id}`, {
+      method: 'DELETE',
+    });
 
-  // Merge user events + hearing events
-  const events = useMemo(() => [...userEvents, ...hearingEvents], [userEvents, hearingEvents]);
+    const data = (await response.json()) as CalendarResponse;
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to delete calendar event');
+    }
 
-  const addEvent = (event: Omit<CalendarEvent, 'id'>) => {
-    const newEvent: CalendarEvent = {
-      ...event,
-      id: crypto.randomUUID(),
-    };
-    setUserEvents((prev) => [...prev, newEvent]);
-    return newEvent;
-  };
+    setEvents((previousEvents) => previousEvents.filter((event) => event.id !== id));
+  }, []);
 
-  const updateEvent = (id: string, updates: Partial<Omit<CalendarEvent, 'id'>>) => {
-    setUserEvents((prev) =>
-      prev.map((event) =>
-        event.id === id ? { ...event, ...updates } : event
-      )
-    );
-  };
+  const getEventsForDate = useCallback(
+    (date: string): CalendarEvent[] => events.filter((event) => event.date === date),
+    [events],
+  );
 
-  const deleteEvent = (id: string) => {
-    // Don't allow deleting hearing events
-    setUserEvents((prev) => prev.filter((event) => event.id !== id));
-  };
-
-  const getEventsForDate = (date: string): CalendarEvent[] => {
-    return events.filter((event) => event.date === date);
-  };
+  const sortedEvents = useMemo(
+    () => [...events].sort((firstEvent, secondEvent) => firstEvent.date.localeCompare(secondEvent.date)),
+    [events],
+  );
 
   return {
-    events,
+    events: sortedEvents,
     addEvent,
     updateEvent,
     deleteEvent,
     getEventsForDate,
+    refreshEvents: fetchEvents,
   };
 };

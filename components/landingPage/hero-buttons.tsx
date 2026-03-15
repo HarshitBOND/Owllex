@@ -11,9 +11,9 @@ export function HeroButtons() {
     return (
         <div className="mt-10 flex items-center justify-center gap-x-6">
             <SignedOut>
-                <Link href="/subscribe">
+                <Link href="/sign-up">
                     <Button size="lg" className="bg-secondary hover:bg-secondary/90 text-secondary-foreground">
-                        Start Free Trial
+                        Get Started Free
                         <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                 </Link>

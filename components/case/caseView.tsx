@@ -66,6 +66,16 @@ function parseCauseListDate(dateStr?: string): string {
     return dateStr;
 }
 
+function formatReadableDate(dateStr?: string | null): string {
+    if (!dateStr) return 'Date TBD';
+    const parsedDate = new Date(dateStr);
+    if (!Number.isNaN(parsedDate.getTime())) {
+        return parsedDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    return parseCauseListDate(dateStr);
+}
+
 const CaseView = ({id}: {id: string}) => {
     const router = useRouter();
     const [caseData, setCaseData] = useState<Case | null>(null);
@@ -81,6 +91,13 @@ const CaseView = ({id}: {id: string}) => {
     const [newListingDate, setNewListingDate] = useState("");
     const [newListingDetails, setNewListingDetails] = useState("");
     const [causeListInfo, setCauseListInfo] = useState<CauseListInfo | null>(null);
+    const [isAddingListing, setIsAddingListing] = useState(false);
+    const [listingError, setListingError] = useState<string | null>(null);
+    const [rescheduleDate, setRescheduleDate] = useState("");
+    const [rescheduleReason, setRescheduleReason] = useState("");
+    const [rescheduleDetails, setRescheduleDetails] = useState("");
+    const [isRescheduling, setIsRescheduling] = useState(false);
+    const [rescheduleError, setRescheduleError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchCaseData = async () => {
@@ -130,34 +147,74 @@ const CaseView = ({id}: {id: string}) => {
     }
 
     const handleAddListing = async () => {
-        if (!newListingDate || !newListingDetails) return;
+        const trimmedDetails = newListingDetails.trim();
+        if (!newListingDate || !trimmedDetails) return;
+        setIsAddingListing(true);
+        setListingError(null);
         
         try {
-            const newListing: Listing = {
-                srlNo: (listings.length + 1).toString(),
-                date: newListingDate,
-                listingDetails: newListingDetails
-            };
-            
-            // Update locally
-            setListings([...listings, newListing]);
+            const response = await fetch(`/api/userdetails/cases/${id}/add-listing`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    date: newListingDate,
+                    listingDetails: trimmedDetails,
+                    setAsCourtDate: true,
+                })
+            });
+
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok || !payload?.success) {
+                throw new Error(payload?.error || "Failed to save listing");
+            }
+
             setNewListingDate("");
             setNewListingDetails("");
-            
-            // Try to save to backend (optional)
-            try {
-                await fetch(`/api/userdetails/cases/${id}/add-listing`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(newListing)
-                });
-            } catch (err) {
-                console.warn("Note: Listing added locally but backend save not yet implemented");
-            }
+            setTrigger((prev) => prev + 1);
         } catch (error) {
             console.error("Error adding listing:", error);
+            setListingError(error instanceof Error ? error.message : "Failed to save listing");
+        } finally {
+            setIsAddingListing(false);
         }
     }
+
+    const handleRescheduleCase = async () => {
+        if (!rescheduleDate) return;
+
+        setIsRescheduling(true);
+        setRescheduleError(null);
+
+        try {
+            const response = await fetch(`/api/userdetails/cases/${id}/reschedule`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    newCourtDate: rescheduleDate,
+                    reason: rescheduleReason.trim() || undefined,
+                    listingDetails: rescheduleDetails.trim() || undefined,
+                }),
+            });
+
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || !payload?.success) {
+                throw new Error(payload?.error || "Failed to reschedule hearing");
+            }
+
+            setRescheduleDate("");
+            setRescheduleReason("");
+            setRescheduleDetails("");
+            setTrigger((prev) => prev + 1);
+        } catch (error) {
+            console.error("Error rescheduling case:", error);
+            setRescheduleError(error instanceof Error ? error.message : "Failed to reschedule hearing");
+        } finally {
+            setIsRescheduling(false);
+        }
+    }
+
+    const hearingHistory = caseData?.hearingHistory || [];
 
     return (
         <div>
@@ -428,13 +485,90 @@ const CaseView = ({id}: {id: string}) => {
                             </div>
                             <Button 
                                 onClick={handleAddListing}
-                                disabled={!newListingDate || !newListingDetails}
+                                disabled={!newListingDate || !newListingDetails.trim() || isAddingListing}
                                 className='w-full bg-blue-600 hover:bg-blue-700'
                             >
-                                Add Hearing
+                                {isAddingListing ? "Saving..." : "Add Hearing"}
                             </Button>
+                            {listingError ? (
+                                <p className="text-xs text-red-600">{listingError}</p>
+                            ) : null}
                         </div>
                     </div>
+
+                    <div className='mb-6 p-4 bg-amber-50 border rounded-md'>
+                        <h3 className='font-semibold text-sm mb-3'>🔁 Reschedule Current Hearing</h3>
+                        <div className='space-y-3'>
+                            <div>
+                                <label className='text-xs font-semibold text-gray-700'>New Court Date</label>
+                                <input
+                                    type="date"
+                                    value={rescheduleDate}
+                                    onChange={(e) => setRescheduleDate(e.target.value)}
+                                    className='w-full mt-1 px-3 py-2 border rounded-md text-sm'
+                                />
+                            </div>
+                            <div>
+                                <label className='text-xs font-semibold text-gray-700'>Reason (optional)</label>
+                                <input
+                                    value={rescheduleReason}
+                                    onChange={(e) => setRescheduleReason(e.target.value)}
+                                    placeholder='e.g., Court adjourned due to strike'
+                                    className='w-full mt-1 px-3 py-2 border rounded-md text-sm'
+                                />
+                            </div>
+                            <div>
+                                <label className='text-xs font-semibold text-gray-700'>Details for listing history (optional)</label>
+                                <textarea
+                                    value={rescheduleDetails}
+                                    onChange={(e) => setRescheduleDetails(e.target.value)}
+                                    placeholder='Any additional details to store in hearing history'
+                                    className='w-full mt-1 px-3 py-2 border rounded-md text-sm'
+                                    rows={2}
+                                />
+                            </div>
+                            <Button
+                                onClick={handleRescheduleCase}
+                                disabled={!rescheduleDate || isRescheduling}
+                                className='w-full bg-amber-600 hover:bg-amber-700'
+                            >
+                                {isRescheduling ? "Rescheduling..." : "Reschedule Hearing"}
+                            </Button>
+                            {rescheduleError ? (
+                                <p className="text-xs text-red-600">{rescheduleError}</p>
+                            ) : null}
+                        </div>
+                    </div>
+
+                    {hearingHistory.length > 0 ? (
+                        <div className='mb-6 p-4 bg-white border rounded-md'>
+                            <h3 className='font-semibold text-sm mb-3 text-gray-700'>Hearing History & Audit Trail</h3>
+                            <div className='space-y-2 max-h-64 overflow-y-auto pr-1'>
+                                {hearingHistory.map((entry: any, index: number) => (
+                                    <div key={`${entry?.changedAt || entry?.hearingDate || index}-${index}`} className='border rounded-md p-3 bg-gray-50'>
+                                        <div className='flex items-center justify-between gap-2'>
+                                            <span className='text-xs font-semibold uppercase tracking-wide text-gray-700'>{entry?.type || 'updated'}</span>
+                                            <span className='text-xs text-gray-500'>{entry?.changedAt ? new Date(entry.changedAt).toLocaleString('en-IN') : 'Timestamp unavailable'}</span>
+                                        </div>
+                                        <div className='text-sm text-gray-800 mt-1'>
+                                            <span className='font-semibold'>Next date:</span> {formatReadableDate(entry?.hearingDate)}
+                                        </div>
+                                        {entry?.previousCourtDate ? (
+                                            <div className='text-xs text-gray-600 mt-1'>
+                                                Previous date: {formatReadableDate(entry.previousCourtDate)}
+                                            </div>
+                                        ) : null}
+                                        {entry?.reason ? (
+                                            <div className='text-xs text-gray-700 mt-1'>Reason: {entry.reason}</div>
+                                        ) : null}
+                                        {entry?.listingDetails ? (
+                                            <div className='text-xs text-gray-700 mt-1'>Details: {entry.listingDetails}</div>
+                                        ) : null}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
 
                     {/* Display Listings */}
                     {listings.length > 0 ? (
@@ -460,7 +594,7 @@ const CaseView = ({id}: {id: string}) => {
                                         {listings.map((listing, index) => (
                                             <tr key={index} className={`border-b ${index === 0 ? 'bg-red-50' : 'hover:bg-blue-50'} transition-colors`}>
                                                 <td className="py-3 px-3 font-semibold">{index + 1}</td>
-                                                <td className="py-3 px-3 font-bold text-red-700">{listing.date}</td>
+                                                <td className="py-3 px-3 font-bold text-red-700">{formatReadableDate(listing.date)}</td>
                                                 <td className="py-3 px-3 text-gray-700">{listing.listingDetails}</td>
                                             </tr>
                                         ))}

@@ -18,7 +18,7 @@ const plans = [
       "Document generation",
       "Email support",
     ],
-    cta: "Start Free Trial",
+    cta: "Get Started Free",
     popular: false,
   },
   {
@@ -69,7 +69,7 @@ export function PricingSection() {
           Choose the Right Plan for You
         </h2>
         <p className="text-gray-500 max-w-lg mx-auto">
-          Start free, upgrade when you're ready. All plans include a 14-day trial.
+          Core access is currently available for all users during this release phase.
         </p>
 
         {/* Billing Toggle */}
@@ -120,7 +120,7 @@ export function PricingSection() {
                 </li>
               ))}
             </ul>
-            <Link href="/subscribe">
+            <Link href="/sign-up">
               <Button
                 className={`w-full ${
                   plan.popular

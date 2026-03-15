@@ -23,6 +23,14 @@ type Act = {
   url?: string
 }
 
+type ActsResponse = {
+  success?: boolean
+  acts?: Act[]
+  data?: Act[]
+  hasMore?: boolean
+  availableCategories?: string[]
+}
+
 const PAGE_SIZE = 30
 
 const Acts = () => {
@@ -32,19 +40,47 @@ const Acts = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const [activeCategory, setActiveCategory] = useState("")
+  const [availableCategories, setAvailableCategories] = useState<string[]>([
+    "Criminal",
+    "Civil",
+    "Evidence",
+    "Constitution",
+    "Commercial",
+    "Property",
+    "Corporate",
+    "Tax",
+  ])
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
 
-  const fetchActs = useCallback(async (skip: number) => {
+  const fetchActs = useCallback(async (skip: number, query: string, category: string) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/public/acts?skip=${skip}&limit=${PAGE_SIZE}`)
+      const params = new URLSearchParams({
+        skip: String(skip),
+        limit: String(PAGE_SIZE),
+      })
+
+      if (query) {
+        params.set("search", query)
+      }
+
+      if (category) {
+        params.set("category", category)
+      }
+
+      const res = await fetch(`/api/public/acts?${params.toString()}`)
       if (!res.ok) throw new Error("Failed to fetch")
-      const data = await res.json()
+      const data = (await res.json()) as ActsResponse
       const items = Array.isArray(data) ? data : data.acts || data.data || []
       setActs(items)
-      setHasMore(items.length === PAGE_SIZE)
+      setHasMore(typeof data.hasMore === "boolean" ? data.hasMore : items.length === PAGE_SIZE)
+
+      if (Array.isArray(data.availableCategories) && data.availableCategories.length > 0) {
+        setAvailableCategories(data.availableCategories)
+      }
     } catch {
       setError("Unable to load acts. Please try again.")
       setActs([])
@@ -54,8 +90,12 @@ const Acts = () => {
   }, [])
 
   useEffect(() => {
-    fetchActs(page * PAGE_SIZE)
-  }, [page, fetchActs])
+    setPage(0)
+  }, [search, activeCategory])
+
+  useEffect(() => {
+    fetchActs(page * PAGE_SIZE, search.trim(), activeCategory)
+  }, [page, search, activeCategory, fetchActs])
 
   if (!isLoaded) {
     return (
@@ -65,10 +105,6 @@ const Acts = () => {
     )
   }
   if (!isSignedIn) return redirect("/")
-
-  const filtered = search.trim()
-    ? acts.filter(a => a.actName?.toLowerCase().includes(search.toLowerCase()))
-    : acts
 
   return (
     <div className="flex">
@@ -105,13 +141,13 @@ const Acts = () => {
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-6">
           {/* Quick Category Tags */}
           <div className="flex flex-wrap gap-2 mb-5">
-            {["IPC", "CrPC", "CPC", "Constitution", "Evidence", "Contract", "Company", "Property"].map(tag => (
+            {availableCategories.map(tag => (
               <button
                 key={tag}
-                onClick={() => setSearch(tag)}
+                onClick={() => setActiveCategory(current => current === tag ? "" : tag)}
                 className={cn(
                   "px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer",
-                  search === tag
+                  activeCategory === tag
                     ? "bg-sidebar-primary text-white border-sidebar-primary"
                     : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                 )}
@@ -119,9 +155,12 @@ const Acts = () => {
                 {tag}
               </button>
             ))}
-            {search && (
+            {(search || activeCategory) && (
               <button
-                onClick={() => setSearch("")}
+                onClick={() => {
+                  setSearch("")
+                  setActiveCategory("")
+                }}
                 className="px-3 py-1.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 cursor-pointer"
               >
                 Clear Filter
@@ -149,20 +188,20 @@ const Acts = () => {
           )}
 
           {/* Empty State */}
-          {!loading && !error && filtered.length === 0 && (
+          {!loading && !error && acts.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20">
               <BookMarked className="h-10 w-10 text-gray-300 mb-3" />
               <p className="text-sm text-gray-500">
-                {search ? `No acts found for "${search}"` : "No acts available"}
+                {search ? `No acts found for "${search}"` : activeCategory ? `No acts found in ${activeCategory}` : "No acts available"}
               </p>
             </div>
           )}
 
           {/* Acts Grid */}
-          {!loading && !error && filtered.length > 0 && (
+          {!loading && !error && acts.length > 0 && (
             <>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.map((act, idx) => (
+                {acts.map((act, idx) => (
                   <div
                     key={act._id || idx}
                     className="bg-white rounded-xl border-2 border-gray-200 p-4 hover:shadow-md hover:border-gray-300 transition-all group"

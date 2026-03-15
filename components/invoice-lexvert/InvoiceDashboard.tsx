@@ -5,6 +5,7 @@ import { InvoiceList } from '@/components/invoice-lexvert/InvoiceList';
 import { ClientList } from '@/components/invoice-lexvert/ClientList';
 import { InvoiceDetailModal } from '@/components/invoice-lexvert/InvoiceDetailModal';
 import { CreateInvoiceModal } from '@/components/invoice-lexvert/CreateInvoiceModal';
+import { AddPaymentModal } from '@/components/invoice-lexvert/AddPaymentModal';
 import { PaymentHistory } from '@/components/invoice-lexvert/PaymentHistory';
 import { RevenueChart } from '@/components/invoice-lexvert/RevenueChart';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,9 @@ export function InvoiceDashboard() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
+  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   
@@ -95,18 +99,41 @@ export function InvoiceDashboard() {
         status: inv.status,
         issueDate: new Date(inv.issueDate),
         dueDate: new Date(inv.dueDate),
-        items: inv.items || [],
+        items: (inv.items || []).map((item: any, index: number) => ({
+          id: item._id || item.id || `${inv._id}-item-${index}`,
+          description: item.description || 'Item',
+          quantity: Number(item.quantity || 0),
+          rate: Number(item.rate || 0),
+          amount: Number(item.amount || 0),
+        })),
         subtotal: inv.subtotal,
         tax: inv.tax || 0,
         taxRate: inv.taxRate || 0,
         discount: inv.discount || 0,
+        currency: inv.currency || 'USD',
         total: inv.total,
         paidAmount: inv.paidAmount || 0,
+        payments: inv.payments || [],
+        paymentLinkUrl: inv.paymentLinkUrl || null,
+        sentAt: inv.sentAt ? new Date(inv.sentAt) : null,
         notes: inv.notes,
         createdAt: new Date(inv.createdAt),
         updatedAt: new Date(inv.updatedAt),
       }));
       setInvoices(mapped);
+      // Flatten all payments from invoices to build the payments list
+      const allPayments: PaymentRecord[] = invoicesList.flatMap((inv: any) =>
+        (inv.payments || []).map((p: any) => ({
+          id: p._id || `${inv._id}-${p.createdAt}`,
+          invoiceId: inv._id,
+          amount: p.amount,
+          method: p.method,
+          date: new Date(p.date),
+          reference: p.reference,
+          notes: p.notes,
+        }))
+      );
+      setPayments(allPayments);
     } catch {
       console.error('Failed to fetch invoices');
     }
@@ -141,11 +168,26 @@ export function InvoiceDashboard() {
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
-    toast({
-      title: 'Edit Invoice',
-      description: `Opening editor for ${invoice.invoiceNumber}`
-    });
+    setEditInvoice(invoice);
     setIsDetailOpen(false);
+    setIsCreateOpen(true);
+  };
+
+  const handleRecordPayment = (invoice: Invoice) => {
+    setPaymentInvoice(invoice);
+    setIsDetailOpen(false);
+    setIsPaymentOpen(true);
+  };
+
+  const handleAddPayment = async (invoiceId: string, payment: { amount: number; method: string; date: Date; reference?: string; notes?: string }) => {
+    const res = await fetch(`/api/userdetails/invoices?id=${invoiceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payment),
+    });
+    if (!res.ok) throw new Error('Failed to record payment');
+    await fetchInvoices();
+    toast({ title: 'Payment Recorded', description: `Payment of ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(payment.amount)} recorded.` });
   };
 
   const handleDeleteInvoice = async (invoice: Invoice) => {
@@ -158,15 +200,58 @@ export function InvoiceDashboard() {
     }
   };
 
+  const handleDownloadInvoice = async (invoice: Invoice) => {
+    try {
+      const response = await fetch(`/api/userdetails/invoices?id=${invoice.id}&format=pdf`);
+      if (!response.ok) {
+        throw new Error('Failed to download invoice PDF');
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = `${invoice.invoiceNumber}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(downloadUrl);
+    } catch {
+      toast({ title: 'Error', description: 'Failed to download invoice PDF', variant: 'destructive' });
+    }
+  };
+
   const handleSendInvoice = async (invoice: Invoice) => {
     try {
-      await fetch(`/api/userdetails/invoices?id=${invoice.id}`, {
+      const response = await fetch(`/api/userdetails/invoices?id=${invoice.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'pending' }),
+        body: JSON.stringify({
+          status: 'pending',
+          sendEmail: true,
+          createPaymentLink: true,
+        }),
       });
-      setInvoices(prev => prev.map(inv => inv.id === invoice.id ? { ...inv, status: 'pending' as const } : inv));
-      toast({ title: 'Invoice Sent', description: `${invoice.invoiceNumber} marked as pending` });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || 'Failed to send invoice');
+      }
+
+      await fetchInvoices();
+
+      const emailSent = result?.email?.sent === true;
+      const paymentLinkCreated = result?.paymentLink?.created === true;
+
+      let description = `${invoice.invoiceNumber} marked as pending.`;
+      if (emailSent && paymentLinkCreated) {
+        description = `${invoice.invoiceNumber} emailed with payment link.`;
+      } else if (emailSent) {
+        description = `${invoice.invoiceNumber} emailed to client.`;
+      } else if (paymentLinkCreated) {
+        description = `${invoice.invoiceNumber} updated and payment link created.`;
+      }
+
+      toast({ title: 'Invoice Sent', description });
       setIsDetailOpen(false);
     } catch {
       toast({ title: 'Error', description: 'Failed to send invoice', variant: 'destructive' });
@@ -191,13 +276,12 @@ export function InvoiceDashboard() {
   const handleSaveInvoice = async (invoiceData: any) => {
     try {
       const client = clientsWithStats.find(c => c.id === invoiceData.clientId);
-      if (!client) return;
+      if (!client) { toast({ title: 'Error', description: 'Please select a client', variant: 'destructive' }); return; }
       const payload = {
         clientId: invoiceData.clientId,
         clientName: client.name,
         clientEmail: client.email,
         clientCompany: client.company,
-        status: 'draft',
         issueDate: invoiceData.issueDate,
         dueDate: invoiceData.dueDate,
         items: invoiceData.items,
@@ -206,21 +290,34 @@ export function InvoiceDashboard() {
         taxRate: invoiceData.taxRate,
         discount: invoiceData.discount,
         total: invoiceData.total,
-        paidAmount: 0,
         notes: invoiceData.notes,
       };
-      const res = await fetch('/api/userdetails/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (data.invoice) {
+
+      if (invoiceData.id) {
+        // Edit existing invoice
+        await fetch(`/api/userdetails/invoices?id=${invoiceData.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        setEditInvoice(null);
         await fetchInvoices();
-        toast({ title: 'Invoice Created', description: `Invoice saved as draft.` });
+        toast({ title: 'Invoice Updated', description: 'Invoice has been updated.' });
+      } else {
+        // Create new invoice
+        const res = await fetch('/api/userdetails/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, status: 'draft', paidAmount: 0 }),
+        });
+        const data = await res.json();
+        if (data.invoice) {
+          await fetchInvoices();
+          toast({ title: 'Invoice Created', description: 'Invoice saved as draft.' });
+        }
       }
     } catch {
-      toast({ title: 'Error', description: 'Failed to create invoice', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to save invoice', variant: 'destructive' });
     }
   };
 
@@ -233,7 +330,6 @@ export function InvoiceDashboard() {
         clientName: client.name,
         clientEmail: client.email,
         clientCompany: client.company,
-        status: 'pending',
         issueDate: invoiceData.issueDate,
         dueDate: invoiceData.dueDate,
         items: invoiceData.items,
@@ -242,23 +338,68 @@ export function InvoiceDashboard() {
         taxRate: invoiceData.taxRate,
         discount: invoiceData.discount,
         total: invoiceData.total,
-        paidAmount: 0,
         notes: invoiceData.notes,
       };
-      const res = await fetch('/api/userdetails/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (data.invoice) {
-        await fetchInvoices();
-        toast({ title: 'Invoice Sent', description: `Invoice sent to ${client.name}` });
+
+      let invoiceId = invoiceData.id as string | undefined;
+
+      if (invoiceId) {
+        const updateRes = await fetch(`/api/userdetails/invoices?id=${invoiceId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!updateRes.ok) {
+          throw new Error('Failed to update invoice before sending');
+        }
+      } else {
+        const createRes = await fetch('/api/userdetails/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, status: 'draft', paidAmount: 0 }),
+        });
+        const createData = await createRes.json();
+
+        if (!createRes.ok || !createData?.invoice?._id) {
+          throw new Error(createData?.error || 'Failed to create invoice');
+        }
+
+        invoiceId = createData.invoice._id;
       }
+
+      const sendRes = await fetch(`/api/userdetails/invoices?id=${invoiceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'pending',
+          sendEmail: true,
+          createPaymentLink: true,
+        }),
+      });
+      const sendData = await sendRes.json().catch(() => ({}));
+      if (!sendRes.ok) {
+        throw new Error(sendData?.error || 'Failed to send invoice');
+      }
+
+      await fetchInvoices();
+      const emailSent = sendData?.email?.sent === true;
+      toast({
+        title: emailSent ? 'Invoice Sent' : 'Invoice Updated',
+        description: emailSent
+          ? `Invoice sent to ${client.name}`
+          : `Invoice prepared for ${client.name}; email delivery not configured.`,
+      });
     } catch {
       toast({ title: 'Error', description: 'Failed to create invoice', variant: 'destructive' });
     }
   };
+
+    // Reset edit state when create modal closes
+    const handleCreateModalClose = (isOpen: boolean) => {
+      if (!isOpen) setEditInvoice(null);
+      setIsCreateOpen(isOpen);
+    };
 
   const handleSelectClient = (client: Client) => {
     setSelectedClient(client);
@@ -436,7 +577,7 @@ export function InvoiceDashboard() {
 
           <div className="p-4 md:p-5">
             <TabsContent value="invoices" className="space-y-4 mt-0">
-              <InvoiceList invoices={invoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} />
+              <InvoiceList invoices={invoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} onDownloadInvoice={handleDownloadInvoice} />
             </TabsContent>
 
             <TabsContent value="clients" className="space-y-4 mt-0">
@@ -455,7 +596,7 @@ export function InvoiceDashboard() {
                           {selectedClient.name}'s Invoices
                         </h3>
                         {clientInvoices.length > 0 ? (
-                          <InvoiceList invoices={clientInvoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} />
+                          <InvoiceList invoices={clientInvoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} onDownloadInvoice={handleDownloadInvoice} />
                         ) : (
                           <p className="text-muted-foreground text-center py-8">
                             No invoices found for this client
@@ -531,8 +672,9 @@ export function InvoiceDashboard() {
       </div>
 
       {/* Modals */}
-      <InvoiceDetailModal invoice={selectedInvoice} open={isDetailOpen} onOpenChange={setIsDetailOpen} onEdit={handleEditInvoice} onSend={handleSendInvoice} onMarkAsPaid={handleMarkAsPaid} />
-      <CreateInvoiceModal open={isCreateOpen} onOpenChange={setIsCreateOpen} clients={clientsWithStats} onSave={handleSaveInvoice} onSaveAndSend={handleSaveAndSend} />
+      <InvoiceDetailModal invoice={selectedInvoice} open={isDetailOpen} onOpenChange={setIsDetailOpen} onEdit={handleEditInvoice} onSend={handleSendInvoice} onDownload={handleDownloadInvoice} onMarkAsPaid={handleMarkAsPaid} onRecordPayment={handleRecordPayment} />
+      <CreateInvoiceModal open={isCreateOpen} onOpenChange={handleCreateModalClose} clients={clientsWithStats} onSave={handleSaveInvoice} onSaveAndSend={handleSaveAndSend} editInvoice={editInvoice} />
+      <AddPaymentModal invoice={paymentInvoice} open={isPaymentOpen} onOpenChange={setIsPaymentOpen} onPaymentAdded={handleAddPayment} />
     </>
   );
 }

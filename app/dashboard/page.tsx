@@ -8,7 +8,7 @@ const Calendar = dynamic(() => import("@/components/lexvert-calendar").then(mod 
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import {
-  FileSearch, FileText, ShieldHalf, Calendar as CalendarIcon,
+  FileSearch, FileText, Calendar as CalendarIcon,
   Users, Briefcase, CheckSquare, Clock, ArrowRight,
   TrendingUp, LoaderCircle, BarChart3, Plus
 } from "lucide-react"
@@ -29,6 +29,22 @@ interface DashboardData {
   recentClients: any[]
   recentTasks: any[]
   upcomingHearings: any[]
+  subscription: {
+    plan: string
+    status: string
+    billingCycle: string
+    caseLimit: number | null
+    casesUsed: number
+    casesRemaining: number | null
+    isPaidPlan: boolean
+    features: {
+      parserUpload: boolean
+      advancedAutomation: boolean
+      prioritySupport: boolean
+    }
+    renewalDate: string | null
+    cancelAtPeriodEnd: boolean
+  } | null
 }
 
 const Dashboard = () => {
@@ -62,6 +78,22 @@ const Dashboard = () => {
   }
 
   const stats = data?.stats || { totalCases: 0, totalClients: 0, pendingTasks: 0, completedTasks: 0, upcomingHearings: 0 }
+  const subscription = data?.subscription || {
+    plan: "free",
+    status: "active",
+    billingCycle: "monthly",
+    caseLimit: 10,
+    casesUsed: stats.totalCases,
+    casesRemaining: Math.max(10 - stats.totalCases, 0),
+    isPaidPlan: false,
+    features: {
+      parserUpload: false,
+      advancedAutomation: false,
+      prioritySupport: false,
+    },
+    renewalDate: null,
+    cancelAtPeriodEnd: false,
+  }
 
   const statCards = [
     {
@@ -130,13 +162,6 @@ const Dashboard = () => {
       icon: <BarChart3 className="text-white" size={20} />,
       href: "/invoices",
       color: "bg-violet-600 hover:bg-violet-700"
-    },
-    {
-      name: "Report Fraud",
-      description: "Report to authorities",
-      icon: <ShieldHalf className="text-white" size={20} />,
-      href: "/report-fraud",
-      color: "bg-orange-600 hover:bg-orange-700"
     },
   ]
 
@@ -261,6 +286,49 @@ const Dashboard = () => {
                   <p className="text-xs text-gray-500 hidden md:block">{item.description}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Plan & Billing Status</h3>
+                  <p className="text-sm text-muted-foreground">Current plan limits and access</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Plan</p>
+                  <p className="text-sm font-semibold text-gray-900">{subscription.plan.toUpperCase()}</p>
+                </div>
+              </div>
+              <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                <div className="p-3 rounded-lg border bg-gray-50">
+                  <p className="text-xs text-gray-500">Status</p>
+                  <p className="font-semibold text-gray-900 capitalize">{subscription.status}</p>
+                </div>
+                <div className="p-3 rounded-lg border bg-gray-50">
+                  <p className="text-xs text-gray-500">Case Usage</p>
+                  <p className="font-semibold text-gray-900">
+                    {subscription.caseLimit === null
+                      ? `${subscription.casesUsed} / Unlimited`
+                      : `${subscription.casesUsed} / ${subscription.caseLimit}`}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg border bg-gray-50">
+                  <p className="text-xs text-gray-500">Parser Access</p>
+                  <p className="font-semibold text-gray-900">
+                    {subscription.features.parserUpload ? "Included" : "Paid plans only"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg border bg-gray-50">
+                  <p className="text-xs text-gray-500">Renewal</p>
+                  <p className="font-semibold text-gray-900">
+                    {subscription.renewalDate
+                      ? new Date(subscription.renewalDate).toLocaleDateString("en-IN")
+                      : subscription.cancelAtPeriodEnd
+                        ? "Cancels at period end"
+                        : "Not scheduled"}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Main Content Grid */}

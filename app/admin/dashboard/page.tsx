@@ -47,6 +47,9 @@ interface TransactionRecord {
   amount: number
   status: string
   paymentGateway: string
+  receiptUrl?: string | null
+  invoiceUrl?: string | null
+  failureReason?: string | null
   description: string
   currency: string
   createdAt: string
@@ -729,7 +732,34 @@ export default function AdminDashboardPage() {
                     </td>
                     <td className="px-4 py-3">{statusBadge(tx.status)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 capitalize">{tx.paymentGateway}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-[200px] truncate">{tx.description || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-[200px]">
+                      <p className="truncate">{tx.description || "—"}</p>
+                      <div className="flex items-center gap-2 mt-1 text-xs">
+                        {tx.receiptUrl ? (
+                          <a
+                            href={tx.receiptUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            Receipt
+                          </a>
+                        ) : null}
+                        {tx.invoiceUrl ? (
+                          <a
+                            href={tx.invoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-violet-600 hover:underline"
+                          >
+                            Invoice
+                          </a>
+                        ) : null}
+                      </div>
+                      {tx.status === "failed" && tx.failureReason ? (
+                        <p className="mt-1 text-xs text-red-600 truncate">{tx.failureReason}</p>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap text-xs">{formatDateTime(tx.createdAt)}</td>
                   </tr>
                 ))

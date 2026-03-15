@@ -1,4 +1,4 @@
-import { Invoice } from '@/components/types/invoice';
+import { Invoice, PaymentRecord } from '@/components/types/invoice';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,10 @@ import {
   Calendar,
   CreditCard,
   FileText,
+  PlusCircle,
+  Banknote,
+  Wallet,
+  Receipt,
 } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
@@ -29,8 +33,20 @@ interface InvoiceDetailModalProps {
   onOpenChange: (open: boolean) => void;
   onEdit: (invoice: Invoice) => void;
   onSend: (invoice: Invoice) => void;
+  onDownload: (invoice: Invoice) => void;
   onMarkAsPaid: (invoice: Invoice) => void;
+  onRecordPayment: (invoice: Invoice) => void;
 }
+
+const methodLabels: Record<string, string> = {
+  cash: 'Cash',
+  bank_transfer: 'Bank Transfer',
+  credit_card: 'Credit Card',
+  check: 'Check',
+  paypal: 'PayPal',
+  upi: 'UPI',
+  other: 'Other',
+};
 
 export function InvoiceDetailModal({
   invoice,
@@ -38,9 +54,13 @@ export function InvoiceDetailModal({
   onOpenChange,
   onEdit,
   onSend,
+  onDownload,
   onMarkAsPaid,
+  onRecordPayment,
 }: InvoiceDetailModalProps) {
   if (!invoice) return null;
+
+  const payments: PaymentRecord[] = (invoice as any).payments || [];
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -74,7 +94,7 @@ export function InvoiceDetailModal({
               <Send className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               Send
             </Button>
-            <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm" onClick={() => window.print()}>
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm" onClick={() => onDownload(invoice)}>
               <Download className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden xs:inline">Download</span>
               <span className="xs:hidden">DL</span>
@@ -83,6 +103,12 @@ export function InvoiceDetailModal({
               <Printer className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               Print
             </Button>
+            {invoice.status !== 'paid' && (
+              <Button size="sm" variant="outline" onClick={() => onRecordPayment(invoice)} className="col-span-2 sm:col-span-1 h-8 sm:h-9 text-xs sm:text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                <PlusCircle className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                Record Payment
+              </Button>
+            )}
             {invoice.status !== 'paid' && invoice.status !== 'draft' && (
               <Button size="sm" onClick={() => onMarkAsPaid(invoice)} className="col-span-2 sm:col-span-1 sm:ml-auto h-8 sm:h-9 text-xs sm:text-sm">
                 <CreditCard className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
@@ -235,6 +261,38 @@ export function InvoiceDetailModal({
               <div className="space-y-2">
                 <h3 className="font-semibold">Notes</h3>
                 <p className="text-sm text-muted-foreground">{invoice.notes}</p>
+              </div>
+            </>
+          )}
+
+          {/* Payment History */}
+          {payments.length > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <h3 className="font-semibold text-sm sm:text-base flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-primary" />
+                  Payment History ({payments.length})
+                </h3>
+                <div className="space-y-2">
+                  {payments.map((p: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/30 text-xs sm:text-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-md bg-emerald-50 border border-emerald-100">
+                          <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{methodLabels[p.method] || p.method}</p>
+                          <p className="text-muted-foreground text-[11px]">
+                            {format(new Date(p.date), 'MMM dd, yyyy')}
+                            {p.reference ? ` · ${p.reference}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-semibold text-emerald-600">+{formatCurrency(p.amount)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           )}

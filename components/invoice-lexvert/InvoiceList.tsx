@@ -47,6 +47,7 @@ interface InvoiceListProps {
   onEditInvoice: (invoice: Invoice) => void;
   onDeleteInvoice: (invoice: Invoice) => void;
   onSendInvoice: (invoice: Invoice) => void;
+  onDownloadInvoice: (invoice: Invoice) => void;
 }
 
 type SortField = 'invoiceNumber' | 'client' | 'total' | 'dueDate' | 'status';
@@ -58,6 +59,7 @@ export function InvoiceList({
   onEditInvoice,
   onDeleteInvoice,
   onSendInvoice,
+  onDownloadInvoice,
 }: InvoiceListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all');
@@ -322,7 +324,7 @@ export function InvoiceList({
                           <Send className="mr-2 h-4 w-4" />
                           Send to Client
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.print(); }}>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownloadInvoice(invoice); }}>
                           <Download className="mr-2 h-4 w-4" />
                           Download PDF
                         </DropdownMenuItem>

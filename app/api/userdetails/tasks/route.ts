@@ -3,6 +3,7 @@ import Task from "@/app/api/lib/models/task";
 import Case from "@/app/api/lib/models/case";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import { auth } from "@clerk/nextjs/server";
+import { syncCalendarEventsForUser } from "@/app/api/lib/services/calendar";
 
 const TASK_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
 const TASK_CATEGORIES = new Set([
@@ -78,19 +79,22 @@ export async function POST(request: NextRequest) {
         const formData = await request.json()
         const payload = normalizeTaskPayload(formData)
         const caseId = payload.caseId as string | null;
+        const caseFound = caseId ? await Case.findById(caseId) : null
+
+        if (caseId && !caseFound) {
+            return NextResponse.json({ success: false, message: "Case not found" }, { status: 404 })
+        }
 
         const newTask = new Task({ clerkUid: userId, ...payload })
 
         await newTask.save()
 
-        if (caseId) {
-            const caseFound = await Case.findById(caseId)
-            if (!caseFound) {
-                return NextResponse.json({ success: false, message: "Case not found" }, { status: 404 })
-            }
+        if (caseFound) {
             caseFound.tasks.push(newTask._id)
             await caseFound.save()
         }
+
+        await syncCalendarEventsForUser(userId)
 
         return NextResponse.json({ success: true, message: "Task added successfully" });
     } catch (error) {
@@ -121,6 +125,8 @@ export async function PUT(request: NextRequest) {
         if (!task) {
             return NextResponse.json({ success: false, message: "Task not found" }, { status: 404 })
         }
+
+        await syncCalendarEventsForUser(userId)
 
         return NextResponse.json({ success: true, message: "Task updated successfully" });
     } catch (error) {
@@ -156,7 +162,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         await task.deleteOne()
-
+        await syncCalendarEventsForUser(userId)
 
         return NextResponse.json({ success: true, message: "Task deleted successfully" });
     } catch (error) {

@@ -35,18 +35,32 @@ export interface Invoice {
   tax: number;
   taxRate: number;
   discount: number;
+  currency?: string;
   total: number;
   paidAmount: number;
+  paymentLinkUrl?: string | null;
+  sentAt?: Date | null;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
+  export interface InvoiceWithPayments extends Invoice {
+    payments: PaymentRecord[];
+  }
+
 export interface PaymentRecord {
   id: string;
   invoiceId: string;
   amount: number;
-  method: 'credit_card' | 'bank_transfer' | 'paypal' | 'cash' | 'check';
+  method:
+    | 'credit_card'
+    | 'bank_transfer'
+    | 'paypal'
+    | 'cash'
+    | 'check'
+    | 'upi'
+    | 'other';
   date: Date;
   reference?: string;
   notes?: string;

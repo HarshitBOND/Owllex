@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  if (roleFilter === "admin" || roleFilter === "user") {
+  if (roleFilter === "admin" || roleFilter === "user" || roleFilter === "support") {
     query.role = roleFilter;
   }
 

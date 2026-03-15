@@ -16,6 +16,44 @@ const ListingSchema = new mongoose.Schema(
   }
 )
 
+const HearingHistorySchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ["created", "listing-added", "rescheduled", "updated"],
+      default: "updated",
+    },
+    hearingDate: { type: String, required: true },
+    previousCourtDate: { type: String, default: null },
+    listingDetails: { type: String, default: "" },
+    reason: { type: String, default: "" },
+    source: {
+      type: String,
+      enum: ["case-create", "listing", "reschedule", "manual"],
+      default: "manual",
+    },
+    changedByClerkUid: { type: String, default: null },
+    changedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+)
+
+const CourtDateAuditEntrySchema = new mongoose.Schema(
+  {
+    previousCourtDate: { type: String, default: null },
+    nextCourtDate: { type: String, required: true },
+    reason: { type: String, default: "" },
+    source: {
+      type: String,
+      enum: ["case-create", "listing", "reschedule", "manual"],
+      default: "manual",
+    },
+    changedByClerkUid: { type: String, default: null },
+    changedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+)
+
 const CaseSchema = new mongoose.Schema(
   {
     fileNo: { type: String },
@@ -37,6 +75,8 @@ const CaseSchema = new mongoose.Schema(
     registrationDate: {type: String}, 
     filingDetails: {type: [FilingSchema], default: []},
     listingDetails: {type: [ListingSchema], default: []},
+    hearingHistory: {type: [HearingHistorySchema], default: []},
+    courtDateAuditTrail: {type: [CourtDateAuditEntrySchema], default: []},
     notes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Note", default: [] }],
     clients: [{type: mongoose.Schema.Types.ObjectId, ref: "Client", default: []}],
     tasks: [{type: mongoose.Schema.Types.ObjectId, ref: "Task", default: []}],

@@ -42,6 +42,24 @@ export interface Case {
     date: string;
     listingDetails: string;
   }[];
+  hearingHistory?: {
+    type: "created" | "listing-added" | "rescheduled" | "updated";
+    hearingDate: string;
+    previousCourtDate?: string | null;
+    listingDetails?: string;
+    reason?: string;
+    source?: "case-create" | "listing" | "reschedule" | "manual";
+    changedByClerkUid?: string | null;
+    changedAt?: string;
+  }[];
+  courtDateAuditTrail?: {
+    previousCourtDate?: string | null;
+    nextCourtDate: string;
+    reason?: string;
+    source?: "case-create" | "listing" | "reschedule" | "manual";
+    changedByClerkUid?: string | null;
+    changedAt?: string;
+  }[];
   client: string;
   notes: any[];
 }

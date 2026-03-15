@@ -1,19 +1,103 @@
-import { NextRequest, NextResponse } from 'next/server';
+import sgMail from "@sendgrid/mail";
+import { auth } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import connectMongo from "@/app/api/lib/db/connectMongo";
+import Complaint from "@/app/api/lib/models/complaint";
+
+const contactSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(200),
+  subject: z.string().trim().min(2).max(160),
+  message: z.string().trim().min(10).max(4000),
+});
+
+async function notifySupportTeam(payload: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  messageId: string;
+}) {
+  const supportInbox = process.env.SUPPORT_TEAM_EMAIL?.trim();
+  const apiKey = process.env.SENDGRID_API_KEY?.trim();
+  const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim();
+  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "LexVert";
+
+  if (!supportInbox || !apiKey || !fromEmail) {
+    return;
+  }
+
+  sgMail.setApiKey(apiKey);
+
+  await sgMail.send({
+    to: supportInbox,
+    from: {
+      email: fromEmail,
+      name: fromName,
+    },
+    replyTo: payload.email,
+    subject: `[Contact Us] ${payload.subject}`,
+    text: [
+      `New support message received in LexVert.`,
+      ``,
+      `Message ID: ${payload.messageId}`,
+      `From: ${payload.name} <${payload.email}>`,
+      `Subject: ${payload.subject}`,
+      ``,
+      payload.message,
+    ].join("\n"),
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, subject, message } = await req.json();
+    const parsed = contactSchema.safeParse(await req.json());
 
-    // Store complaint data (in production, save to database or send email)
-    const complaintData = { name, email, subject, message, receivedAt: new Date().toISOString() };
-    // TODO: Save to MongoDB when Complaint model is added
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid contact form payload",
+          errors: parsed.error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
 
-    // Respond with success
-    return NextResponse.json({ message: 'Complaint submitted successfully' });
-  } catch {
+    const { userId } = await auth();
+
+    await connectMongo();
+
+    const complaint = await Complaint.create({
+      source: "contact-us",
+      clerkUid: userId || null,
+      ...parsed.data,
+      status: "new",
+    });
+
+    try {
+      await notifySupportTeam({
+        name: parsed.data.name,
+        email: parsed.data.email,
+        subject: parsed.data.subject,
+        message: parsed.data.message,
+        messageId: complaint._id.toString(),
+      });
+    } catch (emailError) {
+      console.error("Failed to send support email notification:", emailError);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Message submitted successfully",
+      id: complaint._id,
+    });
+  } catch (error) {
+    console.error("Complaint POST error:", error);
     return NextResponse.json(
-      { message: 'Failed to process complaint' },
-      { status: 500 }
+      { success: false, message: "Failed to process complaint" },
+      { status: 500 },
     );
   }
 }

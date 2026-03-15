@@ -6,6 +6,8 @@ import Task from "../../lib/models/task"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
 import { auth } from "@clerk/nextjs/server"
 import { ensureUser } from "../../lib/ensureUser"
+import { parseCourtDate, toClientDateTimeIso } from "@/lib/hearingDates"
+import { ensureUserSubscriptionDefaults, getUserSubscriptionSummary } from "../../lib/services/subscription"
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,6 +19,7 @@ export async function GET(req: NextRequest) {
 
     // Ensure user exists in MongoDB (auto-creates if webhook missed)
     await ensureUser(userId)
+    await ensureUserSubscriptionDefaults(userId)
 
     await connectMongoWithRetry()
     const user = await User.findOne({ clerkUid: userId })
@@ -24,6 +27,8 @@ export async function GET(req: NextRequest) {
       .populate("clients")
       .lean()
       .exec()
+
+    const subscription = await getUserSubscriptionSummary(userId)
 
     if (!user) {
       return NextResponse.json({
@@ -37,6 +42,8 @@ export async function GET(req: NextRequest) {
         recentCases: [],
         recentClients: [],
         upcomingHearings: [],
+        recentTasks: [],
+        subscription,
       })
     }
 
@@ -56,27 +63,6 @@ export async function GET(req: NextRequest) {
       .lean()
       .exec()
 
-    // Parse courtDate which may be DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY, or ISO
-    function parseCourtDate(dateStr: string): Date | null {
-      if (!dateStr) return null
-      // Try DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
-      const parts = dateStr.split(/[.\/-]/)
-      if (parts.length === 3) {
-        const [a, b, c] = parts
-        // If first part is 4 digits, it's YYYY-MM-DD
-        if (a.length === 4) {
-          const d = new Date(`${a}-${b.padStart(2,'0')}-${c.padStart(2,'0')}T00:00:00`)
-          return isNaN(d.getTime()) ? null : d
-        }
-        // Otherwise assume DD.MM.YYYY
-        const d = new Date(`${c}-${b.padStart(2,'0')}-${a.padStart(2,'0')}T00:00:00`)
-        return isNaN(d.getTime()) ? null : d
-      }
-      // Fallback: try native parsing
-      const d = new Date(dateStr)
-      return isNaN(d.getTime()) ? null : d
-    }
-
     // Calculate upcoming hearings from cases with courtDate
     const now = new Date()
     now.setHours(0, 0, 0, 0)
@@ -95,7 +81,7 @@ export async function GET(req: NextRequest) {
       .map((c: any) => {
         // Normalize courtDate to ISO string so frontend can parse it
         const parsed = parseCourtDate(c.courtDate)
-        return { ...c, courtDate: parsed ? parsed.toISOString() : c.courtDate }
+        return { ...c, courtDate: parsed ? toClientDateTimeIso(parsed) : c.courtDate }
       })
 
     // Recent cases (last 5)
@@ -116,6 +102,7 @@ export async function GET(req: NextRequest) {
       recentClients,
       recentTasks,
       upcomingHearings,
+      subscription,
     })
   } catch (error) {
     console.error("Dashboard API error:", error)

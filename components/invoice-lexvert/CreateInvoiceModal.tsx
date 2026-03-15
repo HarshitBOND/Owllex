@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Client, InvoiceItem } from '@/components/types/invoice';
+import { useState, useEffect } from 'react';
+import { Client, Invoice, InvoiceItem } from '@/components/types/invoice';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ interface CreateInvoiceModalProps {
   clients: Client[];
   onSave: (invoiceData: any) => void;
   onSaveAndSend: (invoiceData: any) => void;
+  editInvoice?: Invoice | null;
 }
 
 export function CreateInvoiceModal({
@@ -42,6 +43,7 @@ export function CreateInvoiceModal({
   clients,
   onSave,
   onSaveAndSend,
+  editInvoice,
 }: CreateInvoiceModalProps) {
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [issueDate, setIssueDate] = useState<Date>(new Date());
@@ -54,6 +56,21 @@ export function CreateInvoiceModal({
   const [taxRate, setTaxRate] = useState(10);
   const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState('');
+
+  // Pre-fill form when editing an existing invoice
+  useEffect(() => {
+    if (open && editInvoice) {
+      setSelectedClient(editInvoice.clientId || '');
+      setIssueDate(new Date(editInvoice.issueDate));
+      setDueDate(new Date(editInvoice.dueDate));
+      setItems(editInvoice.items.map(i => ({ description: i.description, quantity: i.quantity, rate: i.rate, amount: i.amount })));
+      setTaxRate(editInvoice.taxRate || 0);
+      setDiscount(editInvoice.discount || 0);
+      setNotes(editInvoice.notes || '');
+    } else if (open && !editInvoice) {
+      resetForm();
+    }
+  }, [open, editInvoice]);
 
   const addItem = () => {
     setItems([...items, { description: '', quantity: 1, rate: 0, amount: 0 }]);
@@ -89,10 +106,11 @@ export function CreateInvoiceModal({
 
   const handleSave = (send: boolean = false) => {
     const invoiceData = {
+      ...(editInvoice ? { id: editInvoice.id } : {}),
       clientId: selectedClient,
       issueDate,
       dueDate,
-      items: items.map((item, i) => ({ ...item, id: `new-item-${i}` })),
+      items: items.map((item, i) => ({ ...item, id: `item-${i}` })),
       taxRate,
       discount,
       notes,
@@ -126,7 +144,7 @@ export function CreateInvoiceModal({
     }}>
       <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-8">
         <DialogHeader>
-          <DialogTitle className="text-lg sm:text-2xl font-bold">Create New Invoice</DialogTitle>
+          <DialogTitle className="text-lg sm:text-2xl font-bold">{editInvoice ? `Edit Invoice — ${editInvoice.invoiceNumber}` : 'Create New Invoice'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 sm:space-y-6 py-2 sm:py-4">
@@ -381,12 +399,14 @@ export function CreateInvoiceModal({
           </Button>
           <Button variant="secondary" onClick={() => handleSave(false)} className="w-full sm:w-auto h-9 sm:h-10 text-xs sm:text-sm">
             <Save className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Save Draft
+            {editInvoice ? 'Save Changes' : 'Save Draft'}
           </Button>
-          <Button onClick={() => handleSave(true)} disabled={!selectedClient} className="w-full sm:w-auto h-9 sm:h-10 text-xs sm:text-sm">
-            <Send className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Save & Send
-          </Button>
+          {!editInvoice && (
+            <Button onClick={() => handleSave(true)} disabled={!selectedClient} className="w-full sm:w-auto h-9 sm:h-10 text-xs sm:text-sm">
+              <Send className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Save & Send
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

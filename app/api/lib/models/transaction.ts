@@ -27,6 +27,55 @@ const TransactionSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    checkoutSessionId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    subscriptionId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    customerId: {
+      type: String,
+      default: null,
+    },
+    paymentIntentId: {
+      type: String,
+      default: null,
+    },
+    receiptUrl: {
+      type: String,
+      default: null,
+    },
+    invoiceUrl: {
+      type: String,
+      default: null,
+    },
+    failureReason: {
+      type: String,
+      default: "",
+    },
+    supportIssueStatus: {
+      type: String,
+      enum: ["open", "in_progress", "resolved"],
+      default: "open",
+      index: true,
+    },
+    supportIssueNotes: {
+      type: String,
+      default: "",
+    },
+    supportIssueHandledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    supportIssueHandledAt: {
+      type: Date,
+      default: null,
+    },
     description: {
       type: String,
       default: "",
@@ -34,6 +83,10 @@ const TransactionSchema = new mongoose.Schema(
     currency: {
       type: String,
       default: "INR",
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
   },
   {
@@ -43,6 +96,7 @@ const TransactionSchema = new mongoose.Schema(
 
 TransactionSchema.index({ createdAt: -1 });
 TransactionSchema.index({ status: 1, createdAt: -1 });
+TransactionSchema.index({ supportIssueStatus: 1, createdAt: -1 });
 
 const Transaction =
   mongoose.models["Transaction"] ||

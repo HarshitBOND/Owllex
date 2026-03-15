@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { ChevronRight, FileSearch, LayoutDashboard, ExternalLink, UsersRound, ReceiptText, WandSparkles, Scale, ListTodo, Moon, Sun, FileText, ShieldHalf, CreditCard, X, HelpCircle, Crown, ShieldCheck } from "lucide-react"
+import { ChevronRight, FileSearch, LayoutDashboard, ExternalLink, UsersRound, ReceiptText, WandSparkles, Scale, ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck, LifeBuoy, Settings } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -18,6 +18,7 @@ const Sidebar = () => {
     const { theme, setTheme } = useTheme()
     const [mounted, setMounted] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
+    const [isSupport, setIsSupport] = useState(false)
 
     useEffect(() => {
         setMounted(true)
@@ -32,6 +33,16 @@ const Sidebar = () => {
             })
             .then((data) => {
                 if (data?.isAdmin) setIsAdmin(true)
+            })
+            .catch(() => {})
+
+        fetch("/api/support/check")
+            .then((res) => {
+                if (res.ok) return res.json()
+                return null
+            })
+            .then((data) => {
+                if (data?.isSupport) setIsSupport(true)
             })
             .catch(() => {})
     }, [])
@@ -51,13 +62,13 @@ const Sidebar = () => {
         { name: "My Clients", icon: <UsersRound size={19} />, href: "/my-clients" },
         { name: "Invoices", icon: <ReceiptText size={20} />, href: "/invoices" },
         { name: "Tasks", icon: <ListTodo size={20} />, href: "/tasks" },
+        { name: "Settings", icon: <Settings size={20} />, href: "/settings" },
     ]
 
     const toolNavItems = [
         { name: "Suggestions", icon: <WandSparkles size={20} />, href: "/suggestions" },
         { name: "Acts", icon: <Scale size={20} />, href: "/acts" },
         { name: "Affidavit", icon: <FileText size={20} />, href: "/generate-affidavit" },
-        { name: "Report Fraud", icon: <ShieldHalf size={20} />, href: "/report-fraud" },
     ]
 
     const handleNavigation = (href: string) => {
@@ -112,34 +123,21 @@ const Sidebar = () => {
                 {toolNavItems.map((item) => <NavItem key={item.name} item={item} />)}
             </div>
 
-            {/* Admin Panel - Only visible to admins */}
-            {isAdmin && (
+            {/* Admin/Support Panels */}
+            {(isAdmin || isSupport) && (
                 <div className="flex flex-col gap-y-1 px-1 mt-4">
                     {(isOpen || isMobile) && (
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Admin</p>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Panels</p>
                     )}
                     {!isOpen && !isMobile && <hr className="mb-2 border-gray-200 dark:border-gray-700" />}
-                    <NavItem item={{ name: "Admin Panel", icon: <ShieldCheck size={20} />, href: "/admin/dashboard" }} />
+                    {isAdmin && <NavItem item={{ name: "Admin Panel", icon: <ShieldCheck size={20} />, href: "/admin/dashboard" }} />}
+                    {isSupport && <NavItem item={{ name: "Support Panel", icon: <LifeBuoy size={20} />, href: "/support/dashboard" }} />}
                 </div>
             )}
 
             {/* Bottom Section */}
             <div className="mt-auto flex flex-col gap-y-1 px-1 pb-4">
                 <hr className="mb-3 border-gray-200 dark:border-gray-700" />
-
-                {/* Subscription CTA */}
-                {(isOpen || isMobile) && (
-                    <div
-                        onClick={() => router.push("/subscribe")}
-                        className="mx-1 mb-3 p-3 rounded-lg bg-gradient-to-r from-sidebar-primary/10 to-sidebar-primary/5 border border-sidebar-primary/20 cursor-pointer hover:border-sidebar-primary/40 transition-all"
-                    >
-                        <div className="flex items-center gap-2 mb-1">
-                            <Crown size={14} className="text-sidebar-primary" />
-                            <p className="text-xs font-semibold text-sidebar-primary">Upgrade Plan</p>
-                        </div>
-                        <p className="text-[10px] text-gray-500 dark:text-gray-400">Get access to premium features</p>
-                    </div>
-                )}
 
                 <button
                     onClick={toggleTheme}

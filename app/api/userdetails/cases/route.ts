@@ -10,6 +10,11 @@ import * as cheerio from "cheerio";
 import Client from "../../lib/models/client"
 import mongoose from "mongoose"
 import { ensureUser } from "../../lib/ensureUser"
+import { syncCalendarEventsForUser } from "../../lib/services/calendar"
+import { appendCourtDateChange } from "../../lib/services/caseHearing"
+import { reconcileNotificationsForCase } from "../../lib/services/notifications"
+import { checkCaseCreationAllowance } from "../../lib/services/subscription"
+import { formatDateKey, parseCourtDate } from "@/lib/hearingDates"
 
 
 function toSnakeCase(str: string): string {
@@ -119,9 +124,32 @@ export async function POST(req: NextRequest) {
     try {
         await connectMongoWithRetry()
         const { userId } = await auth();
+
+        if (!userId) {
+            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+        }
+
         const caseData = await req.json()
-        if (userId) await ensureUser(userId);
+        await ensureUser(userId);
+
         const user = await User.findOne( {clerkUid: userId} )
+
+        if (!user) {
+            return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
+        }
+
+        const caseCreationAllowance = await checkCaseCreationAllowance(userId)
+        if (!caseCreationAllowance.allowed) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: caseCreationAllowance.reason,
+                    subscription: caseCreationAllowance.subscription,
+                },
+                { status: 403 },
+            )
+        }
+
         const client = caseData.client ? await Client.findById(caseData.client) : null
 
         // Try CauseListCase first, then fall back to ScrapedCase
@@ -151,6 +179,8 @@ export async function POST(req: NextRequest) {
         const sourceCourtValue = fromScraped ? (caseFound.court_no || "") : caseFound.court_value
         const sourceCourtRoom = fromScraped ? (caseFound.court_no || "") : caseFound.court_room
         const sourceCourtDate = fromScraped ? (caseFound.list_date || "") : caseFound.court_date
+        const parsedSourceCourtDate = parseCourtDate(sourceCourtDate)
+        const normalizedSourceCourtDate = parsedSourceCourtDate ? formatDateKey(parsedSourceCourtDate) : ""
 
         // Scrape court website for additional details (non-blocking on failure)
         let scrapedData = { case_details: {} as Record<string,string>, filing_details: [] as any[], listing_details: [] as any[] };
@@ -181,24 +211,46 @@ export async function POST(req: NextRequest) {
             courtName: sourceCourtName,
             courtValue: sourceCourtValue,
             courtRoom: sourceCourtRoom,
-            courtDate: sourceCourtDate,
+            courtDate: normalizedSourceCourtDate || sourceCourtDate,
             fillingAdvocate: data?.["filing_advocate"],
             fillingDate: data?.["date_of_filing"],
             status: data?.["status"],
             registrationDate: data?.["date_of_registration"],
             filingDetails:  filingDetails,
             listingDetails: listingDetails,
+            hearingHistory: [],
+            courtDateAuditTrail: [],
             notes: [],
             clients: clientIds,
         }
 
         const caseCreated = await Case.create(formattedCase)
+
+        if (normalizedSourceCourtDate) {
+            appendCourtDateChange({
+                caseDocument: caseCreated,
+                nextCourtDate: normalizedSourceCourtDate,
+                previousCourtDate: null,
+                reason: "Initial court date imported during case creation",
+                listingDetails: "",
+                changedByClerkUid: userId,
+                source: "case-create",
+                type: "created",
+            })
+
+            caseCreated.courtDate = normalizedSourceCourtDate
+            await caseCreated.save()
+        }
+
         user.cases.push(caseCreated._id)
         if (client) {
             client.cases.push(caseCreated._id)
             await client.save()
         }
         await user.save()
+        if (userId) {
+            await syncCalendarEventsForUser(userId)
+        }
 
         return NextResponse.json({ success: true, caseId: caseCreated._id })
     } catch (error) {
@@ -214,12 +266,23 @@ export async function DELETE(req: NextRequest) {
         const caseId = req.nextUrl.searchParams.get("caseId") || req.nextUrl.searchParams.get("id")
         const clientId = req.nextUrl.searchParams.get("clientId")
 
+        if (!userId) {
+            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+        }
+
+        await ensureUser(userId)
+
         if (!caseId) {
             return NextResponse.json({ success: false, error: "Case ID required" }, { status: 400 })
         }
 
         // If clientId provided, just unlink the client from the case
         if (clientId) {
+            const isOwnedCase = await User.exists({ clerkUid: userId, cases: caseId })
+            if (!isOwnedCase) {
+                return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
+            }
+
             const caseFound = await Case.findById(caseId)
             const clientFound = await Client.findById(clientId)
             if (caseFound && clientFound && caseFound.clients.filter((client: mongoose.Schema.Types.ObjectId) => client.toString() === clientId).length > 0) {
@@ -233,6 +296,11 @@ export async function DELETE(req: NextRequest) {
         }
 
         // Delete the entire case
+        const isOwnedCase = await User.exists({ clerkUid: userId, cases: caseId })
+        if (!isOwnedCase) {
+            return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
+        }
+
         const caseFound = await Case.findById(caseId)
         if (!caseFound) {
             return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
@@ -263,7 +331,14 @@ export async function DELETE(req: NextRequest) {
             await Note.deleteMany({ _id: { $in: caseFound.notes } })
         }
 
+        await reconcileNotificationsForCase(caseId, null)
+
         await Case.findByIdAndDelete(caseId)
+
+        if (userId) {
+            await syncCalendarEventsForUser(userId)
+        }
+
         return NextResponse.json({ success: true })
     } catch (error) {
         console.error(error)

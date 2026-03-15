@@ -76,9 +76,9 @@ export function HowItWorksSection() {
         </div>
 
         <div className="text-center">
-          <a href="/subscribe">
+          <a href="/sign-up">
             <Button size="lg" className="bg-secondary hover:bg-secondary/90 text-secondary-foreground">
-              Start Your Legal Journey
+              Start for Free
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </a>

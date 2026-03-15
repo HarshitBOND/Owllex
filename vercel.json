@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/notifications/run",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/internal/invoices/reminders",
+      "schedule": "30 3 * * *"
+    }
+  ]
+}

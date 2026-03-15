@@ -7,11 +7,37 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { ensureUser } from '@/app/api/lib/ensureUser';
+import { getUserSubscriptionSummary } from '@/app/api/lib/services/subscription';
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || 'http://localhost:8000';
 
 export async function POST(req: NextRequest) {
   try {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    await ensureUser(userId);
+    const subscription = await getUserSubscriptionSummary(userId);
+
+    if (!subscription?.features.parserUpload) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'PDF parser access is available on paid plans only. Please upgrade your plan.',
+          subscription,
+        },
+        { status: 403 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get('file');
 

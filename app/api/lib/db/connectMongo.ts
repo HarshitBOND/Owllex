@@ -43,12 +43,19 @@ const registerModels = async () => {
     await import("../models/note");
     await import("../models/task");
     await import("../models/user");
+    await import("../models/notification");
     await import("../models/downloaded-pdf");
     await import("../models/scraped-case");
     await import("../models/scraper-log");
     await import("../models/transaction");
     await import("../models/document");
     await import("../models/admin-log");
+    await import("../models/calendar-event");
+    await import("../models/support-message");
+    await import("../models/complaint");
+    await import("../models/fraud-report");
+    await import("../models/suggestion");
+    await import("../models/simple-invoice");
 
     console.log("All models registered successfully.");
   } catch (error) {

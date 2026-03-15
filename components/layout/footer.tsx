@@ -35,8 +35,8 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a href="/subscribe" className="hover:text-primary transition-colors">
-                  Subscribe
+                <a href="/sign-up" className="hover:text-primary transition-colors">
+                  Get Started
                 </a>
               </li>
             </ul>

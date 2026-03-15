@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Trash2, Calendar as CalendarIcon } from 'lucide-react';
+import { X, Plus, Trash2, Pencil, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,8 +13,9 @@ interface EventModalProps {
   onClose: () => void;
   selectedDate: Date | null;
   events: CalendarEvent[];
-  onAddEvent: (event: Omit<CalendarEvent, 'id'>) => void;
-  onDeleteEvent: (id: string) => void;
+  onAddEvent: (event: Omit<CalendarEvent, 'id'>) => Promise<CalendarEvent | void>;
+  onUpdateEvent: (id: string, updates: Partial<Omit<CalendarEvent, 'id'>>) => Promise<void>;
+  onDeleteEvent: (id: string) => Promise<void>;
 }
 
 export const EventModal = ({
@@ -23,33 +24,101 @@ export const EventModal = ({
   selectedDate,
   events,
   onAddEvent,
+  onUpdateEvent,
   onDeleteEvent,
 }: EventModalProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setTitle('');
-      setDescription('');
-      setIsAdding(false);
-    }
-  }, [isOpen]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !selectedDate) return;
-
-    onAddEvent({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      date: format(selectedDate, 'yyyy-MM-dd'),
-    });
-
+  const resetFormState = () => {
     setTitle('');
     setDescription('');
     setIsAdding(false);
+    setEditingEvent(null);
+    setActionError(null);
+  };
+
+  const handleStartAdding = () => {
+    setEditingEvent(null);
+    setTitle('');
+    setDescription('');
+    setActionError(null);
+    setIsAdding(true);
+  };
+
+  const handleStartEditing = (event: CalendarEvent) => {
+    if (!event.canEdit) {
+      return;
+    }
+
+    setEditingEvent(event);
+    setTitle(event.title);
+    setDescription(event.description || '');
+    setActionError(null);
+    setIsAdding(true);
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetFormState();
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !selectedDate) return;
+
+    setIsSaving(true);
+    setActionError(null);
+
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      date: format(selectedDate, 'yyyy-MM-dd'),
+      color: editingEvent?.color || 'blue',
+      reminderEnabled: editingEvent?.reminderEnabled || false,
+      reminderOffsets: editingEvent?.reminderOffsets || [],
+    };
+
+    try {
+      if (editingEvent) {
+        await onUpdateEvent(editingEvent.id, payload);
+      } else {
+        await onAddEvent(payload);
+      }
+
+      resetFormState();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to save event');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteEvent = async (event: CalendarEvent) => {
+    if (!event.canDelete) {
+      return;
+    }
+
+    setIsDeletingId(event.id);
+    setActionError(null);
+
+    try {
+      await onDeleteEvent(event.id);
+
+      if (editingEvent?.id === event.id) {
+        resetFormState();
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to delete event');
+    } finally {
+      setIsDeletingId(null);
+    }
   };
 
   if (!selectedDate) return null;
@@ -132,18 +201,36 @@ export const EventModal = ({
                         </p>
                       )}
                     </div>
-                    {!event.isHearing ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onDeleteEvent(event.id)}
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <span className="text-[10px] text-violet-500 font-medium px-1.5 py-0.5 bg-violet-100 dark:bg-violet-500/20 rounded">Hearing</span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {event.canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleStartEditing(event)}
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 hover:bg-secondary transition-all"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      {event.canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => void handleDeleteEvent(event)}
+                          disabled={isDeletingId === event.id}
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      {!event.canEdit && !event.canDelete && (
+                        <span className="text-[10px] text-violet-500 font-medium px-1.5 py-0.5 bg-violet-100 dark:bg-violet-500/20 rounded">
+                          {event.isHearing ? 'Hearing' : 'Synced'}
+                        </span>
+                      )}
+                    </div>
                   </motion.div>
                 ))}
               </div>
@@ -159,12 +246,17 @@ export const EventModal = ({
                     onSubmit={handleSubmit}
                     className="space-y-4 overflow-hidden"
                   >
+                    <p className="text-xs text-muted-foreground">
+                      {editingEvent ? 'Edit manual event' : 'Create manual event'}
+                    </p>
+
                     <Input
                       placeholder="Event title"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       className="bg-secondary/10 border-border focus:border-primary"
                       autoFocus
+                      disabled={isSaving}
                     />
                     <Textarea
                       placeholder="Description (optional)"
@@ -172,29 +264,38 @@ export const EventModal = ({
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
                       rows={3}
                       className="bg-secondary/10 border-border focus:border-primary resize-none"
+                      disabled={isSaving}
                     />
+
+                    {actionError && (
+                      <p className="text-xs text-destructive">
+                        {actionError}
+                      </p>
+                    )}
+
                     <div className="flex gap-2">
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setIsAdding(false)}
+                        disabled={isSaving}
+                        onClick={resetFormState}
                         className="flex-1"
                       >
                         Cancel
                       </Button>
                       <Button
                         type="submit"
-                        disabled={!title.trim()}
+                        disabled={!title.trim() || isSaving}
                         className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                       >
-                        Save Event
+                        {isSaving ? 'Saving...' : editingEvent ? 'Save Changes' : 'Save Event'}
                       </Button>
                     </div>
                   </motion.form>
                 ) : (
                   <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     <Button
-                      onClick={() => setIsAdding(true)}
+                      onClick={handleStartAdding}
                       variant="outline"
                       className="w-full border-dashed border-2 hover:border-primary hover:bg-primary/5 transition-colors"
                     >
