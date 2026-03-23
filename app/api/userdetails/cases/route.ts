@@ -4,7 +4,6 @@ import Case from "../../lib/models/case"
 import User from "../../lib/models/user"
 import ScrapedCase from "../../lib/models/scraped-case"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
-import { auth } from "@clerk/nextjs/server";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import Client from "../../lib/models/client"
@@ -15,6 +14,9 @@ import { appendCourtDateChange } from "../../lib/services/caseHearing"
 import { reconcileNotificationsForCase } from "../../lib/services/notifications"
 import { checkCaseCreationAllowance } from "../../lib/services/subscription"
 import { formatDateKey, parseCourtDate } from "@/lib/hearingDates"
+import { requireOwnedCase, requireOwnedClient, requireUserContext } from "@/app/api/lib/routeGuards"
+import { createCaseSchema } from "@/app/api/lib/validators/userdetails"
+import { canAccessFirm, type TeamPermission } from "@/app/api/lib/services/rbac"
 
 
 function toSnakeCase(str: string): string {
@@ -91,15 +93,42 @@ async function scrapeData(url: string) {
 
 export async function GET(req: NextRequest) {
     try {
-        await connectMongoWithRetry()
-        const { userId } = await auth();
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
         }
+
+        await connectMongoWithRetry()
+        const userId = userContext.clerkUid;
         await ensureUser(userId);
         const caseId = req.nextUrl.searchParams.get("id")
+        const scope = req.nextUrl.searchParams.get("scope")
+
+        const actorUser = await User.findOne({ clerkUid: userId }).select("primaryFirmId").lean().exec()
+        const actorFirmId = (actorUser as any)?.primaryFirmId ? (actorUser as any).primaryFirmId.toString() : null
+
         if (caseId) {
             const caseFound = await Case.findById(caseId).populate("notes").populate("clients").populate("tasks")
+            if (!caseFound) {
+                return NextResponse.json({ error: "Case not found" }, { status: 404 })
+            }
+
+            const ownedCase = await requireOwnedCase(userId, caseId)
+            let hasFirmAccess = false
+
+            if (!ownedCase && caseFound.firmId) {
+                const firmAccess = await canAccessFirm(
+                    userId,
+                    caseFound.firmId.toString(),
+                    "case.read" as TeamPermission,
+                )
+                hasFirmAccess = firmAccess.allowed
+            }
+
+            if (!ownedCase && !hasFirmAccess) {
+                return NextResponse.json({ error: "Case not found" }, { status: 404 })
+            }
+
             // Look up the latest cause list entry matching this case number
             let causeListInfo = null;
             if (caseFound?.caseNo) {
@@ -112,6 +141,21 @@ export async function GET(req: NextRequest) {
             }
             return NextResponse.json({ caseFound, causeListInfo })
         }
+        if (scope === "firm" && actorFirmId) {
+            const firmAccess = await canAccessFirm(userId, actorFirmId, "case.read" as TeamPermission)
+            if (!firmAccess.allowed) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+            }
+
+            const firmCases = await Case.find({ firmId: actorFirmId }).lean().exec()
+            return NextResponse.json({
+                userCases: {
+                    cases: firmCases,
+                },
+                scope: "firm",
+            })
+        }
+
         const userCases = await User.findOne( {clerkUid: userId} ).populate("cases")
         return NextResponse.json({ userCases })
     } catch (error) {
@@ -122,14 +166,26 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        await connectMongoWithRetry()
-        const { userId } = await auth();
-
-        if (!userId) {
-            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
         }
 
-        const caseData = await req.json()
+        await connectMongoWithRetry()
+        const userId = userContext.clerkUid;
+
+        const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+        if (!rawBody) {
+            return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+        }
+
+        const parsedCaseData = createCaseSchema.safeParse(rawBody)
+        if (!parsedCaseData.success) {
+            const issue = parsedCaseData.error.issues[0]?.message || "Invalid case payload"
+            return NextResponse.json({ success: false, error: issue }, { status: 400 })
+        }
+
+        const caseData = parsedCaseData.data
         await ensureUser(userId);
 
         const user = await User.findOne( {clerkUid: userId} )
@@ -151,6 +207,13 @@ export async function POST(req: NextRequest) {
         }
 
         const client = caseData.client ? await Client.findById(caseData.client) : null
+
+        if (caseData.client) {
+            const isOwnedClient = await requireOwnedClient(userId, caseData.client)
+            if (!isOwnedClient) {
+                return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 })
+            }
+        }
 
         // Try CauseListCase first, then fall back to ScrapedCase
         let caseFound = await CauseListCase.findById(caseData.caseId)
@@ -199,6 +262,7 @@ export async function POST(req: NextRequest) {
         }
             
         const formattedCase = {
+            firmId: (user as any).primaryFirmId || null,
             fileNo: caseData.fileNumber || Math.random().toString(36).substring(2, 9).toUpperCase(),
             caseNo: data?.["case_no"] || sourceCaseNo,
             cnrNo: data?.["cnr_no"],
@@ -261,14 +325,15 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
     try {
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
+        }
+
         await connectMongoWithRetry()
-        const { userId } = await auth();
+        const userId = userContext.clerkUid;
         const caseId = req.nextUrl.searchParams.get("caseId") || req.nextUrl.searchParams.get("id")
         const clientId = req.nextUrl.searchParams.get("clientId")
-
-        if (!userId) {
-            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-        }
 
         await ensureUser(userId)
 
@@ -278,9 +343,14 @@ export async function DELETE(req: NextRequest) {
 
         // If clientId provided, just unlink the client from the case
         if (clientId) {
-            const isOwnedCase = await User.exists({ clerkUid: userId, cases: caseId })
+            const isOwnedCase = await requireOwnedCase(userId, caseId)
             if (!isOwnedCase) {
                 return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
+            }
+
+            const isOwnedClient = await requireOwnedClient(userId, clientId)
+            if (!isOwnedClient) {
+                return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 })
             }
 
             const caseFound = await Case.findById(caseId)
@@ -296,7 +366,7 @@ export async function DELETE(req: NextRequest) {
         }
 
         // Delete the entire case
-        const isOwnedCase = await User.exists({ clerkUid: userId, cases: caseId })
+        const isOwnedCase = await requireOwnedCase(userId, caseId)
         if (!isOwnedCase) {
             return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
         }
@@ -348,21 +418,44 @@ export async function DELETE(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
     try {
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
+        }
+
         await connectMongoWithRetry()
+        const userId = userContext.clerkUid
         const caseId = req.nextUrl.searchParams.get("caseId")
         const clientId = req.nextUrl.searchParams.get("clientId")
-        if (caseId && clientId) {
-            const caseFound = await Case.findById(caseId)
-            const clientFound = await Client.findById(clientId)
-            if (caseFound && clientFound) {
-                caseFound.clients.push(clientId)
-                clientFound.cases.push(caseId)
-                await caseFound.save()
-                await clientFound.save()
-                return NextResponse.json({ success: true })
-            }
+
+        if (!caseId || !clientId) {
+            return NextResponse.json({ success: false, error: "caseId and clientId are required" }, { status: 400 })
         }
-        return NextResponse.json({ success: false })
+
+        const [isOwnedCase, isOwnedClient] = await Promise.all([
+            requireOwnedCase(userId, caseId),
+            requireOwnedClient(userId, clientId),
+        ])
+
+        if (!isOwnedCase) {
+            return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
+        }
+
+        if (!isOwnedClient) {
+            return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 })
+        }
+
+        const caseFound = await Case.findById(caseId)
+        const clientFound = await Client.findById(clientId)
+        if (caseFound && clientFound) {
+            caseFound.clients.addToSet(clientId)
+            clientFound.cases.addToSet(caseId)
+            await caseFound.save()
+            await clientFound.save()
+            return NextResponse.json({ success: true })
+        }
+
+        return NextResponse.json({ success: false, error: "Case or client not found" }, { status: 404 })
     } catch (error) {
         console.error(error)
         return NextResponse.json({ error: "Failed to connect to database" }, { status: 500 })

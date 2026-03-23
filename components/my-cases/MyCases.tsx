@@ -55,7 +55,7 @@ export function MyCases() {
   };
 
   const filteredCases = useMemo(() => {
-    let result = cases.filter((c) => {
+    const result = cases.filter((c) => {
       const q = search.toLowerCase();
       const matchesSearch =
         (c.caseTitle || "").toLowerCase().includes(q) ||

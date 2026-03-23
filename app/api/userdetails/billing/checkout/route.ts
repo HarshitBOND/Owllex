@@ -1,16 +1,15 @@
-import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import { ensureUser } from "@/app/api/lib/ensureUser"
 import Transaction from "@/app/api/lib/models/transaction"
 import User from "@/app/api/lib/models/user"
 import {
   convertMinorToMajorAmount,
-  getStripeCheckoutBaseUrl,
-  getStripeClient,
-  getStripePriceId,
-} from "@/app/api/lib/services/stripe"
+  getRazorpayCheckoutBaseUrl,
+  getRazorpayClient,
+  getRazorpayPlanAmountMinor,
+} from "@/app/api/lib/services/razorpay"
+import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
 
 const checkoutPayloadSchema = z
   .object({
@@ -30,120 +29,131 @@ const normalizePath = (path: string | undefined, fallback: string) => {
   return candidate
 }
 
-const withSessionIdPlaceholder = (urlPath: string) =>
-  urlPath.includes("?")
-    ? `${urlPath}&session_id={CHECKOUT_SESSION_ID}`
-    : `${urlPath}?session_id={CHECKOUT_SESSION_ID}`
-
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
 
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
-    if (!body) {
-      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `billing:checkout:${userId}`,
+      max: 15,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
-    const parsedBody = checkoutPayloadSchema.safeParse(body)
+    const parsedBody = await parseAndValidateJson(request, checkoutPayloadSchema)
     if (!parsedBody.success) {
-      const issue = parsedBody.error.issues[0]?.message || "Invalid checkout payload"
-      return NextResponse.json({ success: false, error: issue }, { status: 400 })
+      return parsedBody.response
     }
 
-    const stripe = getStripeClient()
-    if (!stripe) {
+    const razorpay = getRazorpayClient()
+    if (!razorpay) {
       return NextResponse.json(
         {
           success: false,
-          error: "Stripe is not configured. Add STRIPE_SECRET_KEY and plan price IDs to environment.",
+          error:
+            "Razorpay is not configured. Add RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and plan amount env keys.",
         },
         { status: 500 },
       )
     }
 
-    const selectedPriceId = getStripePriceId(parsedBody.data.plan, parsedBody.data.billingCycle)
-    if (!selectedPriceId) {
+    const selectedAmountMinor = getRazorpayPlanAmountMinor(
+      parsedBody.data.plan,
+      parsedBody.data.billingCycle,
+    )
+    if (!selectedAmountMinor) {
       return NextResponse.json(
         {
           success: false,
-          error: "Selected plan is not configured for Stripe checkout.",
+          error: "Selected plan is not configured for Razorpay checkout.",
         },
         { status: 400 },
       )
     }
 
     await connectMongoWithRetry()
-    await ensureUser(userId)
 
-    const user = await User.findOne({ clerkUid: userId }).select("_id email").lean().exec()
+    const user = (await User.findOne({ clerkUid: userId }).select("_id email").lean().exec()) as {
+      _id?: unknown
+      email?: string | null
+    } | null
     if (!user?._id) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }
 
-    const price = await stripe.prices.retrieve(selectedPriceId)
-
-    const amount = convertMinorToMajorAmount(price.unit_amount) || 0
-    const currency = (price.currency || "inr").toUpperCase()
+    const amount = convertMinorToMajorAmount(selectedAmountMinor) || 0
+    const currency = "INR"
 
     const transaction = await Transaction.create({
       userId: user._id,
       amount,
       status: "pending",
-      paymentGateway: "stripe",
+      paymentGateway: "razorpay",
       description: `Subscription checkout: ${parsedBody.data.plan} (${parsedBody.data.billingCycle})`,
       currency,
       metadata: {
         type: "subscription-checkout",
         plan: parsedBody.data.plan,
         billingCycle: parsedBody.data.billingCycle,
-        stripePriceId: selectedPriceId,
+        razorpayAmountMinor: selectedAmountMinor,
       },
     })
 
-    const baseUrl = getStripeCheckoutBaseUrl()
+    const baseUrl = getRazorpayCheckoutBaseUrl()
     const successPath = normalizePath(parsedBody.data.successPath, "/dashboard?billing=success")
     const cancelPath = normalizePath(parsedBody.data.cancelPath, "/dashboard?billing=cancelled")
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [{ price: selectedPriceId, quantity: 1 }],
-      success_url: `${baseUrl}${withSessionIdPlaceholder(successPath)}`,
-      cancel_url: `${baseUrl}${cancelPath}`,
-      client_reference_id: userId,
-      customer_email: (user as any).email || undefined,
-      metadata: {
+    const paymentLink = await razorpay.paymentLink.create({
+      amount: selectedAmountMinor,
+      currency,
+      accept_partial: false,
+      description: `LexVert ${parsedBody.data.plan} (${parsedBody.data.billingCycle}) subscription`,
+      callback_url: `${baseUrl}${successPath}`,
+      callback_method: "get",
+      notify: {
+        email: Boolean(user.email),
+        sms: false,
+      },
+      customer: user.email
+        ? {
+            email: user.email,
+          }
+        : undefined,
+      notes: {
+        paymentType: "subscription",
         clerkUid: userId,
         plan: parsedBody.data.plan,
         billingCycle: parsedBody.data.billingCycle,
         transactionId: transaction._id.toString(),
       },
-      subscription_data: {
-        metadata: {
-          clerkUid: userId,
-          plan: parsedBody.data.plan,
-          billingCycle: parsedBody.data.billingCycle,
-          transactionId: transaction._id.toString(),
-        },
-      },
-      allow_promotion_codes: true,
     })
 
-    transaction.checkoutSessionId = session.id
+    const checkoutUrl = paymentLink.short_url || null
+    if (!checkoutUrl) {
+      throw new Error("Razorpay payment link URL was not returned")
+    }
+
+    transaction.checkoutSessionId = paymentLink.id
     transaction.metadata = {
       ...(transaction.metadata || {}),
-      stripeCheckoutSessionId: session.id,
-      stripeCheckoutUrl: session.url,
+      razorpayPaymentLinkId: paymentLink.id,
+      razorpayPaymentLinkUrl: checkoutUrl,
+      cancelPath,
     }
     await transaction.save()
 
     return NextResponse.json({
       success: true,
-      sessionId: session.id,
-      checkoutUrl: session.url,
+      sessionId: paymentLink.id,
+      checkoutUrl,
       transactionId: transaction._id,
       plan: parsedBody.data.plan,
       billingCycle: parsedBody.data.billingCycle,

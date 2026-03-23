@@ -8,6 +8,8 @@ import {
   type ReminderWindowDays,
 } from "@/lib/hearingDates"
 
+const TaskModel: any = Task
+
 export type CalendarEventColor = "blue" | "violet" | "emerald" | "amber" | "rose"
 export type CalendarEventSourceType = "manual" | "task" | "hearing"
 
@@ -312,7 +314,7 @@ export async function listCalendarEventsForUser(clerkUid: string): Promise<Seria
     .lean()
     .exec()
 
-  return events.map((event) => serializeCalendarEvent(event as CalendarEventDocument))
+  return events.map((event) => serializeCalendarEvent(event as unknown as CalendarEventDocument))
 }
 
 const buildDerivedHearingEvent = (clerkUid: string, caseRecord: PopulatedCaseRecord): DerivedCalendarEvent | null => {
@@ -390,7 +392,7 @@ export async function syncCalendarEventsForUser(clerkUid: string): Promise<Calen
       })
       .lean()
       .exec(),
-    Task.find({ clerkUid, status: { $ne: "completed" } })
+    TaskModel.find({ clerkUid, status: { $ne: "completed" } })
       .select("_id task dueDate dueTime reminder category resourceName caseId")
       .populate({
         path: "caseId",
@@ -400,7 +402,9 @@ export async function syncCalendarEventsForUser(clerkUid: string): Promise<Calen
       .exec(),
   ])
 
-  const hearingEvents = ((user?.cases as PopulatedCaseRecord[] | undefined) || [])
+  const userCases = (((user as any)?.cases as PopulatedCaseRecord[] | undefined) || [])
+
+  const hearingEvents = userCases
     .map((caseRecord) => buildDerivedHearingEvent(clerkUid, caseRecord))
     .filter((event): event is DerivedCalendarEvent => Boolean(event))
 
@@ -464,7 +468,7 @@ export async function getCalendarEventForUser(clerkUid: string, eventId: string)
     return null
   }
 
-  return serializeCalendarEvent(event as CalendarEventDocument)
+  return serializeCalendarEvent(event as unknown as CalendarEventDocument)
 }
 
 export async function createManualCalendarEvent(
@@ -488,7 +492,7 @@ export async function createManualCalendarEvent(
 
   return {
     success: true,
-    event: serializeCalendarEvent(createdEvent.toObject() as CalendarEventDocument),
+    event: serializeCalendarEvent(createdEvent.toObject() as unknown as CalendarEventDocument),
   }
 }
 

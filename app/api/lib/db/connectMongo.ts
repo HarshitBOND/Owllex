@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import path from "path";
-import fs from "fs";
+
+let hasSyncedIndexes = false;
 
 const connectMongo = async () => {
   try {
@@ -26,6 +26,10 @@ const connectMongo = async () => {
     
     // Register all models on first connection
     await registerModels();
+
+    // Optional controlled index sync for production hardening.
+    // Enable only when intentionally auditing/updating indexes.
+    await syncIndexesIfEnabled();
   } catch (error) {
     console.error("MongoDB connection error:", error);
     throw error;
@@ -56,10 +60,54 @@ const registerModels = async () => {
     await import("../models/fraud-report");
     await import("../models/suggestion");
     await import("../models/simple-invoice");
+    await import("../models/firm");
+    await import("../models/team-membership");
+    await import("../models/job-run");
 
     console.log("All models registered successfully.");
   } catch (error) {
     console.error("Error registering models:", error);
+  }
+};
+
+const syncIndexesIfEnabled = async () => {
+  if (hasSyncedIndexes) {
+    return;
+  }
+
+  const shouldSyncIndexes = (process.env.MONGO_SYNC_INDEXES || "").trim().toLowerCase() === "true";
+  if (!shouldSyncIndexes) {
+    return;
+  }
+
+  try {
+    const criticalModels = [
+      "User",
+      "Case",
+      "Client",
+      "Task",
+      "SimpleInvoice",
+      "Notification",
+      "Transaction",
+      "ScrapedCase",
+      "ScraperLog",
+      "DownloadedPDF",
+      "Firm",
+      "TeamMembership",
+      "JobRun",
+    ];
+
+    await Promise.all(
+      criticalModels
+        .map((modelName) => mongoose.models[modelName])
+        .filter(Boolean)
+        .map((model) => model!.syncIndexes()),
+    );
+
+    hasSyncedIndexes = true;
+    console.log("MongoDB indexes synchronized successfully.");
+  } catch (error) {
+    console.error("MongoDB index sync failed:", error);
   }
 };
 

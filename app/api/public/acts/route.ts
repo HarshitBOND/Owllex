@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ACTS_DATASET } from "@/app/api/lib/data/acts"
 
-export const revalidate = 60 * 60 * 6
+export const revalidate = 21600
 
 const clampNumber = (value: string | null, fallback: number, min: number, max: number) => {
   const parsedValue = Number(value)

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import sgMail from "@sendgrid/mail"
 import PDFDocument from "pdfkit"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
@@ -7,9 +6,12 @@ import { ensureUser } from "../../lib/ensureUser"
 import SimpleInvoice from "../../lib/models/simple-invoice"
 import User from "../../lib/models/user"
 import Transaction from "../../lib/models/transaction"
-import { getStripeCheckoutBaseUrl, getStripeClient } from "../../lib/services/stripe"
+import { getRazorpayCheckoutBaseUrl, getRazorpayClient } from "../../lib/services/razorpay"
+import { addInvoicePaymentSchema, createInvoiceSchema, updateInvoiceSchema } from "@/app/api/lib/validators/userdetails"
+import { requireUserContext } from "@/app/api/lib/routeGuards"
+import { canAccessFirm, type TeamPermission } from "@/app/api/lib/services/rbac"
 
-const normalizeCurrency = (currency?: string | null) => (currency || "USD").toUpperCase()
+const normalizeCurrency = (currency?: string | null) => (currency || "INR").toUpperCase()
 
 const toDisplayCurrency = (amount: number, currency = "USD") => {
   try {
@@ -193,11 +195,11 @@ const createInvoicePaymentCheckout = async ({
   invoice: any
   clerkUid: string
 }) => {
-  const stripe = getStripeClient()
-  if (!stripe) {
+  const razorpay = getRazorpayClient()
+  if (!razorpay) {
     return {
       created: false,
-      error: "Stripe is not configured. Add STRIPE_SECRET_KEY.",
+      error: "Razorpay is not configured. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
       paymentLinkUrl: null as string | null,
       checkoutSessionId: null as string | null,
     }
@@ -224,15 +226,23 @@ const createInvoicePaymentCheckout = async ({
     }
   }
 
-  const currency = normalizeCurrency(invoice.currency).toLowerCase()
+  const currency = normalizeCurrency(invoice.currency)
+  if (currency !== "INR") {
+    return {
+      created: false,
+      error: "UPI-friendly Razorpay links currently require INR invoice currency.",
+      paymentLinkUrl: null,
+      checkoutSessionId: null,
+    }
+  }
 
   const transaction = await Transaction.create({
     userId: user._id,
     amount: outstanding,
     status: "pending",
-    paymentGateway: "stripe",
+    paymentGateway: "razorpay",
     description: `Invoice payment: ${invoice.invoiceNumber}`,
-    currency: currency.toUpperCase(),
+    currency,
     metadata: {
       type: "invoice-payment",
       invoiceId: invoice._id.toString(),
@@ -240,27 +250,26 @@ const createInvoicePaymentCheckout = async ({
     },
   })
 
-  const appBaseUrl = getStripeCheckoutBaseUrl()
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency,
-          unit_amount: Math.round(outstanding * 100),
-          product_data: {
-            name: `Invoice ${invoice.invoiceNumber}`,
-            description: invoice.caseTitle || `Payment for invoice ${invoice.invoiceNumber}`,
-          },
-        },
-        quantity: 1,
-      },
-    ],
-    success_url: `${appBaseUrl}/invoices?payment=success&invoice=${invoice._id}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appBaseUrl}/invoices?payment=cancelled&invoice=${invoice._id}`,
-    client_reference_id: clerkUid,
-    customer_email: invoice.clientEmail || (user as any).email || undefined,
-    metadata: {
+  const appBaseUrl = getRazorpayCheckoutBaseUrl()
+  const paymentLink = await razorpay.paymentLink.create({
+    amount: Math.round(outstanding * 100),
+    currency,
+    accept_partial: false,
+    description: invoice.caseTitle || `Payment for invoice ${invoice.invoiceNumber}`,
+    callback_url: `${appBaseUrl}/invoices?payment=success&invoice=${invoice._id}`,
+    callback_method: "get",
+    notify: {
+      email: Boolean(invoice.clientEmail),
+      sms: false,
+    },
+    customer:
+      invoice.clientEmail || (user as any).email
+        ? {
+            name: invoice.clientName || undefined,
+            email: invoice.clientEmail || (user as any).email || undefined,
+          }
+        : undefined,
+    notes: {
       paymentType: "invoice",
       invoiceId: invoice._id.toString(),
       invoiceNumber: invoice.invoiceNumber,
@@ -269,15 +278,16 @@ const createInvoicePaymentCheckout = async ({
     },
   })
 
-  transaction.checkoutSessionId = session.id
+  transaction.checkoutSessionId = paymentLink.id
   transaction.metadata = {
     ...(transaction.metadata || {}),
-    stripeCheckoutSessionId: session.id,
+    razorpayPaymentLinkId: paymentLink.id,
+    razorpayPaymentLinkUrl: paymentLink.short_url || null,
   }
   await transaction.save()
 
-  invoice.paymentLinkUrl = session.url
-  invoice.paymentLinkCheckoutSessionId = session.id
+  invoice.paymentLinkUrl = paymentLink.short_url || null
+  invoice.paymentLinkCheckoutSessionId = paymentLink.id
   invoice.paymentLinkCreatedAt = new Date()
   if (invoice.status === "draft") {
     invoice.status = "pending"
@@ -288,8 +298,8 @@ const createInvoicePaymentCheckout = async ({
   return {
     created: true,
     error: null,
-    paymentLinkUrl: session.url || null,
-    checkoutSessionId: session.id,
+    paymentLinkUrl: paymentLink.short_url || null,
+    checkoutSessionId: paymentLink.id,
   }
 }
 
@@ -312,20 +322,33 @@ const refreshOverdueInvoices = async (clerkUid: string) => {
 
 export async function GET(req: NextRequest) {
   try {
-    await connectMongoWithRetry()
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
 
+    await connectMongoWithRetry()
+    const userId = userContext.clerkUid
+
     await ensureUser(userId)
+
+    const actorUser = await User.findOne({ clerkUid: userId }).select("primaryFirmId").lean().exec()
+    const actorFirmId = (actorUser as any)?.primaryFirmId ? (actorUser as any).primaryFirmId.toString() : null
+    const scope = req.nextUrl.searchParams.get("scope")
 
     const invoiceId = req.nextUrl.searchParams.get("id")
     const format = req.nextUrl.searchParams.get("format")
 
     if (invoiceId) {
-      const invoiceDoc = await SimpleInvoice.findOne({ _id: invoiceId, clerkUid: userId }).lean().exec()
+      let invoiceDoc = await SimpleInvoice.findOne({ _id: invoiceId, clerkUid: userId }).lean().exec()
+
+      if (!invoiceDoc && actorFirmId) {
+        const firmAccess = await canAccessFirm(userId, actorFirmId, "invoice.read" as TeamPermission)
+        if (firmAccess.allowed) {
+          invoiceDoc = await SimpleInvoice.findOne({ _id: invoiceId, firmId: actorFirmId }).lean().exec()
+        }
+      }
+
       const invoice: any = invoiceDoc
       if (!invoice) {
         return NextResponse.json({ error: "Invoice not found" }, { status: 404 })
@@ -348,10 +371,24 @@ export async function GET(req: NextRequest) {
 
     await refreshOverdueInvoices(userId)
 
-    const invoices = await SimpleInvoice.find({ clerkUid: userId })
-      .sort({ createdAt: -1 })
-      .lean()
-      .exec()
+    let invoices: any[] = []
+
+    if (scope === "firm" && actorFirmId) {
+      const firmAccess = await canAccessFirm(userId, actorFirmId, "invoice.read" as TeamPermission)
+      if (!firmAccess.allowed) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+
+      invoices = await SimpleInvoice.find({ firmId: actorFirmId })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec()
+    } else {
+      invoices = await SimpleInvoice.find({ clerkUid: userId })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec()
+    }
 
     return NextResponse.json({ invoices })
   } catch (error) {
@@ -362,16 +399,29 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await connectMongoWithRetry()
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
+
+    await connectMongoWithRetry()
+    const userId = userContext.clerkUid
 
     await ensureUser(userId)
 
-    const data = await req.json()
+    const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+    if (!rawBody) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+
+    const parsed = createInvoiceSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || "Invalid invoice payload"
+      return NextResponse.json({ error: issue }, { status: 400 })
+    }
+
+    const data = parsed.data
+    const ownerUser = await User.findOne({ clerkUid: userId }).select("primaryFirmId").lean().exec()
 
     const count = await SimpleInvoice.countDocuments({ clerkUid: userId })
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`
@@ -379,6 +429,7 @@ export async function POST(req: NextRequest) {
     const invoice = new SimpleInvoice({
       ...data,
       clerkUid: userId,
+      firmId: (ownerUser as any)?.primaryFirmId || null,
       invoiceNumber,
       currency: normalizeCurrency(data?.currency),
       status: data?.status || "draft",
@@ -397,19 +448,31 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    await connectMongoWithRetry()
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
+
+    await connectMongoWithRetry()
+    const userId = userContext.clerkUid
 
     const invoiceId = req.nextUrl.searchParams.get("id")
     if (!invoiceId) {
       return NextResponse.json({ error: "Invoice ID required" }, { status: 400 })
     }
 
-    const data = await req.json()
+    const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+    if (!rawBody) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+
+    const parsed = updateInvoiceSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || "Invalid invoice payload"
+      return NextResponse.json({ error: issue }, { status: 400 })
+    }
+
+    const data = parsed.data
     const sendEmail = Boolean(data?.sendEmail)
     const createPaymentLink = Boolean(data?.createPaymentLink)
 
@@ -471,12 +534,13 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    await connectMongoWithRetry()
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
+
+    await connectMongoWithRetry()
+    const userId = userContext.clerkUid
 
     const invoiceId = req.nextUrl.searchParams.get("id")
     if (!invoiceId) {
@@ -497,27 +561,31 @@ export async function DELETE(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    await connectMongoWithRetry()
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
+
+    await connectMongoWithRetry()
+    const userId = userContext.clerkUid
 
     const invoiceId = req.nextUrl.searchParams.get("id")
     if (!invoiceId) {
       return NextResponse.json({ error: "Invoice ID required" }, { status: 400 })
     }
 
-    const { amount, method, date, reference, notes } = await req.json()
-
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: "Valid payment amount required" }, { status: 400 })
+    const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+    if (!rawBody) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
 
-    if (!method) {
-      return NextResponse.json({ error: "Payment method required" }, { status: 400 })
+    const parsedPayment = addInvoicePaymentSchema.safeParse(rawBody)
+    if (!parsedPayment.success) {
+      const issue = parsedPayment.error.issues[0]?.message || "Invalid payment payload"
+      return NextResponse.json({ error: issue }, { status: 400 })
     }
+
+    const { amount, method, date, reference, notes } = parsedPayment.data
 
     const invoice = await SimpleInvoice.findOne({ _id: invoiceId, clerkUid: userId })
     if (!invoice) {

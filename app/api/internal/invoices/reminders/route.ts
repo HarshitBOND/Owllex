@@ -3,6 +3,8 @@ import sgMail from "@sendgrid/mail"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import SimpleInvoice from "@/app/api/lib/models/simple-invoice"
 import { hasValidCronSecret } from "@/app/api/lib/services/notificationRunnerAuth"
+import { completeJobRun, failJobRun, startJobRun } from "@/app/api/lib/services/jobRun"
+import { enforceRateLimit } from "@/app/api/lib/routeGuards"
 
 const REMINDER_COOLDOWN_HOURS = 24
 
@@ -199,12 +201,46 @@ const handleRunRequest = async (request: NextRequest) => {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const summary = await runOverdueReminderJob()
-
-    return NextResponse.json({
-      success: true,
-      summary,
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: "internal:invoices:reminders",
+      max: 30,
+      windowMs: 5 * 60 * 1000,
     })
+
+    if (blockedResponse) {
+      return blockedResponse
+    }
+
+    const run = await startJobRun({
+      jobName: "invoice-reminders",
+      trigger: "cron",
+      metadata: {
+        route: "/api/internal/invoices/reminders",
+      },
+    })
+
+    try {
+      const summary = await runOverdueReminderJob()
+
+      await completeJobRun({
+        runId: run._id.toString(),
+        status: "success",
+        summary,
+      })
+
+      return NextResponse.json({
+        success: true,
+        runId: run._id,
+        summary,
+      })
+    } catch (runnerError) {
+      await failJobRun({
+        runId: run._id.toString(),
+        error: runnerError,
+      })
+
+      throw runnerError
+    }
   } catch (error) {
     console.error("Invoice reminder runner error:", error)
     return NextResponse.json(

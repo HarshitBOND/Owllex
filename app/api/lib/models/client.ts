@@ -21,6 +21,7 @@ const CustomFieldSchema = new mongoose.Schema(
 
 export const ClientSchema = new mongoose.Schema(
   {
+    firmId: { type: mongoose.Schema.Types.ObjectId, ref: "Firm", default: null, index: true },
     salutation: { type: String, required: true },
     cases: [{ type: mongoose.Schema.Types.ObjectId, ref: "Case", default: [] }],
     name: { type: String, required: true },
@@ -36,6 +37,11 @@ export const ClientSchema = new mongoose.Schema(
     notes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Note", default: [] }]
   }
 );
+
+ClientSchema.index({ email: 1 })
+ClientSchema.index({ name: 1 })
+ClientSchema.index({ createdAt: -1 })
+ClientSchema.index({ firmId: 1, email: 1 })
 
 const Client = mongoose.models["Client"] || mongoose.model("Client", ClientSchema);
 

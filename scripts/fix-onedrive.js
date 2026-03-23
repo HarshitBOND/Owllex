@@ -61,6 +61,66 @@ function pinFolder(folder) {
   }
 }
 
+/** Read JSON file safely (returns null on any error) */
+function readJson(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/** Read installed Next.js version from node_modules */
+function getInstalledNextVersion() {
+  const nextPackageJson = path.join(projectRoot, 'node_modules', 'next', 'package.json');
+  const pkg = readJson(nextPackageJson);
+  return pkg && typeof pkg.version === 'string' ? pkg.version : null;
+}
+
+/**
+ * Ensure redirected cache is healthy and compatible.
+ * Resets cache when toolchain changed or when stale partial artifacts are detected.
+ */
+function ensureHealthyCache(cacheDir) {
+  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+  const nextVersion = getInstalledNextVersion() || 'unknown';
+  const nodeMajor = process.versions.node.split('.')[0];
+  const metaPath = path.join(cacheDir, 'lexvert-cache-meta.json');
+  const previousMeta = readJson(metaPath);
+
+  let resetReason = null;
+  if (
+    previousMeta &&
+    (previousMeta.nextVersion !== nextVersion || previousMeta.nodeMajor !== nodeMajor)
+  ) {
+    resetReason =
+      `toolchain changed (next ${previousMeta.nextVersion || 'unknown'} → ${nextVersion}, ` +
+      `node ${previousMeta.nodeMajor || 'unknown'} → ${nodeMajor})`;
+  }
+
+  const serverDir = path.join(cacheDir, 'server');
+  const routesManifest = path.join(cacheDir, 'routes-manifest.json');
+  if (!resetReason && fs.existsSync(serverDir) && !fs.existsSync(routesManifest)) {
+    resetReason = 'stale .next cache missing routes-manifest.json';
+  }
+
+  if (resetReason) {
+    console.log(`[fix-onedrive] Resetting cache: ${resetReason}.`);
+    removeDir(cacheDir);
+    fs.mkdirSync(cacheDir, { recursive: true });
+  }
+
+  try {
+    fs.writeFileSync(
+      metaPath,
+      JSON.stringify({ nextVersion, nodeMajor, updatedAt: new Date().toISOString() }, null, 2)
+    );
+  } catch {
+    // Non-critical
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────
 
 // Non-Windows or project is not under OneDrive → simple mkdir is enough
@@ -87,7 +147,7 @@ if (isJunction(dotNext)) {
   try {
     const target = path.resolve(fs.readlinkSync(dotNext));
     if (target === path.resolve(cacheTarget)) {
-      if (!fs.existsSync(cacheTarget)) fs.mkdirSync(cacheTarget, { recursive: true });
+      ensureHealthyCache(cacheTarget);
       console.log('[fix-onedrive] .next junction intact → ' + cacheTarget);
       // Pin node_modules and exit
       pinFolder(nodeModules);
@@ -105,6 +165,7 @@ if (stat) {
 
 fs.mkdirSync(cacheTarget, { recursive: true });
 fs.symlinkSync(cacheTarget, dotNext, 'junction');
+ensureHealthyCache(cacheTarget);
 console.log('[fix-onedrive] .next redirected to ' + cacheTarget + ' (outside OneDrive).');
 
 // ── node_modules: pin as always-available + bridge junction ──────────

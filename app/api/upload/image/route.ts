@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
+import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -8,13 +9,37 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const userContext = await requireUserContext();
+    if (userContext instanceof NextResponse) {
+      return userContext;
+    }
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `upload:image:${userContext.clerkUid}`,
+      max: 60,
+      windowMs: 10 * 60 * 1000,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
     const formData = await request.formData();
     const file = formData.get("image") as File;
 
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    }
+
+    if (!file.type.startsWith("image/")) {
+      return NextResponse.json({ error: "Only image uploads are allowed" }, { status: 400 });
+    }
+
+    const maxFileSizeBytes = 10 * 1024 * 1024;
+    if (file.size > maxFileSizeBytes) {
+      return NextResponse.json({ error: "Image size exceeds 10MB" }, { status: 400 });
     }
 
     // Convert file to buffer

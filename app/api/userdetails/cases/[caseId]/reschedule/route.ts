@@ -1,11 +1,9 @@
-import { auth } from "@clerk/nextjs/server"
 import { Types } from "mongoose"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import { ensureUser } from "@/app/api/lib/ensureUser"
 import Case from "@/app/api/lib/models/case"
-import User from "@/app/api/lib/models/user"
+import { enforceRateLimit, parseAndValidateJson, requireOwnedCase, requireUserContext } from "@/app/api/lib/routeGuards"
 import { syncCalendarEventsForUser } from "@/app/api/lib/services/calendar"
 import { appendCourtDateChange, normalizeCourtDateValue } from "@/app/api/lib/services/caseHearing"
 import { reconcileNotificationsForCase } from "@/app/api/lib/services/notifications"
@@ -38,10 +36,21 @@ export async function POST(
   { params }: { params: Promise<{ caseId: string }> },
 ) {
   try {
-    const { userId } = await auth()
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
+    }
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:cases:reschedule:${userId}`,
+      max: 60,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
     const caseId = await getCaseId(params)
@@ -49,15 +58,9 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Invalid caseId" }, { status: 400 })
     }
 
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
-    if (!body) {
-      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
-    }
-
-    const parsedPayload = rescheduleSchema.safeParse(body)
+    const parsedPayload = await parseAndValidateJson(request, rescheduleSchema)
     if (!parsedPayload.success) {
-      const firstIssue = parsedPayload.error.issues[0]?.message || "Invalid reschedule payload"
-      return NextResponse.json({ success: false, error: firstIssue }, { status: 400 })
+      return parsedPayload.response
     }
 
     const normalizedNewCourtDate = normalizeCourtDateValue(parsedPayload.data.newCourtDate)
@@ -65,10 +68,9 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Invalid new court date" }, { status: 400 })
     }
 
-    await ensureUser(userId)
     await connectMongoWithRetry()
 
-    const isOwnedCase = await User.exists({ clerkUid: userId, cases: caseId })
+    const isOwnedCase = await requireOwnedCase(userId, caseId)
     if (!isOwnedCase) {
       return NextResponse.json({ success: false, error: "Case not found" }, { status: 404 })
     }

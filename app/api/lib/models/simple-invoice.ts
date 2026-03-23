@@ -29,6 +29,7 @@ const PaymentRecordSchema = new mongoose.Schema(
 const SimpleInvoiceSchema = new mongoose.Schema(
   {
     clerkUid: { type: String, required: true, index: true },
+    firmId: { type: mongoose.Schema.Types.ObjectId, ref: "Firm", default: null, index: true },
     invoiceNumber: { type: String, required: true, index: true },
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: "Client" },
     clientName: { type: String, required: true },
@@ -69,6 +70,7 @@ const SimpleInvoiceSchema = new mongoose.Schema(
 )
 
 SimpleInvoiceSchema.index({ clerkUid: 1, status: 1, dueDate: 1 })
+SimpleInvoiceSchema.index({ firmId: 1, status: 1, dueDate: 1 })
 
 const SimpleInvoice =
   mongoose.models["SimpleInvoice"] || mongoose.model("SimpleInvoice", SimpleInvoiceSchema)

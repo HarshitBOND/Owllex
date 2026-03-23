@@ -1,8 +1,7 @@
-import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import { ensureUser } from "@/app/api/lib/ensureUser"
+import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
 import {
   cancelUserSubscription,
   changeUserSubscriptionPlan,
@@ -21,14 +20,14 @@ const subscriptionActionSchema = z
 
 export async function GET() {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
 
+    const userId = userContext.clerkUid
+
     await connectMongoWithRetry()
-    await ensureUser(userId)
     await ensureUserSubscriptionDefaults(userId)
 
     const subscription = await getUserSubscriptionSummary(userId)
@@ -48,25 +47,29 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
 
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
-    if (!body) {
-      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:subscription:patch:${userId}`,
+      max: 60,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
-    const parsedBody = subscriptionActionSchema.safeParse(body)
+    const parsedBody = await parseAndValidateJson(request, subscriptionActionSchema)
     if (!parsedBody.success) {
-      const firstIssue = parsedBody.error.issues[0]?.message || "Invalid subscription action"
-      return NextResponse.json({ success: false, error: firstIssue }, { status: 400 })
+      return parsedBody.response
     }
 
     await connectMongoWithRetry()
-    await ensureUser(userId)
     await ensureUserSubscriptionDefaults(userId)
 
     let subscription = null

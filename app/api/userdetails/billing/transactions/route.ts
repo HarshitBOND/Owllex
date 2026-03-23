@@ -1,9 +1,8 @@
-import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import { ensureUser } from "@/app/api/lib/ensureUser"
 import Transaction from "@/app/api/lib/models/transaction"
 import User from "@/app/api/lib/models/user"
+import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 
 const parseLimit = (rawValue: string | null) => {
   const parsed = Number(rawValue)
@@ -16,16 +15,28 @@ const parseLimit = (rawValue: string | null) => {
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth()
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
+    }
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `billing:transactions:${userId}`,
+      max: 120,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
     await connectMongoWithRetry()
-    await ensureUser(userId)
 
-    const user = await User.findOne({ clerkUid: userId }).select("_id").lean().exec()
+    const user = (await User.findOne({ clerkUid: userId }).select("_id").lean().exec()) as {
+      _id?: unknown
+    } | null
     if (!user?._id) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
     }

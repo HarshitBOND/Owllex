@@ -514,7 +514,9 @@ async function resolveUserEmail(clerkUid: string, fallbackEmail?: string | null)
     return fallbackEmail
   }
 
-  const user = await User.findOne({ clerkUid }).select("email").lean().exec()
+  const user = (await User.findOne({ clerkUid }).select("email").lean().exec()) as {
+    email?: string | null
+  } | null
   if (user?.email) {
     return user.email
   }
@@ -602,7 +604,9 @@ export async function listNotificationsForUser(clerkUid: string, limit = 8): Pro
   ])
 
   return {
-    notifications: notifications.map((notification) => serializeNotification(notification as NotificationDocument)),
+    notifications: notifications.map((notification) =>
+      serializeNotification(notification as unknown as NotificationDocument),
+    ),
     unreadCount,
   }
 }
@@ -768,7 +772,7 @@ export async function generateCalendarEventReminderNotifications(
   const operations = []
   let eligibleCalendarReminders = 0
 
-  for (const event of calendarEvents as CalendarEventSummary[]) {
+  for (const event of calendarEvents as unknown as CalendarEventSummary[]) {
     const reminderOffsets = sanitizeReminderOffsets(event.reminderOffsets)
     if (!event.reminderEnabled || reminderOffsets.length === 0) {
       continue
@@ -882,7 +886,7 @@ export async function reconcilePendingHearingNotifications(
   const hearingNotifications = (await Notification.find({ type: "hearing-reminder" })
     .select("_id caseId hearingDate status")
     .lean()
-    .exec()) as NotificationDocument[]
+    .exec()) as unknown as NotificationDocument[]
 
   const staleIds: string[] = []
   let pendingRemoved = 0
@@ -929,7 +933,7 @@ export async function reconcileNotificationsForCase(caseId: string, currentCourt
   })
     .select("_id hearingDate status")
     .lean()
-    .exec()) as NotificationDocument[]
+    .exec()) as unknown as NotificationDocument[]
 
   const staleIds = caseNotifications
     .filter((notificationRecord) => {
@@ -961,7 +965,10 @@ const getDeliverableNotifications = async (now: Date) => {
     Notification.find({ status: "failed" }).lean().exec(),
   ])
 
-  return [...(pendingNotifications as NotificationDocument[]), ...(failedNotifications as NotificationDocument[])]
+  return [
+    ...(pendingNotifications as unknown as NotificationDocument[]),
+    ...(failedNotifications as unknown as NotificationDocument[]),
+  ]
     .filter((notificationRecord) => shouldAttemptDelivery(notificationRecord, now))
     .sort(compareNotificationsForDelivery)
 }
@@ -996,7 +1003,7 @@ export async function sendPendingNotificationEmails(): Promise<ReminderDeliveryS
 
   const preferencesCache = new Map<string, NotificationPreferences>()
 
-  for (const notificationRecord of pendingNotifications as NotificationDocument[]) {
+  for (const notificationRecord of pendingNotifications as unknown as NotificationDocument[]) {
     const cachedPreferences = preferencesCache.get(notificationRecord.clerkUid)
     const userPreferences = cachedPreferences || (await getNotificationPreferences(notificationRecord.clerkUid))
     preferencesCache.set(notificationRecord.clerkUid, userPreferences)

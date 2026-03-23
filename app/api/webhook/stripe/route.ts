@@ -24,6 +24,20 @@ const isBillingCycle = (value: unknown): value is SubscriptionBillingCycle =>
 
 const toStringOrNull = (value: unknown) => (typeof value === "string" && value.trim() ? value : null)
 
+const toStripeIdOrNull = (value: unknown) => {
+  const directValue = toStringOrNull(value)
+  if (directValue) {
+    return directValue
+  }
+
+  if (value && typeof value === "object" && "id" in value) {
+    const id = (value as { id?: unknown }).id
+    return toStringOrNull(id)
+  }
+
+  return null
+}
+
 const toDateFromUnix = (value?: number | null) =>
   Number.isFinite(value) && value ? new Date(Number(value) * 1000) : null
 
@@ -268,7 +282,10 @@ const handleCheckoutFailure = async (session: Stripe.Checkout.Session) => {
 }
 
 const handleInvoicePaymentFailed = async (invoice: Stripe.Invoice) => {
-  const subscriptionId = toStringOrNull(invoice.subscription)
+  const legacySubscription = (invoice as Stripe.Invoice & { subscription?: unknown }).subscription
+  const subscriptionId =
+    toStripeIdOrNull(invoice.parent?.subscription_details?.subscription) ||
+    toStripeIdOrNull(legacySubscription)
   const failureReason =
     invoice.last_finalization_error?.message ||
     invoice.payment_settings?.payment_method_options?.card?.request_three_d_secure ||
@@ -278,23 +295,34 @@ const handleInvoicePaymentFailed = async (invoice: Stripe.Invoice) => {
     return
   }
 
-  const user = await User.findOne({ "subscription.stripeSubscriptionId": subscriptionId })
+  const rawUser: unknown = await User.findOne({ "subscription.stripeSubscriptionId": subscriptionId })
     .select("_id clerkUid")
     .lean()
     .exec()
 
-  if (user?._id) {
+  const userRecord: { _id?: unknown; clerkUid?: unknown } | null = Array.isArray(rawUser)
+    ? rawUser[0] && typeof rawUser[0] === "object"
+      ? (rawUser[0] as { _id?: unknown; clerkUid?: unknown })
+      : null
+    : rawUser && typeof rawUser === "object"
+      ? (rawUser as { _id?: unknown; clerkUid?: unknown })
+      : null
+
+  const legacyPaymentIntent = (invoice as Stripe.Invoice & { payment_intent?: unknown })
+    .payment_intent
+
+  if (userRecord?._id) {
     const amount = convertMinorToMajorAmount(invoice.amount_due)
 
     await Transaction.create({
-      userId: user._id,
+      userId: userRecord._id,
       amount: amount || 0,
       status: "failed",
       paymentGateway: "stripe",
       gatewayTransactionId: invoice.id,
       subscriptionId,
       customerId: toStringOrNull(invoice.customer),
-      paymentIntentId: toStringOrNull(invoice.payment_intent),
+      paymentIntentId: toStringOrNull(legacyPaymentIntent),
       invoiceUrl: invoice.hosted_invoice_url || invoice.invoice_pdf || null,
       failureReason,
       description: "Subscription renewal payment failed",
@@ -306,8 +334,9 @@ const handleInvoicePaymentFailed = async (invoice: Stripe.Invoice) => {
     })
   }
 
-  if (user?.clerkUid) {
-    await markUserSubscriptionPastDue(user.clerkUid, failureReason)
+  const clerkUid = toStringOrNull(userRecord?.clerkUid)
+  if (clerkUid) {
+    await markUserSubscriptionPastDue(clerkUid, failureReason)
   }
 }
 

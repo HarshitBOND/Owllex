@@ -1,9 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import Suggestion from "@/app/api/lib/models/suggestion";
 import { ensureUser } from "@/app/api/lib/ensureUser";
+import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards";
 
 const CATEGORY_VALUES = [
   "Case Strategy",
@@ -55,13 +55,24 @@ const parseLimit = (value: string | null) => {
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    const userContext = await requireUserContext();
+    if (userContext instanceof NextResponse) {
+      return userContext;
+    }
+
+    const userId = userContext.clerkUid;
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:suggestions:get:${userId}`,
+      max: 180,
+      windowMs: 10 * 60 * 1000,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
     }
 
     await connectMongoWithRetry();
-    await ensureUser(userId);
 
     const { searchParams } = new URL(request.url);
     const status = (searchParams.get("status") || "all").trim();
@@ -117,20 +128,26 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    const userContext = await requireUserContext();
+    if (userContext instanceof NextResponse) {
+      return userContext;
     }
 
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body) {
-      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
+    const userId = userContext.clerkUid;
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:suggestions:post:${userId}`,
+      max: 30,
+      windowMs: 10 * 60 * 1000,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
     }
 
-    const parsed = createSuggestionSchema.safeParse(body);
+    const parsed = await parseAndValidateJson(request, createSuggestionSchema);
     if (!parsed.success) {
-      const firstIssue = parsed.error.issues[0]?.message || "Invalid suggestion payload";
-      return NextResponse.json({ success: false, error: firstIssue }, { status: 400 });
+      return parsed.response;
     }
 
     await connectMongoWithRetry();

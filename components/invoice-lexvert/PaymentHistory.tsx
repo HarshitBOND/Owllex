@@ -8,20 +8,24 @@ interface PaymentHistoryProps {
   invoices: Invoice[];
 }
 
-const methodIcons = {
+const methodIcons: Record<PaymentRecord['method'], typeof CreditCard> = {
   credit_card: CreditCard,
   bank_transfer: Building2,
   paypal: Wallet,
   cash: Banknote,
   check: Receipt,
+  upi: Wallet,
+  other: Receipt,
 };
 
-const methodLabels = {
+const methodLabels: Record<PaymentRecord['method'], string> = {
   credit_card: 'Credit Card',
   bank_transfer: 'Bank Transfer',
   paypal: 'PayPal',
   cash: 'Cash',
   check: 'Check',
+  upi: 'UPI',
+  other: 'Other',
 };
 
 export function PaymentHistory({ payments, invoices }: PaymentHistoryProps) {

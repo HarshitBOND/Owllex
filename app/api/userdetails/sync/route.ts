@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import { requireUserContext } from "@/app/api/lib/routeGuards";
 import { ensureUser } from "../../lib/ensureUser";
 
 /**
@@ -8,15 +8,15 @@ import { ensureUser } from "../../lib/ensureUser";
  * Call this after login to guarantee the user record is created,
  * even if the Clerk webhook was not configured or failed.
  */
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
-    const { userId } = await auth();
-    console.log("[SYNC] User sync called for userId:", userId);
-
-    if (!userId) {
-      console.error("[SYNC] No userId found, returning 401");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userContext = await requireUserContext();
+    if (userContext instanceof NextResponse) {
+      return userContext;
     }
+
+    const userId = userContext.clerkUid;
+    console.log("[SYNC] User sync called for userId:", userId);
 
     console.log("[SYNC] Calling ensureUser...");
     const user = await ensureUser(userId);

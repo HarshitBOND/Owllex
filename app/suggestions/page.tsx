@@ -193,13 +193,6 @@ const Suggestions = () => {
     return redirect("/")
   }
 
-  const filteredSuggestions = legalSuggestions.filter((s) => {
-    const matchesSearch = s.title.toLowerCase().includes(search.toLowerCase()) ||
-      s.description.toLowerCase().includes(search.toLowerCase())
-    const matchesCategory = selectedCategory === "All" || s.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
-
   return (
     <div className="flex">
       <Sidebar />

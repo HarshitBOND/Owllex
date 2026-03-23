@@ -9,6 +9,8 @@ import {
   reconcilePendingHearingNotifications,
   sendPendingNotificationEmails,
 } from "@/app/api/lib/services/notifications"
+import { completeJobRun, failJobRun, startJobRun } from "@/app/api/lib/services/jobRun"
+import { enforceRateLimit } from "@/app/api/lib/routeGuards"
 
 const isAuthorized = (request: NextRequest) => {
   return hasValidCronSecret({
@@ -55,12 +57,46 @@ const handleRunRequest = async (request: NextRequest) => {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const summary = await runNotificationJob()
-
-    return NextResponse.json({
-      success: true,
-      summary,
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: "internal:notifications:runner",
+      max: 30,
+      windowMs: 5 * 60 * 1000,
     })
+
+    if (blockedResponse) {
+      return blockedResponse
+    }
+
+    const run = await startJobRun({
+      jobName: "notifications-runner",
+      trigger: "cron",
+      metadata: {
+        route: "/api/internal/notifications/run",
+      },
+    })
+
+    try {
+      const summary = await runNotificationJob()
+
+      await completeJobRun({
+        runId: run._id.toString(),
+        status: "success",
+        summary,
+      })
+
+      return NextResponse.json({
+        success: true,
+        runId: run._id,
+        summary,
+      })
+    } catch (runnerError) {
+      await failJobRun({
+        runId: run._id.toString(),
+        error: runnerError,
+      })
+
+      throw runnerError
+    }
   } catch (error) {
     console.error("Notification runner error:", error)
     return NextResponse.json(

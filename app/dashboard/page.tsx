@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import {
   FileSearch, FileText, Calendar as CalendarIcon,
   Users, Briefcase, CheckSquare, Clock, ArrowRight,
-  TrendingUp, LoaderCircle, BarChart3, Plus
+  TrendingUp, LoaderCircle, BarChart3, Plus, Activity, AlertTriangle
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -45,6 +45,26 @@ interface DashboardData {
     renewalDate: string | null
     cancelAtPeriodEnd: boolean
   } | null
+  analytics: {
+    overdueTasks: number
+    tasksDueNext7Days: number
+    hearingsNext30Days: number
+    outstandingInvoices: number
+    overdueInvoices: number
+    recentFailedTransactions: number
+  }
+  billing: {
+    totalOutstanding: number
+    overdueOutstanding: number
+    collectedThisMonth: number
+    openBillingIssues: number
+    recentTransactions: any[]
+  }
+  activityFeed: any[]
+  operations: {
+    automationEnabled: boolean
+    recentJobs: any[]
+  }
 }
 
 const Dashboard = () => {
@@ -94,6 +114,36 @@ const Dashboard = () => {
     renewalDate: null,
     cancelAtPeriodEnd: false,
   }
+
+  const analytics = data?.analytics || {
+    overdueTasks: 0,
+    tasksDueNext7Days: 0,
+    hearingsNext30Days: 0,
+    outstandingInvoices: 0,
+    overdueInvoices: 0,
+    recentFailedTransactions: 0,
+  }
+
+  const billing = data?.billing || {
+    totalOutstanding: 0,
+    overdueOutstanding: 0,
+    collectedThisMonth: 0,
+    openBillingIssues: 0,
+    recentTransactions: [],
+  }
+
+  const activityFeed = data?.activityFeed || []
+  const operations = data?.operations || {
+    automationEnabled: false,
+    recentJobs: [],
+  }
+
+  const formatMoney = (value: number) =>
+    new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(Number.isFinite(value) ? value : 0)
 
   const statCards = [
     {
@@ -327,6 +377,134 @@ const Dashboard = () => {
                         ? "Cancels at period end"
                         : "Not scheduled"}
                   </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+              <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">Overdue Tasks</p>
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900 mt-2">{analytics.overdueTasks}</p>
+                <p className="text-xs text-gray-500 mt-1">Pending work past due date</p>
+              </div>
+
+              <div className="bg-white rounded-xl border border-violet-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">Hearings (30d)</p>
+                  <Clock className="h-4 w-4 text-violet-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900 mt-2">{analytics.hearingsNext30Days}</p>
+                <p className="text-xs text-gray-500 mt-1">Scheduled court appearances</p>
+              </div>
+
+              <div className="bg-white rounded-xl border border-blue-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">Outstanding</p>
+                  <BarChart3 className="h-4 w-4 text-blue-600" />
+                </div>
+                <p className="text-xl font-bold text-gray-900 mt-2">{formatMoney(billing.totalOutstanding)}</p>
+                <p className="text-xs text-gray-500 mt-1">Uncollected invoice amount</p>
+              </div>
+
+              <div className="bg-white rounded-xl border border-rose-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">Failed Txn (30d)</p>
+                  <Activity className="h-4 w-4 text-rose-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900 mt-2">{analytics.recentFailedTransactions}</p>
+                <p className="text-xs text-gray-500 mt-1">Recent payment failures</p>
+              </div>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-6 mb-6">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+                    <p className="text-sm text-muted-foreground">Latest case, task, invoice, and billing events</p>
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {activityFeed.length > 0 ? (
+                    activityFeed.slice(0, 8).map((item: any, index: number) => (
+                      <div
+                        key={`${item.type}-${index}`}
+                        className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                        onClick={() => item.href && router.push(item.href)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                            <p className="text-xs text-gray-500 truncate mt-0.5">{item.subtitle}</p>
+                          </div>
+                          <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                            {item.at ? new Date(item.at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "-"}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-6 text-sm text-gray-500">No recent activity yet</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="p-4 border-b border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900">Operations & Billing Health</h3>
+                  <p className="text-sm text-muted-foreground">Automation runs and billing support signals</p>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="p-3 rounded-lg border bg-gray-50">
+                      <p className="text-xs text-gray-500">Automation</p>
+                      <p className="font-semibold text-gray-900">
+                        {operations.automationEnabled ? "Enabled" : "Upgrade required"}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-gray-50">
+                      <p className="text-xs text-gray-500">Open Billing Issues</p>
+                      <p className="font-semibold text-gray-900">{billing.openBillingIssues}</p>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-gray-50">
+                      <p className="text-xs text-gray-500">Collected This Month</p>
+                      <p className="font-semibold text-gray-900">{formatMoney(billing.collectedThisMonth)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-gray-50">
+                      <p className="text-xs text-gray-500">Overdue Amount</p>
+                      <p className="font-semibold text-gray-900">{formatMoney(billing.overdueOutstanding)}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Recent Jobs</p>
+                    <div className="space-y-2">
+                      {(operations.recentJobs || []).slice(0, 4).map((job: any) => (
+                        <div key={job.id} className="flex items-center justify-between text-sm p-2 rounded-md bg-gray-50 border">
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{job.jobName}</p>
+                            <p className="text-xs text-gray-500">
+                              {job.startedAt ? new Date(job.startedAt).toLocaleString("en-IN") : "-"}
+                            </p>
+                          </div>
+                          <span className={cn(
+                            "text-xs px-2 py-0.5 rounded-full font-medium",
+                            job.status === "success" ? "bg-emerald-100 text-emerald-700" :
+                            job.status === "failed" ? "bg-rose-100 text-rose-700" :
+                            "bg-amber-100 text-amber-700"
+                          )}>
+                            {job.status}
+                          </span>
+                        </div>
+                      ))}
+                      {(operations.recentJobs || []).length === 0 ? (
+                        <p className="text-sm text-gray-500">No job runs recorded yet</p>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

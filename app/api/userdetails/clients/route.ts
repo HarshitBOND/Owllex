@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import Client from "../../lib/models/client"
 import User from "../../lib/models/user"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
-import { auth } from "@clerk/nextjs/server";
 import Case from "../../lib/models/case";
 import { ensureUser } from "../../lib/ensureUser";
+import { requireOwnedClient, requireUserContext } from "@/app/api/lib/routeGuards";
+import { createClientSchema, updateClientSchema } from "@/app/api/lib/validators/userdetails";
+import { canAccessFirm, type TeamPermission } from "@/app/api/lib/services/rbac";
 
 function getClientNameFromCase(caseTitle?: string, caseNo?: string) {
     const normalizedTitle = (caseTitle || "").trim()
@@ -84,20 +86,74 @@ async function ensureClientsSyncedFromCases(userId: string) {
 
 export async function GET(req: NextRequest) {
     try {
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
+        }
+
         await connectMongoWithRetry()
-        const { userId } = await auth();
-        if (userId) await ensureUser(userId);
+        const userId = userContext.clerkUid;
+        await ensureUser(userId);
+        const scope = req.nextUrl.searchParams.get("scope")
+        const actorUser = await User.findOne({ clerkUid: userId }).select("primaryFirmId").lean().exec()
+        const actorFirmId = (actorUser as any)?.primaryFirmId ? (actorUser as any).primaryFirmId.toString() : null
 
         const clientId = req.nextUrl.searchParams.get("id")
         if (clientId) {
-            // Only fetch necessary fields for single client
-            let client = await Client.findById(clientId)
+            const clientDoc = await Client.findById(clientId)
                 .populate("cases", "_id caseTitle caseNo status courtDate courtName")
                 .populate("notes", "_id title content createdAt updatedAt")
                 .lean()
                 .exec()
 
-            return NextResponse.json({ client })
+            if (!clientDoc) {
+                return NextResponse.json({ error: "Client not found" }, { status: 404 })
+            }
+
+            const isOwnedClient = await requireOwnedClient(userId, clientId)
+            let hasFirmAccess = false
+
+            if (!isOwnedClient && (clientDoc as any).firmId) {
+                const firmAccess = await canAccessFirm(
+                    userId,
+                    (clientDoc as any).firmId.toString(),
+                    "client.read" as TeamPermission,
+                )
+                hasFirmAccess = firmAccess.allowed
+            }
+
+            if (!isOwnedClient && !hasFirmAccess) {
+                return NextResponse.json({ error: "Client not found" }, { status: 404 })
+            }
+
+            // Only fetch necessary fields for single client
+            return NextResponse.json({ client: clientDoc })
+        }
+
+        if (scope === "firm" && actorFirmId) {
+            const firmAccess = await canAccessFirm(userId, actorFirmId, "client.read" as TeamPermission)
+            if (!firmAccess.allowed) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+            }
+
+            const firmClients = await Client.find({ firmId: actorFirmId })
+                .populate({
+                    path: "cases",
+                    select: "_id caseTitle caseNo status courtDate courtName",
+                })
+                .populate({
+                    path: "notes",
+                    select: "_id title content createdAt updatedAt",
+                })
+                .lean()
+                .exec()
+
+            return NextResponse.json({
+                userClients: {
+                    clients: firmClients,
+                },
+                scope: "firm",
+            })
         }
 
         if (userId) {
@@ -125,11 +181,32 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
+        }
+
         await connectMongoWithRetry()
-        const { userId } = await auth();
-        if (userId) await ensureUser(userId);
-        const clientData = await req.json()
-        const client = new Client(clientData)
+        const userId = userContext.clerkUid;
+        await ensureUser(userId);
+
+        const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+        if (!rawBody) {
+            return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+        }
+
+        const parsed = createClientSchema.safeParse(rawBody)
+        if (!parsed.success) {
+            const issue = parsed.error.issues[0]?.message || "Invalid client payload"
+            return NextResponse.json({ error: issue }, { status: 400 })
+        }
+
+        const ownerUser = await User.findOne({ clerkUid: userId }).select("primaryFirmId").lean().exec()
+
+        const client = new Client({
+            ...parsed.data,
+            firmId: (ownerUser as any)?.primaryFirmId || null,
+        })
         await client.save()
         const userClients = await User.findOneAndUpdate( {clerkUid: userId}, { $push: { clients: client._id } }, { new: true } )
         return NextResponse.json({ userClients, clientId: client._id })
@@ -141,9 +218,30 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
     try {
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
+        }
+
         await connectMongoWithRetry()
-        const clientData = await req.json()
-        const client = await Client.findByIdAndUpdate(clientData._id, clientData)
+        const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+        if (!rawBody) {
+            return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+        }
+
+        const parsed = updateClientSchema.safeParse(rawBody)
+        if (!parsed.success) {
+            const issue = parsed.error.issues[0]?.message || "Invalid client payload"
+            return NextResponse.json({ error: issue }, { status: 400 })
+        }
+
+        const isOwnedClient = await requireOwnedClient(userContext.clerkUid, parsed.data._id)
+        if (!isOwnedClient) {
+            return NextResponse.json({ error: "Client not found" }, { status: 404 })
+        }
+
+        const { _id, ...updateData } = parsed.data
+        const client = await Client.findByIdAndUpdate(_id, updateData, { new: true })
         return NextResponse.json({ client })
     } catch (error) {
         console.error(error)
@@ -153,10 +251,29 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
     try {
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
+        }
+
         await connectMongoWithRetry()
-        const { userId } = await auth();
+        const userId = userContext.clerkUid;
         const clientId = req.nextUrl.searchParams.get("id")
+
+        if (!clientId) {
+            return NextResponse.json({ error: "Client ID required" }, { status: 400 })
+        }
+
+        const isOwnedClient = await requireOwnedClient(userId, clientId)
+        if (!isOwnedClient) {
+            return NextResponse.json({ error: "Client not found" }, { status: 404 })
+        }
+
         const client = await Client.findByIdAndDelete(clientId)
+        if (!client) {
+            return NextResponse.json({ error: "Client not found" }, { status: 404 })
+        }
+
         const userClients = await User.findOneAndUpdate( {clerkUid: userId}, { $pull: { clients: client._id } }, { new: true } )
         return NextResponse.json({ userClients })
     } catch (error) {

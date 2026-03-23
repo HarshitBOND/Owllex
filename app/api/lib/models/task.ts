@@ -29,6 +29,7 @@ export const FieldsSchema = new mongoose.Schema(
 const TaskSchema = new mongoose.Schema(
   {
     clerkUid: { type: String, required: true },
+    firmId: { type: mongoose.Schema.Types.ObjectId, ref: "Firm", default: null, index: true },
     task: { type: String, required: true },
     caseId: { type: mongoose.Schema.Types.ObjectId, ref: "Case", default: null },
     dueDate: { type: String, required: true },
@@ -46,6 +47,10 @@ const TaskSchema = new mongoose.Schema(
     updatedAt: { type: Date, default: Date.now },
   }
 )
+
+TaskSchema.index({ clerkUid: 1, status: 1, dueDate: 1 })
+TaskSchema.index({ clerkUid: 1, updatedAt: -1 })
+TaskSchema.index({ firmId: 1, status: 1, dueDate: 1 })
 
 const existingTaskModel = mongoose.models["Task"] as mongoose.Model<any> | undefined
 

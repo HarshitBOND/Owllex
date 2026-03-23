@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import connectMongo from "@/app/api/lib/db/connectMongo";
 import Complaint from "@/app/api/lib/models/complaint";
+import { enforceRateLimit } from "@/app/api/lib/routeGuards";
 
 const contactSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -52,6 +53,16 @@ async function notifySupportTeam(payload: {
 
 export async function POST(req: NextRequest) {
   try {
+    const { blockedResponse } = enforceRateLimit(req, {
+      key: "public:contact-us",
+      max: 20,
+      windowMs: 10 * 60 * 1000,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
     const parsed = contactSchema.safeParse(await req.json());
 
     if (!parsed.success) {

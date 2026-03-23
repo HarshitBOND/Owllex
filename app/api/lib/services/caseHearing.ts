@@ -1,6 +1,6 @@
 import { formatDateKey, parseCourtDate } from "@/lib/hearingDates"
 
-export type CourtDateChangeSource = "case-create" | "listing" | "reschedule" | "manual"
+export type CourtDateChangeSource = "case-create" | "listing" | "reschedule" | "manual" | "automation"
 export type CourtDateChangeType = "created" | "listing-added" | "rescheduled" | "updated"
 
 export const normalizeCourtDateValue = (value?: string | null) => {

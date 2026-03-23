@@ -1,9 +1,13 @@
 import { NextResponse, NextRequest } from "next/server";
 import Task from "@/app/api/lib/models/task";
 import Case from "@/app/api/lib/models/case";
+import User from "@/app/api/lib/models/user";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
-import { auth } from "@clerk/nextjs/server";
 import { syncCalendarEventsForUser } from "@/app/api/lib/services/calendar";
+import { deleteTaskSchema, upsertTaskSchema } from "@/app/api/lib/validators/userdetails";
+import { requireOwnedCase, requireUserContext } from "@/app/api/lib/routeGuards";
+
+const TaskModel: any = Task
 
 const TASK_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
 const TASK_CATEGORIES = new Set([
@@ -46,16 +50,21 @@ const normalizeTaskPayload = (formData: any) => {
 
 export async function GET(request: NextRequest) {
     try {
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
+        }
+
         await connectMongoWithRetry();
-        const { userId } = await auth();
+        const userId = userContext.clerkUid;
         const status = request.nextUrl.searchParams.get("status") || "pending";
 
-        if (!userId) {
-            return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+        if (!["pending", "completed"].includes(status)) {
+            return NextResponse.json({ success: false, message: "Invalid task status" }, { status: 400 })
         }
 
         // Add lean() for faster queries and select only needed fields
-        const tasks = await Task.find({clerkUid: userId, status})
+        const tasks = await TaskModel.find({clerkUid: userId, status})
             .populate("caseId", "_id title status")
             .lean()
             .exec()
@@ -69,23 +78,47 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        await connectMongoWithRetry();
-        const { userId } = await auth();
-
-        if (!userId) {
-            return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
         }
 
-        const formData = await request.json()
-        const payload = normalizeTaskPayload(formData)
+        await connectMongoWithRetry();
+        const userId = userContext.clerkUid;
+
+        const rawBody = (await request.json().catch(() => null)) as Record<string, unknown> | null
+        if (!rawBody) {
+            return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
+        }
+
+        const parsed = upsertTaskSchema.safeParse(rawBody)
+        if (!parsed.success) {
+            const issue = parsed.error.issues[0]?.message || "Invalid task payload"
+            return NextResponse.json({ success: false, message: issue }, { status: 400 })
+        }
+
+        const payload = normalizeTaskPayload(parsed.data)
         const caseId = payload.caseId as string | null;
+
+        if (caseId) {
+            const isOwnedCase = await requireOwnedCase(userId, caseId)
+            if (!isOwnedCase) {
+                return NextResponse.json({ success: false, message: "Case not found" }, { status: 404 })
+            }
+        }
+
         const caseFound = caseId ? await Case.findById(caseId) : null
+        const ownerUser = await User.findOne({ clerkUid: userId }).select("primaryFirmId").lean().exec()
 
         if (caseId && !caseFound) {
             return NextResponse.json({ success: false, message: "Case not found" }, { status: 404 })
         }
 
-        const newTask = new Task({ clerkUid: userId, ...payload })
+        const newTask = new TaskModel({
+            clerkUid: userId,
+            firmId: (caseFound as any)?.firmId || (ownerUser as any)?.primaryFirmId || null,
+            ...payload,
+        })
 
         await newTask.save()
 
@@ -105,19 +138,41 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
     try {
-        await connectMongoWithRetry();
-        const { userId } = await auth();
-
-        if (!userId) {
-            return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
         }
 
-        const formData = await request.json()
-        const payload = normalizeTaskPayload(formData)
+        await connectMongoWithRetry();
+        const userId = userContext.clerkUid;
+
+        const rawBody = (await request.json().catch(() => null)) as Record<string, unknown> | null
+        if (!rawBody) {
+            return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
+        }
+
+        const parsed = upsertTaskSchema.safeParse(rawBody)
+        if (!parsed.success) {
+            const issue = parsed.error.issues[0]?.message || "Invalid task payload"
+            return NextResponse.json({ success: false, message: issue }, { status: 400 })
+        }
+
+        if (!parsed.data._id) {
+            return NextResponse.json({ success: false, message: "Task ID is required" }, { status: 400 })
+        }
+
+        if (parsed.data.caseId) {
+            const isOwnedCase = await requireOwnedCase(userId, parsed.data.caseId)
+            if (!isOwnedCase) {
+                return NextResponse.json({ success: false, message: "Case not found" }, { status: 404 })
+            }
+        }
+
+        const payload = normalizeTaskPayload(parsed.data)
 
         // Use findByIdAndUpdate for atomic operation
-        const task = await Task.findByIdAndUpdate(
-            formData._id,
+        const task = await TaskModel.findByIdAndUpdate(
+            parsed.data._id,
             { clerkUid: userId, ...payload },
             { new: false }
         );
@@ -137,16 +192,26 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
-        await connectMongoWithRetry();
-        const { userId } = await auth();
-
-        if (!userId) {
-            return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+        const userContext = await requireUserContext();
+        if (userContext instanceof NextResponse) {
+            return userContext;
         }
 
-        const formData = await request.json()
+        await connectMongoWithRetry();
+        const userId = userContext.clerkUid;
 
-        const task = await Task.findById(formData._id);
+        const rawBody = (await request.json().catch(() => null)) as Record<string, unknown> | null
+        if (!rawBody) {
+            return NextResponse.json({ success: false, message: "Invalid JSON body" }, { status: 400 })
+        }
+
+        const parsed = deleteTaskSchema.safeParse(rawBody)
+        if (!parsed.success) {
+            const issue = parsed.error.issues[0]?.message || "Invalid delete payload"
+            return NextResponse.json({ success: false, message: issue }, { status: 400 })
+        }
+
+        const task = await TaskModel.findOne({ _id: parsed.data._id, clerkUid: userId });
         if (!task) {
             return NextResponse.json({ success: false, message: "Task not found" }, { status: 404 })
         }

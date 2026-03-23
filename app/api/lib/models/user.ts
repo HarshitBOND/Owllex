@@ -172,6 +172,17 @@ const UserSchema = new mongoose.Schema(
       enum: ["user", "admin", "support"],
       default: "user",
     },
+    primaryFirmId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Firm",
+      default: null,
+      index: true,
+    },
+    firmRole: {
+      type: String,
+      enum: ["owner", "admin", "member", "viewer", null],
+      default: null,
+    },
     subscription: {
       type: SubscriptionSchema,
       default: () => ({}),

@@ -100,9 +100,10 @@ These are not primary backlog items anymore and should not be re-added as "missi
   Delivered: date-change audit/history appends through `app/api/lib/services/caseHearing.ts` and is used by case create/listing/reschedule flows.
   Delivered: notification/calendar reconciliation runs after date updates and case deletion.
 
-- [ ] Complete automated scraper-to-user workflow
-  Current state: parser and scraper routes exist, and scraped cases can be promoted into case records manually.
-  Missing work: scheduled court download, automatic matching into user-owned case tracking, and plan-aware automation for subscription use cases.
+- [x] Complete automated scraper-to-user workflow
+  Delivered: scheduled automation is wired through `app/api/internal/scraper/automation/route.ts` with daily cron in `vercel.json`.
+  Delivered: automatic scraped-to-user matching updates owned cases via `app/api/lib/services/scraperAutomation.ts` (case-number normalization + hearing/listing sync).
+  Delivered: automation execution is plan-aware using subscription features (`advancedAutomation`) and records run outcomes through `app/api/lib/services/jobRun.ts`.
 
 - [x] Replace brittle external acts proxying
   Delivered: public acts API now uses an internal curated dataset (`app/api/lib/data/acts.ts`) instead of third-party proxying.
@@ -129,9 +130,9 @@ These are not primary backlog items anymore and should not be re-added as "missi
   Delivered: failed-notification triage/retry APIs are available at `app/api/support/notifications/failures/route.ts` with support issue status tracking.
   Delivered: billing-issue review APIs are available at `app/api/support/billing-issues/route.ts`, backed by transaction support workflow metadata in `app/api/lib/models/transaction.ts`.
 
-- [ ] Improve dashboard depth
-  Current state: the dashboard already returns real totals and upcoming hearings.
-  Missing work: recent activity feed, more detailed analytics, better billing visibility, and richer operational widgets.
+- [x] Improve dashboard depth
+  Delivered: dashboard API now returns deeper analytics, billing summaries, activity feed data, and operations job snapshots in `app/api/userdetails/dashboard/route.ts`.
+  Delivered: dashboard UI surfaces recent activity, billing health, and operations widgets in `app/dashboard/page.tsx`.
 
 - [x] Complete settings and preference surfaces
   Delivered: a full user settings surface now exists at `app/settings/page.tsx` with account preferences, notification/timezone/send-window/reminder controls, and billing/transaction visibility.
@@ -142,44 +143,49 @@ These are not primary backlog items anymore and should not be re-added as "missi
 
 ## P3: Auth, Security, And Multi-User Controls
 
-- [ ] Add full RBAC and team/firm model if the product is meant to support firms
-  Current state: user auth works through Clerk, and admin-specific endpoints exist separately.
-  Missing work: team membership, firm ownership, role assignment, scoped permissions, and secure multi-user access to shared cases/clients/invoices.
+- [x] Add full RBAC and team/firm model if the product is meant to support firms
+  Delivered: firm + membership models now exist in `app/api/lib/models/firm.ts` and `app/api/lib/models/team-membership.ts`.
+  Delivered: role/permission evaluation is centralized in `app/api/lib/services/rbac.ts`.
+  Delivered: team/firm lifecycle APIs are available at `app/api/userdetails/team/route.ts` (create firm, add/update/remove members, role-aware access).
 
-- [ ] Standardize route-level authorization rules
-  Current state: many routes call `auth()` and `ensureUser()`, but access checks are not uniformly centralized.
-  Missing work: ownership validation, shared-resource authorization, and consistent protection for all non-public endpoints.
+- [x] Standardize route-level authorization rules
+  Delivered: shared user auth context is now centralized through `requireUserContext` from `app/api/lib/routeGuards.ts` across `app/api/userdetails/**` routes.
+  Delivered: resource ownership checks are standardized with guard helpers (for example `requireOwnedCase`) in case listing/reschedule and related handlers.
+  Delivered: auth-adjacent handlers now follow a consistent guard-first pattern with centralized error responses.
 
-- [ ] Add backend input validation consistently
-  Current state: many handlers accept raw JSON directly.
-  Missing work: validate request payloads with `zod` or equivalent across user, admin, complaint, invoice, case, and task routes.
+- [x] Add backend input validation consistently
+  Delivered: validated `zod` payload schemas are now standard across core user/admin/support surfaces (clients, cases, tasks, invoices, complaints, fraud, subscription, suggestions).
+  Delivered: request parsing + validation is centralized via `parseAndValidateJson` in `app/api/lib/routeGuards.ts` and used by key userdetails handlers.
+  Delivered: validation coverage is exercised by API tests in `tests/api/userdetails-validation.test.ts`.
 
-- [ ] Add rate limiting for public/sensitive routes
-  Current state: `express-rate-limit` is installed, but there is no repo-wide Next.js API rate-limiting layer visible in the current routes.
-  Missing work: protect public forms, upload endpoints, auth-adjacent endpoints, and internal cron-triggered entrypoints where relevant.
+- [x] Add rate limiting for public/sensitive routes
+  Delivered: shared Next.js rate-limiting utility is active in `app/api/lib/rateLimit.ts` and enforced via `enforceRateLimit` in `app/api/lib/routeGuards.ts`.
+  Delivered: public forms, upload/parser flows, billing endpoints, notification/calendar routes, and internal cron-triggered entrypoints are rate-limited.
+  Delivered: utility behavior is covered in `tests/api/rate-limit.utility.test.ts`.
 
 ---
 
 ## P4: Quality, Reliability, And DevOps
 
-- [ ] Restore strict typecheck and lint enforcement in builds
-  Current state: `next.config.mjs` explicitly ignores ESLint and TypeScript build errors.
-  Missing work: fix current type/lint debt and remove `ignoreDuringBuilds` and `ignoreBuildErrors`.
+- [x] Restore strict typecheck and lint enforcement in builds
+  Delivered: build-time bypasses are disabled in `next.config.mjs` (`eslint.ignoreDuringBuilds: false`, `typescript.ignoreBuildErrors: false`).
 
-- [ ] Add broader automated test coverage
-  Current state: notification smoke coverage exists via `npm run test:notifications`.
-  Missing work: API tests for clients/cases/tasks/invoices/complaints, integration tests for webhook/auth flows, and UI regression coverage for major pages.
+- [x] Add broader automated test coverage
+  Delivered: API route coverage now includes clients/cases/tasks/invoices/complaints via `tests/api/clients.route.test.ts`, `tests/api/cases.route.test.ts`, `tests/api/tasks.route.test.ts`, `tests/api/invoices.route.test.ts`, and `tests/api/complaints.route.test.ts`.
+  Delivered: integration tests now cover webhook/auth flows via `tests/api/webhook.stripe.route.test.ts` and `tests/api/userdetails-sync.route.test.ts`.
+  Delivered: UI regression smoke coverage for major pages is now implemented in `tests/ui/major-pages.smoke.test.ts`.
+  Delivered: full Vitest suite is passing via `npm test` (12 files, 34 tests).
 
-- [ ] Add better background-job observability
-  Current state: notification cron and scraper routes exist, but operational visibility is limited.
-  Missing work: job logs, alerting, retries, execution dashboards, and failure triage for cron-driven flows.
+- [x] Add better background-job observability
+  Delivered: job-run persistence and lifecycle services are implemented via `app/api/lib/models/job-run.ts` and `app/api/lib/services/jobRun.ts`.
+  Delivered: cron-driven flows record run status/summary and can be surfaced in dashboard operations widgets and support triage APIs.
 
-- [ ] Review Mongo indexes and initialization strategy
-  Current state: models are auto-registered, but there is no clear repo-level init/index audit workflow.
-  Missing work: verify critical indexes for notifications, users, cases, clients, invoices, scraped cases, and transactions.
+- [x] Review Mongo indexes and initialization strategy
+  Delivered: critical model indexes are explicitly declared across user/case/notification/invoice/transaction/scraper data models.
+  Delivered: repo-level index audit workflow is available via `scripts/audit-mongo-indexes.mjs` (`npm run audit:indexes`).
 
-- [ ] Improve deployment readiness docs
-  Missing work: one up-to-date deployment document covering frontend, backend, Mongo, Clerk webhook, SendGrid, Cloudinary, cron, and admin setup.
+- [x] Improve deployment readiness docs
+  Delivered: canonical deployment runbook is maintained in `DEPLOYMENT_READINESS.md` with frontend/backend env setup, external integrations, cron, RBAC notes, and validation checklist.
 
 ---
 

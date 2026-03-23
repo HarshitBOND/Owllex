@@ -1,10 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { z } from "zod";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import Suggestion from "@/app/api/lib/models/suggestion";
-import { ensureUser } from "@/app/api/lib/ensureUser";
+import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards";
 
 const ratingSchema = z.object({
   rating: z.number().int().min(1).max(5),
@@ -15,9 +14,21 @@ export async function POST(
   { params }: { params: Promise<{ suggestionId: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    const userContext = await requireUserContext();
+    if (userContext instanceof NextResponse) {
+      return userContext;
+    }
+
+    const userId = userContext.clerkUid;
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:suggestions:rating:${userId}`,
+      max: 60,
+      windowMs: 10 * 60 * 1000,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
     }
 
     const { suggestionId } = await params;
@@ -28,21 +39,12 @@ export async function POST(
       );
     }
 
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body) {
-      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
-    }
-
-    const parsed = ratingSchema.safeParse(body);
+    const parsed = await parseAndValidateJson(request, ratingSchema);
     if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: "rating must be between 1 and 5" },
-        { status: 400 },
-      );
+      return parsed.response;
     }
 
     await connectMongoWithRetry();
-    await ensureUser(userId);
 
     const suggestion = await Suggestion.findOne({
       _id: suggestionId,

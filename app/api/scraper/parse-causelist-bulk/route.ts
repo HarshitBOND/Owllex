@@ -5,23 +5,46 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/app/api/lib/adminAuth";
+import { z } from "zod";
+import { enforceRateLimit } from "@/app/api/lib/routeGuards";
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || "http://localhost:8000";
 
+const bulkParseSchema = z.object({
+  days_back: z.number().int().min(1).max(30).optional(),
+  auto_delete_pdfs: z.boolean().optional(),
+  start_from_checkpoint: z.boolean().optional(),
+});
+
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin(req);
   if (admin instanceof NextResponse) return admin;
 
   try {
-    const body = await req.json();
+    const { blockedResponse } = enforceRateLimit(req, {
+      key: `scraper:bulk:${admin.userId}`,
+      max: 20,
+      windowMs: 10 * 60 * 1000,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const parsed = bulkParseSchema.safeParse(body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message || "Invalid import payload";
+      return NextResponse.json({ success: false, error: issue }, { status: 400 });
+    }
 
     const res = await fetch(`${BACKEND_API}/api/v1/scraper/parse-causelist-bulk`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        days_back: body.days_back ?? 3,
-        auto_delete_pdfs: body.auto_delete_pdfs ?? true,
-        start_from_checkpoint: body.start_from_checkpoint ?? true,
+        days_back: parsed.data.days_back ?? 3,
+        auto_delete_pdfs: parsed.data.auto_delete_pdfs ?? true,
+        start_from_checkpoint: parsed.data.start_from_checkpoint ?? true,
       }),
     });
 

@@ -29,7 +29,7 @@ const HearingHistorySchema = new mongoose.Schema(
     reason: { type: String, default: "" },
     source: {
       type: String,
-      enum: ["case-create", "listing", "reschedule", "manual"],
+      enum: ["case-create", "listing", "reschedule", "manual", "automation"],
       default: "manual",
     },
     changedByClerkUid: { type: String, default: null },
@@ -45,7 +45,7 @@ const CourtDateAuditEntrySchema = new mongoose.Schema(
     reason: { type: String, default: "" },
     source: {
       type: String,
-      enum: ["case-create", "listing", "reschedule", "manual"],
+      enum: ["case-create", "listing", "reschedule", "manual", "automation"],
       default: "manual",
     },
     changedByClerkUid: { type: String, default: null },
@@ -56,6 +56,7 @@ const CourtDateAuditEntrySchema = new mongoose.Schema(
 
 const CaseSchema = new mongoose.Schema(
   {
+    firmId: { type: mongoose.Schema.Types.ObjectId, ref: "Firm", default: null, index: true },
     fileNo: { type: String },
     caseNo: { type: String, required: true },
     cnrNo: { type: String },
@@ -80,8 +81,16 @@ const CaseSchema = new mongoose.Schema(
     notes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Note", default: [] }],
     clients: [{type: mongoose.Schema.Types.ObjectId, ref: "Client", default: []}],
     tasks: [{type: mongoose.Schema.Types.ObjectId, ref: "Task", default: []}],
+  },
+  {
+    timestamps: true,
   }
 );
+
+CaseSchema.index({ caseNo: 1 })
+CaseSchema.index({ courtDate: 1 })
+CaseSchema.index({ updatedAt: -1 })
+CaseSchema.index({ firmId: 1, caseNo: 1 })
 
 const Case = mongoose.models["Case"] || mongoose.model("Case", CaseSchema);
 

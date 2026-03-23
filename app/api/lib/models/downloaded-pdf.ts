@@ -21,6 +21,8 @@ const DownloadedPDFSchema = new mongoose.Schema({
 });
 
 DownloadedPDFSchema.index({ downloaded_at: -1 });
+DownloadedPDFSchema.index({ parse_status: 1, downloaded_at: -1 });
+DownloadedPDFSchema.index({ import_id: 1, downloaded_at: -1 });
 
 const DownloadedPDF =
   mongoose.models["DownloadedPDF"] ||

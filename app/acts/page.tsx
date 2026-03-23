@@ -181,7 +181,11 @@ const Acts = () => {
             <div className="flex flex-col items-center justify-center py-20">
               <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
               <p className="text-sm text-gray-600 mb-3">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => fetchActs(page * PAGE_SIZE)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchActs(page * PAGE_SIZE, search.trim(), activeCategory)}
+              >
                 Retry
               </Button>
             </div>

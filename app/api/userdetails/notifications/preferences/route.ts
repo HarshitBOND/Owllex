@@ -1,8 +1,7 @@
-import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import { ensureUser } from "@/app/api/lib/ensureUser"
+import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -20,15 +19,25 @@ const updatePreferencesSchema = z
     message: "At least one preference field is required",
   })
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
 
-    await ensureUser(userId)
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:notifications:preferences:get:${userId}`,
+      max: 120,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
+    }
+
     await connectMongoWithRetry()
 
     const preferences = await getNotificationPreferences(userId)
@@ -48,24 +57,28 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await auth()
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
     }
 
-    await ensureUser(userId)
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:notifications:preferences:patch:${userId}`,
+      max: 90,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
+    }
+
     await connectMongoWithRetry()
 
-    const body = await request.json().catch(() => null)
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
-    }
-
-    const parsedBody = updatePreferencesSchema.safeParse(body)
+    const parsedBody = await parseAndValidateJson(request, updatePreferencesSchema)
     if (!parsedBody.success) {
-      const firstIssue = parsedBody.error.issues[0]?.message || "Invalid notification preferences payload"
-      return NextResponse.json({ success: false, error: firstIssue }, { status: 400 })
+      return parsedBody.response
     }
 
     const preferences = await updateNotificationPreferences(userId, parsedBody.data)

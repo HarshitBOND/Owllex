@@ -20,14 +20,15 @@ Use this document as the source of truth for runtime environment variables and p
 | `CLOUDINARY_CLOUD_NAME` | Yes (uploads) | Cloudinary upload config |
 | `CLOUDINARY_API_KEY` | Yes (uploads) | Cloudinary upload config |
 | `CLOUDINARY_API_SECRET` | Yes (uploads) | Cloudinary upload config |
-| `STRIPE_SECRET_KEY` | Yes (billing) | Server-side Stripe API key for checkout/session APIs |
-| `STRIPE_WEBHOOK_SECRET` | Yes (billing) | Stripe webhook signing secret for `/api/webhook/stripe` |
-| `STRIPE_PRICE_STARTER_MONTHLY` | Yes (billing) | Stripe Price ID for starter monthly plan |
-| `STRIPE_PRICE_STARTER_YEARLY` | Yes (billing) | Stripe Price ID for starter yearly plan |
-| `STRIPE_PRICE_PROFESSIONAL_MONTHLY` | Yes (billing) | Stripe Price ID for professional monthly plan |
-| `STRIPE_PRICE_PROFESSIONAL_YEARLY` | Yes (billing) | Stripe Price ID for professional yearly plan |
-| `STRIPE_PRICE_ENTERPRISE_MONTHLY` | Yes (billing) | Stripe Price ID for enterprise monthly plan |
-| `STRIPE_PRICE_ENTERPRISE_YEARLY` | Yes (billing) | Stripe Price ID for enterprise yearly plan |
+| `RAZORPAY_KEY_ID` | Yes (billing) | Razorpay key ID for payment-link APIs |
+| `RAZORPAY_KEY_SECRET` | Yes (billing) | Razorpay key secret for server-side billing routes |
+| `RAZORPAY_WEBHOOK_SECRET` | Yes (billing) | Razorpay webhook signing secret for `/api/webhook/razorpay` |
+| `RAZORPAY_AMOUNT_STARTER_MONTHLY` | Yes (billing) | Starter monthly amount in INR (major unit, e.g. `999`) |
+| `RAZORPAY_AMOUNT_STARTER_YEARLY` | Yes (billing) | Starter yearly amount in INR |
+| `RAZORPAY_AMOUNT_PROFESSIONAL_MONTHLY` | Yes (billing) | Professional monthly amount in INR |
+| `RAZORPAY_AMOUNT_PROFESSIONAL_YEARLY` | Yes (billing) | Professional yearly amount in INR |
+| `RAZORPAY_AMOUNT_ENTERPRISE_MONTHLY` | Yes (billing) | Enterprise monthly amount in INR |
+| `RAZORPAY_AMOUNT_ENTERPRISE_YEARLY` | Yes (billing) | Enterprise yearly amount in INR |
 | `SENDGRID_API_KEY` | Recommended | Enables support + notification email delivery |
 | `NOTIFICATION_FROM_EMAIL` | Recommended | Sender email for SendGrid |
 | `NOTIFICATION_FROM_NAME` | Optional | Sender display name (defaults to `LexVert`) |
@@ -58,8 +59,8 @@ Set all Next.js keys above in Vercel project env vars for `Production` and `Prev
 - `CRON_SECRET` must be set in Vercel so cron-authenticated calls to `/api/internal/notifications/run` succeed.
 - Configure Clerk webhook endpoint as: `https://<your-domain>/api/webhook/clerk`.
 - Use the Clerk webhook signing secret as `CLERK_WEBHOOK_SECRET`.
-- Configure Stripe webhook endpoint as: `https://<your-domain>/api/webhook/stripe`.
-- Use Stripe webhook signing secret as `STRIPE_WEBHOOK_SECRET`.
+- Configure Razorpay webhook endpoint as: `https://<your-domain>/api/webhook/razorpay`.
+- Use Razorpay webhook signing secret as `RAZORPAY_WEBHOOK_SECRET`.
 - Ensure SendGrid sender (`NOTIFICATION_FROM_EMAIL`) is verified in SendGrid.
 - Ensure Cloudinary credentials are from the same Cloudinary product environment used for uploads.
 

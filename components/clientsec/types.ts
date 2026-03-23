@@ -15,6 +15,7 @@ export interface Client {
   email: string;
   contact: string;
   contactAlt?: string;
+  alternateContact?: string;
   company?: string;
   group?: string;
   gstin?: string;

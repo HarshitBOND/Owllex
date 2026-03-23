@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/internal/scraper/automation",
+      "schedule": "30 2 * * *"
+    },
+    {
       "path": "/api/internal/notifications/run",
       "schedule": "0 3 * * *"
     },

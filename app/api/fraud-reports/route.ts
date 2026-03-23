@@ -5,6 +5,7 @@ import { z } from "zod";
 import connectMongo from "@/app/api/lib/db/connectMongo";
 import FraudReport from "@/app/api/lib/models/fraud-report";
 import { ensureUser } from "@/app/api/lib/ensureUser";
+import { enforceRateLimit } from "@/app/api/lib/routeGuards";
 
 const createFraudReportSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -68,6 +69,16 @@ async function notifySupportTeam(payload: {
 
 export async function POST(req: NextRequest) {
   try {
+    const { blockedResponse } = enforceRateLimit(req, {
+      key: "public:fraud-reports",
+      max: 12,
+      windowMs: 10 * 60 * 1000,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
     const { userId } = await auth();
 
     if (!userId) {

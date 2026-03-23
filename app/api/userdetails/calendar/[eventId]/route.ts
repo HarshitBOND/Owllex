@@ -1,8 +1,7 @@
-import { auth } from "@clerk/nextjs/server"
 import { Types } from "mongoose"
 import { NextRequest, NextResponse } from "next/server"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import { ensureUser } from "@/app/api/lib/ensureUser"
+import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 import {
   deleteManualCalendarEvent,
   getCalendarEventForUser,
@@ -17,14 +16,25 @@ const getEventId = async (params: Promise<{ eventId: string }>) => {
 const isValidObjectId = (value: string) => Types.ObjectId.isValid(value)
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   try {
-    const { userId } = await auth()
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
+    }
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:calendar:event:get:${userId}`,
+      max: 120,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
     const eventId = await getEventId(params)
@@ -32,7 +42,6 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Invalid eventId" }, { status: 400 })
     }
 
-    await ensureUser(userId)
     await connectMongoWithRetry()
 
     const event = await getCalendarEventForUser(userId, eventId)
@@ -55,10 +64,21 @@ export async function PUT(
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   try {
-    const { userId } = await auth()
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
+    }
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:calendar:event:put:${userId}`,
+      max: 90,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
     const eventId = await getEventId(params)
@@ -71,7 +91,6 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
     }
 
-    await ensureUser(userId)
     await connectMongoWithRetry()
 
     const result = await updateManualCalendarEvent(userId, eventId, body)
@@ -89,6 +108,10 @@ export async function PUT(
       )
     }
 
+    if (!("event" in result)) {
+      return NextResponse.json({ success: false, error: "Invalid calendar event payload" }, { status: 400 })
+    }
+
     return NextResponse.json({ success: true, event: result.event })
   } catch (error) {
     console.error("Calendar event PUT error:", error)
@@ -100,14 +123,25 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   try {
-    const { userId } = await auth()
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
+    }
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:calendar:event:delete:${userId}`,
+      max: 90,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
     const eventId = await getEventId(params)
@@ -115,7 +149,6 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: "Invalid eventId" }, { status: 400 })
     }
 
-    await ensureUser(userId)
     await connectMongoWithRetry()
 
     const result = await deleteManualCalendarEvent(userId, eventId)

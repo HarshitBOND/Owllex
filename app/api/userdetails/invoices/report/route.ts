@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import { ensureUser } from "@/app/api/lib/ensureUser"
+import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 import SimpleInvoice from "@/app/api/lib/models/simple-invoice"
 
 const parseDateParam = (value: string | null) => {
@@ -27,14 +26,24 @@ const clampNumber = (value: number) => Number(value.toFixed(2))
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth()
+    const userContext = await requireUserContext()
+    if (userContext instanceof NextResponse) {
+      return userContext
+    }
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    const userId = userContext.clerkUid
+
+    const { blockedResponse } = enforceRateLimit(request, {
+      key: `userdetails:invoices:report:${userId}`,
+      max: 90,
+      windowMs: 10 * 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
     }
 
     await connectMongoWithRetry()
-    await ensureUser(userId)
 
     const fromParam = parseDateParam(request.nextUrl.searchParams.get("from"))
     const toParam = parseDateParam(request.nextUrl.searchParams.get("to"))
