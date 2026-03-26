@@ -13,7 +13,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
-import { useParams } from "next/navigation"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -125,14 +124,10 @@ function statusBadge(status: string) {
 type Tab = "overview" | "cases" | "pdfs" | "logs"
 
 export default function AdminSecretPage() {
-  const params = useParams()
-  const slug = params?.slug as string
-
   const { isOpen } = useSidebar()
   const { isLoaded, isSignedIn, user } = useUser()
   const [activeTab, setActiveTab] = useState<Tab>("overview")
 
-  const [validUrl, setValidUrl] = useState<boolean | null>(null)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
   const [stats, setStats] = useState<ScraperStats | null>(null)
   const [recentPdfs, setRecentPdfs] = useState<DownloadedPDF[]>([])
@@ -147,25 +142,10 @@ export default function AdminSecretPage() {
   const [seeding, setSeeding] = useState(false)
   const [seedResult, setSeedResult] = useState<string | null>(null)
 
-  // ── Secret URL Validation ────────────────────────────────────────────────
-
-  useEffect(() => {
-    // Validate secret URL on mount
-    const expectedSecret = process.env.NEXT_PUBLIC_ADMIN_PANEL_SECRET_URL
-    if (slug && expectedSecret && slug === expectedSecret) {
-      setValidUrl(true)
-    } else if (slug && expectedSecret) {
-      setValidUrl(false)
-    } else {
-      // No env var or slug - invalid
-      setValidUrl(false)
-    }
-  }, [slug])
-
   // ── Admin check ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!isSignedIn || !validUrl) return
+    if (!isSignedIn) return
     fetch("/api/scraper/admin-check")
       .then((res) => {
         if (res.ok) return res.json()
@@ -177,7 +157,7 @@ export default function AdminSecretPage() {
       .catch(() => {
         setIsAdmin(false)
       })
-  }, [isSignedIn, validUrl])
+  }, [isSignedIn])
 
   // ── Fetch status ─────────────────────────────────────────────────────────
 
@@ -591,12 +571,6 @@ export default function AdminSecretPage() {
         </div>
       </div>
     )
-  }
-
-  // Invalid secret URL — silently redirect, don't reveal admin panel exists
-  if (validUrl === false) {
-    if (typeof window !== "undefined") window.location.href = "/"
-    return null
   }
 
   // Not signed in — silently redirect

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
+import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
       return userContext;
     }
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `upload:image:${userContext.clerkUid}`,
       max: 60,
       windowMs: 10 * 60 * 1000,
@@ -33,10 +34,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "Only image uploads are allowed" }, { status: 400 });
-    }
-
     const maxFileSizeBytes = 10 * 1024 * 1024;
     if (file.size > maxFileSizeBytes) {
       return NextResponse.json({ error: "Image size exceeds 10MB" }, { status: 400 });
@@ -46,14 +43,19 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    const validation = validateUploadBuffer(file.name, new Uint8Array(buffer));
+    if (!validation.ok || validation.resourceType !== "image") {
+      return NextResponse.json({ error: "Only image uploads are allowed" }, { status: 400 });
+    }
+
     // Convert buffer to base64
     const base64String = buffer.toString("base64");
-    const dataURI = `data:${file.type};base64,${base64String}`;
+    const dataURI = `data:image/*;base64,${base64String}`;
 
     // Upload to Cloudinary
     const result = await cloudinary.uploader.upload(dataURI, {
       folder: "rich-text-editor", // Optional: organize images
-      resource_type: "auto",
+      resource_type: "image",
     });
 
     return NextResponse.json({
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Upload error:", error);
     return NextResponse.json(
-      { error: "Failed to upload image", message: error.message },
+      { error: "Failed to upload image" },
       { status: 500 }
     );
   }

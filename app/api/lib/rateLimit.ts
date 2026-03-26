@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { Redis } from "@upstash/redis"
 
 type RateLimitStoreEntry = {
   count: number
@@ -9,6 +10,7 @@ type RateLimitStore = Map<string, RateLimitStoreEntry>
 
 type GlobalRateLimitState = typeof globalThis & {
   __lexvertRateLimitStore?: RateLimitStore
+  __lexvertRateLimitRedis?: Redis | null
 }
 
 export type RateLimitInput = {
@@ -29,6 +31,23 @@ const globalState = globalThis as GlobalRateLimitState
 const store = globalState.__lexvertRateLimitStore || new Map<string, RateLimitStoreEntry>()
 
 globalState.__lexvertRateLimitStore = store
+
+const getRedisClient = () => {
+  if (globalState.__lexvertRateLimitRedis !== undefined) {
+    return globalState.__lexvertRateLimitRedis
+  }
+
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+
+  if (!url || !token) {
+    globalState.__lexvertRateLimitRedis = null
+    return null
+  }
+
+  globalState.__lexvertRateLimitRedis = new Redis({ url, token })
+  return globalState.__lexvertRateLimitRedis
+}
 
 const getRequestIp = (request: NextRequest) => {
   const forwardedFor = request.headers.get("x-forwarded-for")
@@ -53,7 +72,7 @@ export const getRateLimitIdentity = (request: NextRequest, fallback: string) => 
   return `${fallback}:${ip}:${userAgent.slice(0, 128)}`
 }
 
-export function applyRateLimit({ request, key, max, windowMs }: RateLimitInput): RateLimitResult {
+function applyInMemoryRateLimit({ request, key, max, windowMs }: RateLimitInput): RateLimitResult {
   const now = Date.now()
   const identity = getRateLimitIdentity(request, key)
   const existing = store.get(identity)
@@ -89,5 +108,37 @@ export function applyRateLimit({ request, key, max, windowMs }: RateLimitInput):
     limit: max,
     remaining: Math.max(max - existing.count, 0),
     retryAfterSeconds: Math.max(Math.ceil((existing.resetAt - now) / 1000), 1),
+  }
+}
+
+export async function applyRateLimit({ request, key, max, windowMs }: RateLimitInput): Promise<RateLimitResult> {
+  const identity = getRateLimitIdentity(request, key)
+  const redis = getRedisClient()
+
+  if (!redis) {
+    return applyInMemoryRateLimit({ request, key, max, windowMs })
+  }
+
+  const windowSeconds = Math.max(Math.ceil(windowMs / 1000), 1)
+  const rateLimitKey = `rl:${identity}`
+
+  try {
+    const count = Number(await redis.incr(rateLimitKey))
+
+    if (count === 1) {
+      await redis.expire(rateLimitKey, windowSeconds)
+    }
+
+    const ttlSeconds = Math.max(Number(await redis.ttl(rateLimitKey)), 1)
+    const remaining = Math.max(max - count, 0)
+
+    return {
+      allowed: count <= max,
+      limit: max,
+      remaining,
+      retryAfterSeconds: ttlSeconds,
+    }
+  } catch {
+    return applyInMemoryRateLimit({ request, key, max, windowMs })
   }
 }

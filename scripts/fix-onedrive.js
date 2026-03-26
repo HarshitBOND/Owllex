@@ -121,6 +121,24 @@ function ensureHealthyCache(cacheDir) {
   }
 }
 
+function ensureNodeModulesBridge(cacheDir) {
+  const cacheBase = path.dirname(cacheDir); // .../lexvert-cache/<hash>
+  const bridgeNM = path.join(cacheBase, 'node_modules');
+
+  if (!isJunction(bridgeNM) && fs.existsSync(nodeModules)) {
+    try {
+      const bridgeStat = safeLstat(bridgeNM);
+      if (bridgeStat) removeDir(bridgeNM);
+      fs.symlinkSync(nodeModules, bridgeNM, 'junction');
+      console.log('[fix-onedrive] Bridge junction: cache/node_modules → project node_modules.');
+    } catch (e) {
+      console.log('[fix-onedrive] Could not create bridge junction (non-critical):', e.message);
+    }
+  } else if (isJunction(bridgeNM)) {
+    console.log('[fix-onedrive] Bridge junction for node_modules already exists.');
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────
 
 // Non-Windows or project is not under OneDrive → simple mkdir is enough
@@ -149,8 +167,9 @@ if (isJunction(dotNext)) {
     if (target === path.resolve(cacheTarget)) {
       ensureHealthyCache(cacheTarget);
       console.log('[fix-onedrive] .next junction intact → ' + cacheTarget);
-      // Pin node_modules and exit
+      // Pin node_modules and ensure cache bridge before exit
       pinFolder(nodeModules);
+      ensureNodeModulesBridge(cacheTarget);
       process.exit(0);
     }
   } catch { /* readlink failed – re-create below */ }
@@ -170,22 +189,4 @@ console.log('[fix-onedrive] .next redirected to ' + cacheTarget + ' (outside One
 
 // ── node_modules: pin as always-available + bridge junction ──────────
 pinFolder(nodeModules);
-
-// Node.js resolves require() from the REAL path (inside the cache dir),
-// not the junction path. Create a node_modules junction inside the cache
-// base so Node's upward resolution finds the project's node_modules.
-const cacheBase = path.dirname(cacheTarget); // .../lexvert-cache/<hash>
-const bridgeNM = path.join(cacheBase, 'node_modules');
-if (!isJunction(bridgeNM) && fs.existsSync(nodeModules)) {
-  try {
-    // Remove any stale entry
-    const bridgeStat = safeLstat(bridgeNM);
-    if (bridgeStat) removeDir(bridgeNM);
-    fs.symlinkSync(nodeModules, bridgeNM, 'junction');
-    console.log('[fix-onedrive] Bridge junction: cache/node_modules → project node_modules.');
-  } catch (e) {
-    console.log('[fix-onedrive] Could not create bridge junction (non-critical):', e.message);
-  }
-} else if (isJunction(bridgeNM)) {
-  console.log('[fix-onedrive] Bridge junction for node_modules already exists.');
-}
+ensureNodeModulesBridge(cacheTarget);

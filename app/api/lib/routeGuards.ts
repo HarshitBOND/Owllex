@@ -67,15 +67,15 @@ export async function parseAndValidateJson<T extends z.ZodTypeAny>(
   }
 }
 
-export function enforceRateLimit(
+export async function enforceRateLimit(
   request: NextRequest,
   options: {
     key: string
     max: number
     windowMs: number
   },
-): { blockedResponse: NextResponse | null; result: RateLimitResult } {
-  const result = applyRateLimit({
+): Promise<{ blockedResponse: NextResponse | null; result: RateLimitResult }> {
+  const result = await applyRateLimit({
     request,
     key: options.key,
     max: options.max,

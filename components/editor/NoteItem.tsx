@@ -19,6 +19,27 @@ export const NoteItem = ({
   onDelete,
   onTogglePin 
 }: NoteItemProps) => {
+  const getCategoryColorClass = (categoryId?: string) => {
+    if (!categoryId) {
+      return 'bg-muted-foreground';
+    }
+    const palette = [
+      'bg-primary',
+      'bg-secondary',
+      'bg-accent',
+      'bg-destructive',
+      'bg-emerald-500',
+      'bg-indigo-500',
+      'bg-rose-500',
+      'bg-amber-500',
+    ];
+    let hash = 0;
+    for (let index = 0; index < categoryId.length; index += 1) {
+      hash = (hash * 31 + categoryId.charCodeAt(index)) >>> 0;
+    }
+    return palette[hash % palette.length];
+  };
+
   const formatDate = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -53,8 +74,10 @@ export const NoteItem = ({
     >
       {/* Category indicator */}
       <div 
-        className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full transition-all duration-200"
-        style={{ backgroundColor: category?.color || 'hsl(var(--muted-foreground))' }}
+        className={cn(
+          "absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full transition-all duration-200",
+          getCategoryColorClass(category?.id)
+        )}
       />
 
       {/* Pin indicator */}

@@ -33,6 +33,23 @@ export const NoteList = ({
   className,
 }: NoteListProps) => {
   const getCategoryById = (id: string) => categories.find(c => c.id === id);
+  const getCategoryColorClass = (categoryId: string) => {
+    const palette = [
+      'bg-primary',
+      'bg-secondary',
+      'bg-accent',
+      'bg-destructive',
+      'bg-emerald-500',
+      'bg-indigo-500',
+      'bg-rose-500',
+      'bg-amber-500',
+    ];
+    let hash = 0;
+    for (let index = 0; index < categoryId.length; index += 1) {
+      hash = (hash * 31 + categoryId.charCodeAt(index)) >>> 0;
+    }
+    return palette[hash % palette.length];
+  };
 
   return (
     <div className={cn("flex flex-col h-full bg-background", className)}>
@@ -89,14 +106,12 @@ export const NoteList = ({
               className={cn(
                 "shrink-0 px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 flex items-center gap-1.5",
                 selectedCategory === category.id
-                  ? "text-primary-foreground"
+                  ? "text-primary-foreground bg-primary"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
-              style={selectedCategory === category.id ? { backgroundColor: category.color } : undefined}
             >
               <span 
-                className="w-2 h-2 rounded-full" 
-                style={{ backgroundColor: category.color }}
+                className={cn("w-2 h-2 rounded-full", getCategoryColorClass(category.id))}
               />
               {category.name}
             </button>
@@ -128,11 +143,10 @@ export const NoteList = ({
             )}
           </div>
         ) : (
-          notes.map((note, index) => (
+          notes.map((note) => (
             <div
               key={note.id}
               className="animate-fade-in"
-              style={{ animationDelay: `${index * 50}ms` }}
             >
               <NoteItem
                 note={note}

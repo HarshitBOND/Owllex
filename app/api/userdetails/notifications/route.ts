@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:notifications:get:${userId}`,
       max: 180,
       windowMs: 10 * 60 * 1000,
@@ -73,7 +73,7 @@ export async function PATCH(request: NextRequest) {
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:notifications:patch:${userId}`,
       max: 120,
       windowMs: 10 * 60 * 1000,

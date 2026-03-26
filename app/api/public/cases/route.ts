@@ -142,18 +142,20 @@ export async function POST(req: NextRequest) {
     try {
         const caseData = await req.json()
         const { caseNumber, caseType, forum, caseYear, advocateName } = caseData
+    const safeAdvocateName = escapeRegexLiteral(String(advocateName || "").trim().slice(0, 128))
+    const safeCaseYear = escapeRegexLiteral(String(caseYear || "").trim().slice(0, 16))
         await connectMongoWithRetry()
 
         if (!caseNumber && !caseType && forum) {
             // Advocate name search — search both collections
             let foundCases = await CauseListCase.find({
-                advocate: { $regex: advocateName, $options: "i" },
-                case_no: { $regex: caseYear, $options: "i" }
+              advocate: { $regex: safeAdvocateName, $options: "i" },
+              case_no: { $regex: safeCaseYear, $options: "i" }
             })
             if (!foundCases || foundCases.length === 0) {
                 const scrapedCases = await ScrapedCase.find({
-                    advocate_petitioner: { $regex: advocateName, $options: "i" },
-                    main_case_no: { $regex: caseYear, $options: "i" }
+                advocate_petitioner: { $regex: safeAdvocateName, $options: "i" },
+                main_case_no: { $regex: safeCaseYear, $options: "i" }
                 })
                 foundCases = scrapedCases.map(normalizeScrapedCase)
             }

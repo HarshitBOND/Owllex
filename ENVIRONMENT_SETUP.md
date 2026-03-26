@@ -36,7 +36,9 @@ Use this document as the source of truth for runtime environment variables and p
 | `CRON_SECRET` | Yes | Protects `/api/internal/notifications/run` |
 | `NEXT_PUBLIC_APP_URL` | Yes | Absolute app URL used in notification links |
 | `NEXT_PUBLIC_BACKEND_API` | Recommended | Python backend base URL (defaults to `http://localhost:8000`) |
-| `NEXT_PUBLIC_ADMIN_PANEL_SECRET_URL` | Yes | Secret admin slug check for `/admin/[slug]` |
+| `BACKEND_INTERNAL_TOKEN` | Yes (if backend enabled) | Shared secret sent to backend parser/scraper APIs via `x-internal-token` |
+| `UPSTASH_REDIS_REST_URL` | Recommended (production) | Shared store for distributed API rate limiting |
+| `UPSTASH_REDIS_REST_TOKEN` | Recommended (production) | Token for Upstash REST Redis |
 
 ## 3) Parser Backend (`backend/.env`)
 
@@ -49,7 +51,8 @@ Use this document as the source of truth for runtime environment variables and p
 | `LEXVERT_MAX_PDF_SIZE_MB` | Optional | Max upload size |
 | `MONGODB_URI` | Recommended | Parser persistence store |
 | `MONGODB_DB` | Recommended | Parser database name |
-| `LEXVERT_CORS_ORIGINS` | Recommended | Allowed CORS origins |
+| `LEXVERT_CORS_ORIGINS` | Yes (production) | Explicit allowed CORS origins |
+| `LEXVERT_INTERNAL_TOKEN` | Yes | Must match frontend `BACKEND_INTERNAL_TOKEN` |
 
 ## 4) Production Secret Checklist
 
@@ -72,5 +75,5 @@ After env setup, verify:
 2. Contact form submission creates records and sends email (if SendGrid keys set).
 3. File/image uploads succeed.
 4. `/api/webhook/clerk` validates webhook signatures.
-5. Admin page works at `/admin/<NEXT_PUBLIC_ADMIN_PANEL_SECRET_URL>`.
+5. Admin pages only load for users with server-side `admin` role checks.
 6. Notification cron route authorizes with `CRON_SECRET`.

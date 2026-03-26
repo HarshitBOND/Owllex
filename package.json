@@ -9,12 +9,15 @@
     "dev": "next dev",
     "dev:backend": "cd backend && python run.py",
     "lint": "next lint",
+    "security:audit": "npm audit --audit-level=high",
+    "security:test": "vitest run tests/api/rate-limit.utility.test.ts tests/api/upload-validation.security.test.ts tests/api/notification-runner-auth.security.test.ts",
     "audit:indexes": "node scripts/audit-mongo-indexes.mjs",
     "start": "next start",
     "test": "vitest run",
     "test:notifications": "vitest run tests/notifications/notification-mvp.smoke.test.ts"
   },
   "dependencies": {
+    "@upstash/redis": "^1.35.3",
     "@clerk/nextjs": "^6.36.10",
     "@fullcalendar/core": "^6.1.19",
     "@fullcalendar/daygrid": "^6.1.19",
@@ -80,6 +83,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
     "date-fns": "^4.1.0",
+    "dompurify": "^3.3.3",
     "dotenv": "^17.2.3",
     "embla-carousel-react": "8.5.1",
     "express-rate-limit": "^8.3.1",

@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectMongo from "@/app/api/lib/db/connectMongo";
 import User from "@/app/api/lib/models/user";
 import AdminLog from "@/app/api/lib/models/admin-log";
+import { applyRateLimit, getRateLimitIdentity } from "@/app/api/lib/rateLimit";
 
 export interface AdminUser {
   userId: string;
@@ -22,27 +23,8 @@ export interface AdminUser {
   role: string;
 }
 
-// Simple in-memory rate limiter for admin routes
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX = 60; // 60 requests per minute
-
-function checkRateLimit(identifier: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(identifier);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(identifier, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-    return true;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return false;
-  }
-
-  entry.count++;
-  return true;
-}
 
 /**
  * Verifies the current user is an authenticated admin.
@@ -60,8 +42,15 @@ export async function requireAdmin(
     );
   }
 
-  // Rate limit check
-  if (!checkRateLimit(userId)) {
+  const syntheticRequest = request || new NextRequest("http://localhost/api/admin/rate-limit");
+  const rateLimit = await applyRateLimit({
+    request: syntheticRequest,
+    key: getRateLimitIdentity(syntheticRequest, `admin:${userId}`),
+    max: RATE_LIMIT_MAX,
+    windowMs: RATE_LIMIT_WINDOW,
+  });
+
+  if (!rateLimit.allowed) {
     return NextResponse.json(
       { success: false, error: "Too many requests. Please try again later." },
       { status: 429 }

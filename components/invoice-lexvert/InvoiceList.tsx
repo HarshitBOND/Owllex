@@ -164,11 +164,10 @@ export function InvoiceList({
             <p className="text-sm text-muted-foreground">No invoices found</p>
           </div>
         ) : (
-          paginatedInvoices.map((invoice, index) => (
+          paginatedInvoices.map((invoice) => (
             <div
               key={invoice.id}
               className="bg-card rounded-lg border p-3 active:bg-muted/50 animate-fade-in w-[95vw] max-w-[500px] mx-auto"
-              style={{ animationDelay: `${index * 50}ms` }}
               onClick={() => onViewInvoice(invoice)}
             >
               <div className="flex items-start justify-between gap-2 mb-2">
@@ -268,14 +267,13 @@ export function InvoiceList({
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedInvoices.map((invoice, index) => (
+              paginatedInvoices.map((invoice) => (
                 <TableRow
                   key={invoice.id}
                   className={cn(
                     'invoice-row',
                     'animate-fade-in'
                   )}
-                  style={{ animationDelay: `${index * 50}ms` }}
                   onClick={() => onViewInvoice(invoice)}
                 >
                   <TableCell className="font-mono font-medium text-primary">

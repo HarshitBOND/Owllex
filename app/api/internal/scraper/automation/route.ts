@@ -59,7 +59,7 @@ const runAutomation = async (request: NextRequest, options: Record<string, unkno
     return authorization.errorResponse
   }
 
-  const { blockedResponse } = enforceRateLimit(request, {
+  const { blockedResponse } = await enforceRateLimit(request, {
     key: "internal:scraper:automation",
     max: 30,
     windowMs: 5 * 60 * 1000,

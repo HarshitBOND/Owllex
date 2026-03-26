@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
 import { FileText, Image, Video, Music, Archive, File, X, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 
 type UploadedFile = {
@@ -148,12 +149,7 @@ export function FileDropzone({ onChange, uploadEndpoint = '/api/upload/file' }: 
                 </div>
                 {fileData.status === 'uploading' && (
                   <div className="mt-1">
-                    <div className="w-full bg-muted-foreground/20 rounded-full h-1.5">
-                      <div 
-                        className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                        style={{ width: `${fileData.progress}%` }}
-                      />
-                    </div>
+                    <Progress value={fileData.progress} className="h-1.5" />
                     <span className="text-xs text-muted-foreground mt-0.5">
                       {fileData.progress}%
                     </span>

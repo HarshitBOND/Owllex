@@ -5,7 +5,6 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -18,6 +17,7 @@ interface RevenueChartProps {
 }
 
 const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#6b7280'];
+const COLOR_DOT_CLASSES = ['bg-[#10b981]', 'bg-[#f59e0b]', 'bg-[#ef4444]', 'bg-[#6b7280]'];
 
 export function RevenueChart({ invoices }: RevenueChartProps) {
   const monthlyData = useMemo(() => {
@@ -84,20 +84,6 @@ export function RevenueChart({ invoices }: RevenueChartProps) {
                 tickFormatter={(value) => `$${value / 1000}k`}
                 width={35}
               />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '0.5rem',
-                  fontSize: '12px',
-                }}
-                formatter={(value: number) =>
-                  new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                  }).format(value)
-                }
-              />
               <Area
                 type="monotone"
                 dataKey="revenue"
@@ -140,14 +126,6 @@ export function RevenueChart({ invoices }: RevenueChartProps) {
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '0.5rem',
-                  fontSize: '12px',
-                }}
-              />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -156,8 +134,7 @@ export function RevenueChart({ invoices }: RevenueChartProps) {
             <div key={item.name} className="flex items-center justify-between text-[10px] sm:text-sm">
               <div className="flex items-center gap-1 sm:gap-2">
                 <div
-                  className="h-2 w-2 sm:h-3 sm:w-3 rounded-full shrink-0"
-                  style={{ backgroundColor: COLORS[index] }}
+                  className={`h-2 w-2 sm:h-3 sm:w-3 rounded-full shrink-0 ${COLOR_DOT_CLASSES[index % COLOR_DOT_CLASSES.length]}`}
                 />
                 <span className="truncate">{item.name}</span>
               </div>

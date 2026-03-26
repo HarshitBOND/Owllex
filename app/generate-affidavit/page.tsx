@@ -10,10 +10,18 @@ import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  FileText, Sparkles, ArrowRight, Download, Eye,
+  FileText, Sparkles, Download, Eye,
   ChevronRight, BookOpen, Scale, Shield, Briefcase,
-  AlertCircle, CheckCircle, Copy, Wand2
+  CheckCircle, Copy, Wand2
 } from "lucide-react"
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 
 const affidavitTemplates = [
   {
@@ -271,13 +279,19 @@ const GenerateAffidavit = () => {
                       <Eye className="h-4 w-4 mr-1" /> Preview
                     </Button>
                     <Button size="sm" className="bg-sidebar-primary hover:bg-sidebar-primary/90 text-white" onClick={() => {
-                      const printWindow = window.open('', '_blank')
-                      if (printWindow && docRef.current) {
-                        printWindow.document.write('<html><head><title>Affidavit</title><style>body{font-family:serif;padding:40px;line-height:1.8}h2{text-align:center}ol{margin-left:20px}</style></head><body>')
-                        printWindow.document.write(docRef.current.innerHTML)
-                        printWindow.document.write('</body></html>')
-                        printWindow.document.close()
-                        printWindow.print()
+                      if (docRef.current) {
+                        const safePrintableText = escapeHtml(docRef.current.innerText)
+                        const printableBlob = new Blob([safePrintableText], { type: 'text/plain' })
+                        const printableUrl = URL.createObjectURL(printableBlob)
+                        const printWindow = window.open(printableUrl, '_blank')
+                        if (printWindow) {
+                          printWindow.onload = () => {
+                            printWindow.print()
+                            URL.revokeObjectURL(printableUrl)
+                          }
+                        } else {
+                          URL.revokeObjectURL(printableUrl)
+                        }
                       }
                     }}>
                       <Download className="h-4 w-4 mr-1" /> Download PDF

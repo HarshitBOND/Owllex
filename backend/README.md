@@ -113,7 +113,8 @@ All settings via environment variables (see `.env.example`):
 | `LEXVERT_MAX_PDF_SIZE_MB` | `50` | Max upload file size |
 | `MONGODB_URI` | *(empty)* | MongoDB connection string (optional) |
 | `MONGODB_DB` | `cause_list_db` | MongoDB database name |
-| `LEXVERT_CORS_ORIGINS` | `*` | Allowed CORS origins (comma-separated) |
+| `LEXVERT_CORS_ORIGINS` | *(required in production)* | Allowed CORS origins (comma-separated, no wildcard in production) |
+| `LEXVERT_INTERNAL_TOKEN` | *(required)* | Shared internal token expected in `x-internal-token` header |
 
 ## Docker
 

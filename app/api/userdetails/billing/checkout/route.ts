@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `billing:checkout:${userId}`,
       max: 15,
       windowMs: 10 * 60 * 1000,
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     const successPath = normalizePath(parsedBody.data.successPath, "/dashboard?billing=success")
     const cancelPath = normalizePath(parsedBody.data.cancelPath, "/dashboard?billing=cancelled")
 
-    const paymentLink = await razorpay.paymentLink.create({
+    const paymentLinkPayload = {
       amount: selectedAmountMinor,
       currency,
       accept_partial: false,
@@ -122,11 +122,6 @@ export async function POST(request: NextRequest) {
         email: Boolean(user.email),
         sms: false,
       },
-      customer: user.email
-        ? {
-            email: user.email,
-          }
-        : undefined,
       notes: {
         paymentType: "subscription",
         clerkUid: userId,
@@ -134,7 +129,11 @@ export async function POST(request: NextRequest) {
         billingCycle: parsedBody.data.billingCycle,
         transactionId: transaction._id.toString(),
       },
-    })
+    }
+
+    const paymentLink = await razorpay.paymentLink.create(
+      paymentLinkPayload as unknown as Parameters<typeof razorpay.paymentLink.create>[0],
+    )
 
     const checkoutUrl = paymentLink.short_url || null
     if (!checkoutUrl) {

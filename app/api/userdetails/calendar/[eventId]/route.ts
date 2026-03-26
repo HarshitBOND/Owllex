@@ -27,7 +27,7 @@ export async function GET(
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:calendar:event:get:${userId}`,
       max: 120,
       windowMs: 10 * 60 * 1000,
@@ -71,7 +71,7 @@ export async function PUT(
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:calendar:event:put:${userId}`,
       max: 90,
       windowMs: 10 * 60 * 1000,
@@ -134,7 +134,7 @@ export async function DELETE(
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:calendar:event:delete:${userId}`,
       max: 90,
       windowMs: 10 * 60 * 1000,

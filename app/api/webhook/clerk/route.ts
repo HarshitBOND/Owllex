@@ -6,14 +6,11 @@ import { NextRequest } from "next/server";
 import User from "../../lib/models/user";
 
 export async function POST(req: NextRequest) {
-  console.log("[WEBHOOK] Clerk webhook received");
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
-    console.error("[WEBHOOK] Missing CLERK_WEBHOOK_SECRET in env");
     throw new Error("Missing CLERK_WEBHOOK_SECRET");
   }
-  console.log("[WEBHOOK] CLERK_WEBHOOK_SECRET found, validating...");
 
   const headerPayload = await headers();
   const svix_id = headerPayload.get("svix-id");
@@ -36,21 +33,18 @@ export async function POST(req: NextRequest) {
       "svix-timestamp": svix_timestamp,
       "svix-signature": svix_signature,
     }) as WebhookEvent;
-    console.log("[WEBHOOK] Signature verified. Event type:", evt.type, "User ID:", (evt.data as any).id);
-  } catch (err) {
-    console.error("[WEBHOOK] Signature verification failed:", (err as Error).message);
+  } catch {
+    console.error("[WEBHOOK] Signature verification failed");
     return new Response("Invalid svix payload", { status: 400 });
   }
 
   const { id, email_addresses, first_name, last_name } = evt.data as UserJSON;
 
   if (evt.type === "user.created") {
-    console.log("[WEBHOOK] Processing user.created event for", id);
     try {
       await connectMongoWithRetry();
-      console.log("[WEBHOOK] MongoDB connected");
 
-      const result = await User.findOneAndUpdate(
+      await User.findOneAndUpdate(
         { clerkUid: id },
         {
           $setOnInsert: {
@@ -64,10 +58,9 @@ export async function POST(req: NextRequest) {
         },
         { upsert: true, new: true }
       );
-      console.log("[WEBHOOK] User created/updated in MongoDB:", result?._id, "Email:", result?.email);
       return new Response("User created", { status: 200 });
-    } catch (error) {
-      console.error("[WEBHOOK] Error creating user:", error);
+    } catch {
+      console.error("[WEBHOOK] Error creating user");
       return new Response("Error creating user", { status: 500 });
     }
   }

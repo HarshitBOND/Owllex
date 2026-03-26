@@ -50,7 +50,7 @@ export function PaymentHistory({ payments, invoices }: PaymentHistoryProps) {
 
   return (
     <div className="space-y-2 sm:space-y-4">
-      {payments.map((payment, index) => {
+      {payments.map((payment) => {
         const invoice = getInvoice(payment.invoiceId);
         const Icon = methodIcons[payment.method];
         
@@ -61,7 +61,6 @@ export function PaymentHistory({ payments, invoices }: PaymentHistoryProps) {
               'flex items-center gap-2 sm:gap-4 rounded-lg border bg-card p-2.5 sm:p-4 transition-all duration-300 hover:shadow-md',
               'animate-fade-in'
             )}
-            style={{ animationDelay: `${index * 50}ms` }}
           >
             <div className="flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shrink-0">
               <Icon className="h-4 w-4 sm:h-6 sm:w-6" />

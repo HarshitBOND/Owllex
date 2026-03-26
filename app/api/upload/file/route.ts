@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
+import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
       return userContext;
     }
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `upload:file:${userContext.clerkUid}`,
       max: 40,
       windowMs: 10 * 60 * 1000,
@@ -38,22 +39,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File size exceeds 10MB" }, { status: 400 });
     }
 
-    if (!file.type || file.type === "application/octet-stream") {
-      return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
-    }
-
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    const validation = validateUploadBuffer(file.name, new Uint8Array(buffer));
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error || "Unsupported file" }, { status: 400 });
+    }
+
     // Convert buffer to base64
     const base64String = buffer.toString("base64");
-    const dataURI = `data:${file.type};base64,${base64String}`;
+    const dataURI = `data:application/octet-stream;base64,${base64String}`;
 
     // Upload to Cloudinary with resource type detection
     const result = await cloudinary.uploader.upload(dataURI, {
       folder: "file-uploads", 
-      resource_type: "auto", // Automatically detects image, video, or raw files
+      resource_type: validation.resourceType || "raw",
       use_filename: true,
       unique_filename: true,
     });
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Upload error:", error);
     return NextResponse.json(
-      { error: "Failed to upload file", message: error.message },
+      { error: "Failed to upload file" },
       { status: 500 }
     );
   }

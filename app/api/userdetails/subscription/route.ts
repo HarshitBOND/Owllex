@@ -54,7 +54,7 @@ export async function PATCH(request: NextRequest) {
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:subscription:patch:${userId}`,
       max: 60,
       windowMs: 10 * 60 * 1000,

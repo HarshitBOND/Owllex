@@ -25,9 +25,26 @@ class Settings:
     # CORS
     CORS_ORIGINS: list = None
 
+    # Internal auth
+    INTERNAL_TOKEN: str = os.getenv("LEXVERT_INTERNAL_TOKEN", "")
+
     def __post_init__(self):
-        origins = os.getenv("LEXVERT_CORS_ORIGINS", "*")
-        object.__setattr__(self, "CORS_ORIGINS", [o.strip() for o in origins.split(",")])
+        origins_raw = os.getenv("LEXVERT_CORS_ORIGINS", "").strip()
+
+        if origins_raw:
+            parsed_origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
+        elif self.DEBUG:
+            parsed_origins = [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+            ]
+        else:
+            raise RuntimeError("LEXVERT_CORS_ORIGINS must be explicitly configured in production")
+
+        if not self.DEBUG and "*" in parsed_origins:
+            raise RuntimeError("Wildcard CORS origin is not allowed in production")
+
+        object.__setattr__(self, "CORS_ORIGINS", parsed_origins)
         Path(self.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 

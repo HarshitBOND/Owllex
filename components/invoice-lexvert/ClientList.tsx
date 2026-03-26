@@ -61,7 +61,7 @@ export function ClientList({ clients, onSelectClient, selectedClientId }: Client
             <p className="text-muted-foreground text-sm">No clients found</p>
           </div>
         ) : (
-          filteredClients.map((client, index) => (
+          filteredClients.map((client) => (
             <div
               key={client.id}
               onClick={() => onSelectClient(client)}
@@ -72,7 +72,6 @@ export function ClientList({ clients, onSelectClient, selectedClientId }: Client
                   ? 'border-primary bg-primary/5 shadow-md'
                   : 'bg-card hover:border-primary/30'
               )}
-              style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="flex items-start gap-2.5 sm:gap-4">
                 <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-background shadow-sm shrink-0">

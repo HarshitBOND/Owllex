@@ -107,6 +107,60 @@ const HIGHLIGHT_COLORS = [
   { name: 'Red', value: '#fecaca' },
 ];
 
+const TEXT_COLOR_SWATCH_CLASSES: Record<string, string> = {
+  '#000000': 'bg-[#000000]',
+  '#374151': 'bg-[#374151]',
+  '#6b7280': 'bg-[#6b7280]',
+  '#9ca3af': 'bg-[#9ca3af]',
+  '#991b1b': 'bg-[#991b1b]',
+  '#dc2626': 'bg-[#dc2626]',
+  '#ef4444': 'bg-[#ef4444]',
+  '#f43f5e': 'bg-[#f43f5e]',
+  '#c2410c': 'bg-[#c2410c]',
+  '#ea580c': 'bg-[#ea580c]',
+  '#f97316': 'bg-[#f97316]',
+  '#f59e0b': 'bg-[#f59e0b]',
+  '#ca8a04': 'bg-[#ca8a04]',
+  '#eab308': 'bg-[#eab308]',
+  '#facc15': 'bg-[#facc15]',
+  '#84cc16': 'bg-[#84cc16]',
+  '#166534': 'bg-[#166534]',
+  '#16a34a': 'bg-[#16a34a]',
+  '#22c55e': 'bg-[#22c55e]',
+  '#10b981': 'bg-[#10b981]',
+  '#0f766e': 'bg-[#0f766e]',
+  '#14b8a6': 'bg-[#14b8a6]',
+  '#06b6d4': 'bg-[#06b6d4]',
+  '#0ea5e9': 'bg-[#0ea5e9]',
+  '#1e40af': 'bg-[#1e40af]',
+  '#2563eb': 'bg-[#2563eb]',
+  '#3b82f6': 'bg-[#3b82f6]',
+  '#6366f1': 'bg-[#6366f1]',
+  '#6b21a8': 'bg-[#6b21a8]',
+  '#9333ea': 'bg-[#9333ea]',
+  '#a855f7': 'bg-[#a855f7]',
+  '#d946ef': 'bg-[#d946ef]',
+  '#be185d': 'bg-[#be185d]',
+  '#ec4899': 'bg-[#ec4899]',
+  '#f472b6': 'bg-[#f472b6]',
+  '#fb7185': 'bg-[#fb7185]',
+};
+
+const HIGHLIGHT_SWATCH_CLASSES: Record<string, string> = {
+  transparent: 'bg-card',
+  '#fef08a': 'bg-[#fef08a]',
+  '#d9f99d': 'bg-[#d9f99d]',
+  '#bbf7d0': 'bg-[#bbf7d0]',
+  '#a5f3fc': 'bg-[#a5f3fc]',
+  '#bfdbfe': 'bg-[#bfdbfe]',
+  '#ddd6fe': 'bg-[#ddd6fe]',
+  '#fbcfe8': 'bg-[#fbcfe8]',
+  '#fecdd3': 'bg-[#fecdd3]',
+  '#fed7aa': 'bg-[#fed7aa]',
+  '#fde68a': 'bg-[#fde68a]',
+  '#fecaca': 'bg-[#fecaca]',
+};
+
 export const FormattingToolbar = ({ contentRef, onContentChange, isMobile = false }: FormattingToolbarProps) => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [selectedFont, setSelectedFont] = useState(FONTS[0]);
@@ -254,7 +308,6 @@ export const FormattingToolbar = ({ contentRef, onContentChange, isMobile = fals
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleFontChange(font)}
-                  style={{ fontFamily: font.value }}
                   className={cn(
                     "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors",
                     selectedFont.name === font.name ? "bg-muted font-medium" : "hover:bg-muted/50"
@@ -353,8 +406,10 @@ export const FormattingToolbar = ({ contentRef, onContentChange, isMobile = fals
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleColorChange(color.value)}
                     title={color.name}
-                    className="w-5 h-5 rounded border border-border/50 hover:scale-125 hover:shadow-lg transition-all cursor-pointer"
-                    style={{ backgroundColor: color.value }}
+                    className={cn(
+                      "w-5 h-5 rounded border border-border/50 hover:scale-125 hover:shadow-lg transition-all cursor-pointer",
+                      TEXT_COLOR_SWATCH_CLASSES[color.value] ?? 'bg-muted'
+                    )}
                   />
                 ))}
               </div>
@@ -381,9 +436,8 @@ export const FormattingToolbar = ({ contentRef, onContentChange, isMobile = fals
                     title={color.name}
                     className={cn(
                       "w-8 h-6 rounded border border-border/50 hover:scale-110 hover:shadow-md transition-all cursor-pointer text-xs flex items-center justify-center",
-                      color.value === 'transparent' && "bg-card"
+                      HIGHLIGHT_SWATCH_CLASSES[color.value] ?? 'bg-card'
                     )}
-                    style={{ backgroundColor: color.value !== 'transparent' ? color.value : undefined }}
                   >
                     {color.value === 'transparent' && '✕'}
                   </button>

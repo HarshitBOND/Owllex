@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     const userId = userContext.clerkUid;
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:suggestions:get:${userId}`,
       max: 180,
       windowMs: 10 * 60 * 1000,
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     const userId = userContext.clerkUid;
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:suggestions:post:${userId}`,
       max: 30,
       windowMs: 10 * 60 * 1000,

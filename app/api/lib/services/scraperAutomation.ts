@@ -6,6 +6,7 @@ import { reconcileNotificationsForCase } from "@/app/api/lib/services/notificati
 import { syncCalendarEventsForUsers } from "@/app/api/lib/services/calendar"
 import { parseCourtDate, formatDateKey } from "@/lib/hearingDates"
 import { buildSubscriptionSummaryFromUserRecord } from "@/app/api/lib/services/subscription"
+import { getBackendInternalHeaders } from "@/app/api/lib/backendInternalAuth"
 
 type ScraperAutomationOptions = {
   triggerCourtDownload?: boolean
@@ -101,6 +102,7 @@ async function triggerBulkImport(options: ScraperAutomationOptions): Promise<Imp
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...getBackendInternalHeaders(),
       },
       body: JSON.stringify({
         days_back: options.daysBack ?? 3,
@@ -143,6 +145,7 @@ async function triggerBulkImport(options: ScraperAutomationOptions): Promise<Imp
         `${BACKEND_API}/api/v1/scraper/progress/${encodeURIComponent(importId)}`,
         {
           method: "GET",
+          headers: getBackendInternalHeaders(),
         },
       )
 

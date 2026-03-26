@@ -12,22 +12,22 @@ const makeRequest = (ip: string, userAgent = "vitest") => {
 }
 
 describe("rate limit utility", () => {
-  it("allows requests within limit and blocks overflow", () => {
+  it("allows requests within limit and blocks overflow", async () => {
     const request = makeRequest("1.1.1.1")
 
-    const first = applyRateLimit({
+    const first = await applyRateLimit({
       request,
       key: "test:rate:basic",
       max: 2,
       windowMs: 30_000,
     })
-    const second = applyRateLimit({
+    const second = await applyRateLimit({
       request,
       key: "test:rate:basic",
       max: 2,
       windowMs: 30_000,
     })
-    const third = applyRateLimit({
+    const third = await applyRateLimit({
       request,
       key: "test:rate:basic",
       max: 2,
@@ -40,17 +40,17 @@ describe("rate limit utility", () => {
     expect(third.retryAfterSeconds).toBeGreaterThan(0)
   })
 
-  it("isolates rate buckets by key", () => {
+  it("isolates rate buckets by key", async () => {
     const request = makeRequest("2.2.2.2")
 
-    const bucketOne = applyRateLimit({
+    const bucketOne = await applyRateLimit({
       request,
       key: "test:rate:bucket-one",
       max: 1,
       windowMs: 30_000,
     })
 
-    const bucketTwo = applyRateLimit({
+    const bucketTwo = await applyRateLimit({
       request,
       key: "test:rate:bucket-two",
       max: 1,

@@ -43,7 +43,7 @@ const DisplayNotes = ({id, setTrigger, notes, source}: {id: string, setTrigger: 
                 <div className="hover:bg-gray-200 cursor-pointer p-2 rounded mb-2 min-h-25 flex items-center" key={note._id}>
                     <div className="w-3/4 flex flex-col gap-y-2">
                         {note.visibility === "private" && <div className="text-xs text-gray-500">This note is private to you</div>}
-                        <div dangerouslySetInnerHTML={{ __html: note.content }} />
+                        <div>{note.content ?? ""}</div>
                     </div>
                     <Button className="ms-auto" variant="outline" onClick={() => handleDeleteNote(note._id)}>
                         {deleting && note._id === deletingNoteId ? <Loader2 className="animate-spin" /> : <Trash2 />}

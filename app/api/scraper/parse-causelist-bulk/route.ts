@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/app/api/lib/adminAuth";
 import { z } from "zod";
 import { enforceRateLimit } from "@/app/api/lib/routeGuards";
+import { getBackendInternalHeaders } from "@/app/api/lib/backendInternalAuth";
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || "http://localhost:8000";
 
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (admin instanceof NextResponse) return admin;
 
   try {
-    const { blockedResponse } = enforceRateLimit(req, {
+    const { blockedResponse } = await enforceRateLimit(req, {
       key: `scraper:bulk:${admin.userId}`,
       max: 20,
       windowMs: 10 * 60 * 1000,
@@ -40,7 +41,10 @@ export async function POST(req: NextRequest) {
 
     const res = await fetch(`${BACKEND_API}/api/v1/scraper/parse-causelist-bulk`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...getBackendInternalHeaders(),
+      },
       body: JSON.stringify({
         days_back: parsed.data.days_back ?? 3,
         auto_delete_pdfs: parsed.data.auto_delete_pdfs ?? true,
@@ -53,10 +57,13 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Bulk causelist trigger error:", error);
     const isConnErr = error?.cause?.code === "ECONNREFUSED" || error?.message?.includes("fetch failed");
+    const missingToken = error instanceof Error && error.message.includes("BACKEND_INTERNAL_TOKEN");
     return NextResponse.json(
       {
         success: false,
-        error: isConnErr
+        error: missingToken
+          ? "Server configuration error. Missing BACKEND_INTERNAL_TOKEN."
+          : isConnErr
           ? "Python backend is not running. Start it with: cd backend && python run.py"
           : "Failed to trigger bulk import",
       },

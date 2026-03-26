@@ -7,7 +7,6 @@ import {
   TrendingUp,
   Flame,
   Target,
-  BarChart3,
   Zap,
   Scale,
   FileText,
@@ -27,21 +26,38 @@ import {
   Cell,
   AreaChart,
   Area,
-  Tooltip as RechartsTooltip,
 } from 'recharts';
 
 interface TaskStatsCardProps {
   stats: TaskStats;
 }
 
-const priorityColors: Record<Priority, string> = {
-  low: 'bg-muted-foreground',
-  medium: 'bg-primary',
-  high: 'bg-accent',
-  urgent: 'bg-destructive',
-};
-
 const PRIORITY_CHART_COLORS = ['hsl(142, 71%, 45%)', 'hsl(38, 92%, 50%)', 'hsl(25, 95%, 53%)', 'hsl(0, 84%, 60%)'];
+const PRIORITY_DOT_CLASSES = ['bg-[#22c55e]', 'bg-[#f59e0b]', 'bg-[#f97316]', 'bg-[#ef4444]'];
+
+const RATE_WIDTH_CLASS_BY_BUCKET: Record<number, string> = {
+  0: 'w-0',
+  5: 'w-[5%]',
+  10: 'w-[10%]',
+  15: 'w-[15%]',
+  20: 'w-[20%]',
+  25: 'w-1/4',
+  30: 'w-[30%]',
+  35: 'w-[35%]',
+  40: 'w-2/5',
+  45: 'w-[45%]',
+  50: 'w-1/2',
+  55: 'w-[55%]',
+  60: 'w-3/5',
+  65: 'w-[65%]',
+  70: 'w-[70%]',
+  75: 'w-3/4',
+  80: 'w-4/5',
+  85: 'w-[85%]',
+  90: 'w-[90%]',
+  95: 'w-[95%]',
+  100: 'w-full',
+};
 
 const categoryLabels: Record<Category, { label: string; icon: string }> = {
   hearing: { label: 'Hearing', icon: '⚖️' },
@@ -55,6 +71,12 @@ const categoryLabels: Record<Category, { label: string; icon: string }> = {
 };
 
 export const TaskStatsCard: React.FC<TaskStatsCardProps> = ({ stats }) => {
+  const getCompletionRateWidthClass = (value: number) => {
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+    const bucket = Math.round(clamped / 5) * 5;
+    return RATE_WIDTH_CLASS_BY_BUCKET[bucket] ?? 'w-0';
+  };
+
   const statItems = [
     { label: 'Total', value: stats.total, icon: Target, color: 'text-primary', bgColor: 'bg-primary/10' },
     { label: 'Completed', value: stats.completed, icon: CheckCircle2, color: 'text-secondary', bgColor: 'bg-secondary/20' },
@@ -82,7 +104,7 @@ export const TaskStatsCard: React.FC<TaskStatsCardProps> = ({ stats }) => {
 
   // Category bar data
   const categoryData = (Object.entries(stats.byCategory) as [Category, number][])
-    .filter(([_, count]) => count > 0)
+    .filter((entry) => entry[1] > 0)
     .map(([cat, count]) => ({
       name: categoryLabels[cat]?.label || cat,
       count,
@@ -136,7 +158,7 @@ export const TaskStatsCard: React.FC<TaskStatsCardProps> = ({ stats }) => {
             <span className="font-bold text-lg">{stats.completionRate}%</span>
           </div>
           <div className="h-2.5 w-full rounded-full border border-border/60 bg-muted/35">
-            <div className="h-full rounded-full bg-primary/85 transition-all" style={{ width: `${stats.completionRate}%` }} />
+            <div className={cn('h-full rounded-full bg-primary/85 transition-all', getCompletionRateWidthClass(stats.completionRate))} />
           </div>
           {stats.streak > 0 && (
             <div className="flex items-center gap-1.5 mt-2">
@@ -182,7 +204,7 @@ export const TaskStatsCard: React.FC<TaskStatsCardProps> = ({ stats }) => {
               <ResponsiveContainer width={100} height={100}>
                 <PieChart>
                   <Pie data={priorityData} dataKey="value" cx="50%" cy="50%" innerRadius={25} outerRadius={45} paddingAngle={3}>
-                    {priorityData.map((entry: any, index: number) => (
+                    {priorityData.map((entry: any) => (
                       <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Pie>
@@ -191,7 +213,7 @@ export const TaskStatsCard: React.FC<TaskStatsCardProps> = ({ stats }) => {
               <div className="flex flex-col gap-1">
                 {priorityData.map((d: any) => (
                   <div key={d.name} className="flex items-center gap-2 text-xs">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.fill }} />
+                    <div className={cn('w-2.5 h-2.5 rounded-full', PRIORITY_DOT_CLASSES[priorityData.indexOf(d) % PRIORITY_DOT_CLASSES.length])} />
                     <span>{d.name}</span>
                     <span className="text-muted-foreground ml-auto">{d.value}</span>
                   </div>

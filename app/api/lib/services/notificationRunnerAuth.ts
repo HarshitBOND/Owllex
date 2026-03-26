@@ -1,3 +1,5 @@
+import crypto from "crypto"
+
 type CronSecretValidationInput = {
   configuredSecret?: string | null
   secretHeader?: string | null
@@ -27,14 +29,25 @@ export function hasValidCronSecret({
   }
 
   const headerSecret = normalize(secretHeader)
-  if (headerSecret && headerSecret === expectedSecret) {
+  if (headerSecret && areSecretsEqual(headerSecret, expectedSecret)) {
     return true
   }
 
   const bearerToken = readBearerToken(authorizationHeader)
-  if (bearerToken && bearerToken === expectedSecret) {
+  if (bearerToken && areSecretsEqual(bearerToken, expectedSecret)) {
     return true
   }
 
   return false
+}
+
+function areSecretsEqual(left: string, right: string) {
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false
+  }
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer)
 }

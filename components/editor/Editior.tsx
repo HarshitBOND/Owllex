@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { Note, Category } from './types';
 import { FormattingToolbar } from './FormattingToolBar';
 import { 
@@ -30,29 +31,65 @@ export const Editor = ({
   onTogglePin,
   className,
 }: EditorProps) => {
+  const sanitizeHtml = (value: string) =>
+    DOMPurify.sanitize(value, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 'ol', 'li',
+        'blockquote', 'code', 'pre', 'h1', 'h2', 'h3', 'a'
+      ],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+      FORBID_ATTR: ['style', 'onerror', 'onclick', 'onload'],
+    });
+
+  const addSafeLinkRel = (html: string) => {
+    if (typeof window === 'undefined') return html;
+    if (!html.includes('<a')) return html;
+
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    temp.querySelectorAll('a').forEach((link) => {
+      link.setAttribute('rel', 'noopener noreferrer');
+      link.setAttribute('target', '_blank');
+    });
+
+    return temp.innerHTML;
+  };
+
   const [localTitle, setLocalTitle] = useState('');
   const [localContent, setLocalContent] = useState('');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>;
   const titleRef = useRef<HTMLInputElement>(null);
+  const noteIdRef = useRef(note?.id);
 
   useEffect(() => {
     if (note) {
       setLocalTitle(note.title);
-      setLocalContent(note.content);
-      if (contentRef.current) {
-        contentRef.current.innerHTML = note.content;
+      const safeContent = addSafeLinkRel(sanitizeHtml(note.content || ''));
+      setLocalContent(safeContent);
+      if (contentRef.current && contentRef.current.innerHTML !== safeContent) {
+        contentRef.current.innerHTML = safeContent;
       }
     }
-  }, [note?.id]);
+  }, [note]);
+
+  useEffect(() => {
+    noteIdRef.current = note?.id;
+  }, [note]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (note && (localTitle !== note.title || localContent !== note.content)) {
+      if (
+        note &&
+        noteIdRef.current === note.id &&
+        (localTitle !== note.title || localContent !== note.content)
+      ) {
         onUpdate(note.id, { title: localTitle, content: localContent });
       }
     }, 300);
+
     return () => clearTimeout(timer);
   }, [localTitle, localContent, note, onUpdate]);
 
@@ -77,9 +114,13 @@ export const Editor = ({
   };
 
   const handleContentChange = () => {
-    if (contentRef.current) {
-      setLocalContent(contentRef.current.innerHTML);
-    }
+    if (!contentRef.current) return;
+
+    const sanitized = addSafeLinkRel(
+      sanitizeHtml(contentRef.current.innerHTML)
+    );
+
+    setLocalContent(prev => (prev === sanitized ? prev : sanitized));
   };
 
   const currentCategory = categories.find(c => c.id === note?.category);
@@ -183,10 +224,7 @@ export const Editor = ({
                       note.category === cat.id ? "bg-muted" : "hover:bg-muted/50"
                     )}
                   >
-                    <span 
-                      className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: cat.color }}
-                    />
+                    <span className={cn("w-3 h-3 rounded-full", cat.color || 'bg-muted-foreground')} />
                     <span className="flex-1 text-left">{cat.name}</span>
                     {note.category === cat.id && (
                       <Check className="h-4 w-4 text-note-active" />
@@ -246,10 +284,7 @@ export const Editor = ({
                 onClick={() => setShowCategoryPicker(!showCategoryPicker)}
                 className="p-2 rounded-lg hover:bg-muted transition-colors flex items-center gap-1.5"
               >
-                <span 
-                  className="w-3 h-3 rounded-full" 
-                  style={{ backgroundColor: currentCategory?.color }}
-                />
+                <span className={cn("w-3 h-3 rounded-full", currentCategory?.color || 'bg-muted-foreground')} />
                 <Tag className="h-4 w-4 text-muted-foreground" />
               </button>
               
@@ -267,10 +302,7 @@ export const Editor = ({
                         note.category === cat.id ? "bg-muted" : "hover:bg-muted/50"
                       )}
                     >
-                      <span 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: cat.color }}
-                      />
+                      <span className={cn("w-3 h-3 rounded-full", cat.color || 'bg-muted-foreground')} />
                       {cat.name}
                       {note.category === cat.id && (
                         <Check className="h-4 w-4 ml-auto text-note-active" />
@@ -306,10 +338,7 @@ export const Editor = ({
                 <span>{formatShortDate(note.updatedAt)}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span 
-                  className="w-2 h-2 rounded-full" 
-                  style={{ backgroundColor: currentCategory?.color }}
-                />
+                <span className={cn("w-2 h-2 rounded-full", currentCategory?.color || 'bg-muted-foreground')} />
                 <span>{currentCategory?.name}</span>
               </div>
               {note.isPinned && (
@@ -337,10 +366,7 @@ export const Editor = ({
               <span>{formatDate(note.updatedAt)}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span 
-                className="w-2.5 h-2.5 rounded-full" 
-                style={{ backgroundColor: currentCategory?.color }}
-              />
+              <span className={cn("w-2.5 h-2.5 rounded-full", currentCategory?.color || 'bg-muted-foreground')} />
               <span>{currentCategory?.name}</span>
             </div>
           </div>
@@ -349,6 +375,9 @@ export const Editor = ({
           <div
             ref={contentRef}
             contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
             onInput={handleContentChange}
             onBlur={handleContentChange}
             className={cn(
@@ -359,12 +388,9 @@ export const Editor = ({
               "prose-blockquote:border-l-4 prose-blockquote:border-note-active prose-blockquote:pl-4 prose-blockquote:italic",
               "prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg prose-pre:overflow-x-auto",
               "prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm",
-              "lg:text-base text-sm"
+              "lg:text-base text-sm caret-[hsl(var(--note-active))]"
             )}
             data-placeholder="Start writing your case notes..."
-            style={{
-              caretColor: 'hsl(var(--note-active))',
-            }}
           />
         </div>
       </div>

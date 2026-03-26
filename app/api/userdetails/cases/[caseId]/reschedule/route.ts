@@ -43,7 +43,7 @@ export async function POST(
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `userdetails:cases:reschedule:${userId}`,
       max: 60,
       windowMs: 10 * 60 * 1000,

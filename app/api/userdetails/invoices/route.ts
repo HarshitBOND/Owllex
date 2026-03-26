@@ -251,7 +251,7 @@ const createInvoicePaymentCheckout = async ({
   })
 
   const appBaseUrl = getRazorpayCheckoutBaseUrl()
-  const paymentLink = await razorpay.paymentLink.create({
+  const paymentLinkPayload = {
     amount: Math.round(outstanding * 100),
     currency,
     accept_partial: false,
@@ -276,7 +276,11 @@ const createInvoicePaymentCheckout = async ({
       clerkUid,
       transactionId: transaction._id.toString(),
     },
-  })
+  }
+
+  const paymentLink = await razorpay.paymentLink.create(
+    paymentLinkPayload as unknown as Parameters<typeof razorpay.paymentLink.create>[0],
+  )
 
   transaction.checkoutSessionId = paymentLink.id
   transaction.metadata = {

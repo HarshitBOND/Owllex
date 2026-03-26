@@ -13,7 +13,8 @@ import logging
 import os
 import sys
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
@@ -21,6 +22,7 @@ from .config import settings
 from .models import HealthResponse
 from .routes import router
 from .scraper_routes import scraper_router
+from .security import require_internal_token
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -38,9 +40,21 @@ app = FastAPI(
     title="LexVert - DHC Cause List Parser",
     description="Parse Delhi High Court cause list PDFs into structured JSON data.",
     version=__version__,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
 
 # CORS
 app.add_middleware(
@@ -52,8 +66,18 @@ app.add_middleware(
 )
 
 # Routes
-app.include_router(router, prefix="/api/v1", tags=["Parser"])
-app.include_router(scraper_router, prefix="/api/v1/scraper", tags=["Scraper"])
+app.include_router(
+    router,
+    prefix="/api/v1",
+    tags=["Parser"],
+    dependencies=[Depends(require_internal_token)],
+)
+app.include_router(
+    scraper_router,
+    prefix="/api/v1/scraper",
+    tags=["Scraper"],
+    dependencies=[Depends(require_internal_token)],
+)
 
 
 # ─── Health check ────────────────────────────────────────────────────────────

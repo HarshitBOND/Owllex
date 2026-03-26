@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     const userId = userContext.clerkUid
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: `billing:transactions:${userId}`,
       max: 120,
       windowMs: 10 * 60 * 1000,

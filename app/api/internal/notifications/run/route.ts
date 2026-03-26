@@ -57,7 +57,7 @@ const handleRunRequest = async (request: NextRequest) => {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const { blockedResponse } = enforceRateLimit(request, {
+    const { blockedResponse } = await enforceRateLimit(request, {
       key: "internal:notifications:runner",
       max: 30,
       windowMs: 5 * 60 * 1000,

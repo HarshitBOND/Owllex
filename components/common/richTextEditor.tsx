@@ -251,6 +251,19 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
 
     const colors = ["#000000", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500", "#800080", "#008000"];
     const highlightColors = ["#FFFF00", "#00FF00", "#00FFFF", "#FF00FF", "#FFA500", "#FFB6C1"];
+        const swatchColorClasses: Record<string, string> = {
+            '#000000': 'bg-[#000000]',
+            '#FF0000': 'bg-[#FF0000]',
+            '#00FF00': 'bg-[#00FF00]',
+            '#0000FF': 'bg-[#0000FF]',
+            '#FFFF00': 'bg-[#FFFF00]',
+            '#FF00FF': 'bg-[#FF00FF]',
+            '#00FFFF': 'bg-[#00FFFF]',
+            '#FFA500': 'bg-[#FFA500]',
+            '#800080': 'bg-[#800080]',
+            '#008000': 'bg-[#008000]',
+            '#FFB6C1': 'bg-[#FFB6C1]',
+        };
 
     const ToolbarButton = ({ onClick, isActive, children, title }: { onClick: () => void, isActive: boolean, children: React.ReactNode, title: string }) => (
         <button
@@ -386,8 +399,7 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
                                 editor.chain().focus().setColor(color).run();
                                 setShowColorPicker(false);
                             }}
-                            className="w-6 h-6 rounded border-2 border-gray-300 hover:border-gray-500"
-                            style={{ backgroundColor: color }}
+                            className={`w-6 h-6 rounded border-2 border-gray-300 hover:border-gray-500 ${swatchColorClasses[color] ?? 'bg-gray-200'}`}
                             />
                         ))}
                         </div>
@@ -412,8 +424,7 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
                                 editor.chain().focus().toggleHighlight({ color }).run();
                                 setShowHighlightPicker(false);
                             }}
-                            className="w-6 h-6 rounded border-2 border-gray-300 hover:border-gray-500"
-                            style={{ backgroundColor: color }}
+                            className={`w-6 h-6 rounded border-2 border-gray-300 hover:border-gray-500 ${swatchColorClasses[color] ?? 'bg-gray-200'}`}
                             />
                         ))}
                         <button

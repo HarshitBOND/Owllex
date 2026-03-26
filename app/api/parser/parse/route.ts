@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureUser } from '@/app/api/lib/ensureUser';
 import { getUserSubscriptionSummary } from '@/app/api/lib/services/subscription';
 import { enforceRateLimit, requireUserContext } from '@/app/api/lib/routeGuards';
+import { getBackendInternalHeaders } from '@/app/api/lib/backendInternalAuth';
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || 'http://localhost:8000';
 
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
       return userContext;
     }
 
-    const { blockedResponse } = enforceRateLimit(req, {
+    const { blockedResponse } = await enforceRateLimit(req, {
       key: `parser:${userContext.clerkUid}`,
       max: 30,
       windowMs: 10 * 60 * 1000,
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
     // Forward to backend parser
     const response = await fetch(`${BACKEND_API}/api/v1/parse`, {
       method: 'POST',
+      headers: getBackendInternalHeaders(),
       body: formData,
     });
 
@@ -85,9 +87,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Parser API error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Parser service unavailable'
+      {
+        success: false,
+        error: 'Parser service unavailable'
       },
       { status: 500 }
     );

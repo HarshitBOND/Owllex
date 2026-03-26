@@ -69,7 +69,7 @@ async function notifySupportTeam(payload: {
 
 export async function POST(req: NextRequest) {
   try {
-    const { blockedResponse } = enforceRateLimit(req, {
+    const { blockedResponse } = await enforceRateLimit(req, {
       key: "public:fraud-reports",
       max: 12,
       windowMs: 10 * 60 * 1000,

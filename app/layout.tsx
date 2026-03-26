@@ -1,5 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
+import { headers } from "next/headers"
 import { DM_Sans, Space_Grotesk, Outfit, Amethysta } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
@@ -44,16 +45,19 @@ export const metadata: Metadata = {
     "Draft documents, track cases, find lawyers, and get doorstep delivery — all powered by cutting-edge technology.",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const requestHeaders = await headers()
+  const nonce = requestHeaders.get("x-nonce") || undefined
+
   return (
     <html lang="en" className={`${dmSans.variable} ${spaceGrotesk.variable} ${outfit.variable} ${amethysta.variable} antialiased`} suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <ClerkProvider>
+          <ClerkProvider dynamic nonce={nonce}>
             <SidebarProvider>
               {children}
             </SidebarProvider>
