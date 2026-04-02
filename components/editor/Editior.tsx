@@ -39,6 +39,7 @@ export const Editor = ({
       ],
       ALLOWED_ATTR: ['href', 'target', 'rel'],
       FORBID_ATTR: ['style', 'onerror', 'onclick', 'onload'],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
     });
 
   const addSafeLinkRel = (html: string) => {

@@ -8,6 +8,10 @@ import connectMongo from "@/app/api/lib/db/connectMongo";
 import FraudReport from "@/app/api/lib/models/fraud-report";
 import { requireSupport } from "@/app/api/lib/supportMiddleware";
 
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const STATUS_VALUES = [
   "new",
   "under_review",
@@ -40,12 +44,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
+    const safeSearch = escapeRegexLiteral(search);
     query.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
-      { incidentTitle: { $regex: search, $options: "i" } },
-      { incidentDetails: { $regex: search, $options: "i" } },
-      { caseReference: { $regex: search, $options: "i" } },
+      { name: { $regex: safeSearch, $options: "i" } },
+      { email: { $regex: safeSearch, $options: "i" } },
+      { incidentTitle: { $regex: safeSearch, $options: "i" } },
+      { incidentDetails: { $regex: safeSearch, $options: "i" } },
+      { caseReference: { $regex: safeSearch, $options: "i" } },
     ];
   }
 

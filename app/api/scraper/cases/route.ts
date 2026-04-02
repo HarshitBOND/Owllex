@@ -8,6 +8,10 @@ import connectMongo from "@/app/api/lib/db/connectMongo";
 import ScrapedCase from "@/app/api/lib/models/scraped-case";
 import { requireAdmin } from "@/app/api/lib/adminAuth";
 
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(req: NextRequest) {
   const admin = await requireAdmin();
   if (admin instanceof NextResponse) return admin;
@@ -22,15 +26,16 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
 
     const query: Record<string, unknown> = {};
-    if (source_pdf) {
+    if (source_pdf && typeof source_pdf === "string" && !source_pdf.startsWith("$")) {
       query.source_pdf = source_pdf;
     }
     if (search) {
+      const safeSearch = escapeRegexLiteral(search).slice(0, 200);
       query.$or = [
-        { main_case_no: { $regex: search, $options: "i" } },
-        { petitioner: { $regex: search, $options: "i" } },
-        { respondent: { $regex: search, $options: "i" } },
-        { judge: { $regex: search, $options: "i" } },
+        { main_case_no: { $regex: safeSearch, $options: "i" } },
+        { petitioner: { $regex: safeSearch, $options: "i" } },
+        { respondent: { $regex: safeSearch, $options: "i" } },
+        { judge: { $regex: safeSearch, $options: "i" } },
       ];
     }
 

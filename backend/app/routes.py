@@ -82,7 +82,7 @@ async def parse_cause_list(
 
     except Exception as e:
         logger.exception("Failed to parse %s", file.filename)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Failed to parse PDF file")
 
     finally:
         # Clean up temp file

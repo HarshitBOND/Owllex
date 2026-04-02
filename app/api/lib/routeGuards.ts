@@ -5,6 +5,7 @@ import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import { ensureUser } from "@/app/api/lib/ensureUser"
 import User from "@/app/api/lib/models/user"
 import { applyRateLimit, type RateLimitResult } from "@/app/api/lib/rateLimit"
+import { logSecurityEvent } from "@/app/api/lib/securityLogger"
 
 export const objectIdSchema = z
   .string()
@@ -15,10 +16,16 @@ export type AuthenticatedUserContext = {
   clerkUid: string
 }
 
-export async function requireUserContext(): Promise<AuthenticatedUserContext | NextResponse> {
+export async function requireUserContext(request?: NextRequest): Promise<AuthenticatedUserContext | NextResponse> {
   const { userId } = await auth()
 
   if (!userId) {
+    logSecurityEvent({
+      type: "auth_failed",
+      level: "warn",
+      message: "Authenticated endpoint access without valid session",
+      request,
+    })
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
   }
 
@@ -83,6 +90,17 @@ export async function enforceRateLimit(
   })
 
   if (!result.allowed) {
+    logSecurityEvent({
+      type: "rate_limited",
+      level: "warn",
+      message: "Rate limit exceeded",
+      request,
+      details: {
+        key: options.key,
+        limit: result.limit,
+        retryAfterSeconds: result.retryAfterSeconds,
+      },
+    })
     return {
       blockedResponse: NextResponse.json(
         {

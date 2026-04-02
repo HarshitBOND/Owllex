@@ -1,0 +1,12 @@
+# Keep non-frontend services out of Vercel build context.
+backend/
+backend/**
+
+# Local/runtime artifacts.
+uploads/
+uploads/**
+
+# Python environment/cache files.
+.venv/
+**/__pycache__/
+*.pyc

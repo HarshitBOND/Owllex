@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error: missingToken
-          ? "Server configuration error. Missing BACKEND_INTERNAL_TOKEN."
+          ? "Server configuration error"
           : isConnErr
-          ? "Python backend is not running. Start it with: cd backend && python run.py"
+          ? "Backend service unavailable"
           : "Failed to trigger bulk import",
       },
       { status: isConnErr ? 503 : 500 }

@@ -16,6 +16,8 @@ type ScraperAutomationOptions = {
   waitForImportCompletion?: boolean
   maxImportPolls?: number
   importPollIntervalMs?: number
+  maxPages?: number  // Override pagination limit (each page ~10 PDFs)
+  fetchAllPages?: boolean  // Fetch ALL pages (100+), use with caution
 }
 
 type ImportTriggerResult = {
@@ -108,6 +110,8 @@ async function triggerBulkImport(options: ScraperAutomationOptions): Promise<Imp
         days_back: options.daysBack ?? 3,
         auto_delete_pdfs: options.autoDeletePdfs ?? true,
         start_from_checkpoint: options.startFromCheckpoint ?? true,
+        max_pages: options.maxPages ?? null,
+        fetch_all_pages: options.fetchAllPages ?? false,
       }),
     })
 

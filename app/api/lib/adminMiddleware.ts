@@ -15,6 +15,7 @@ import connectMongo from "@/app/api/lib/db/connectMongo";
 import User from "@/app/api/lib/models/user";
 import AdminLog from "@/app/api/lib/models/admin-log";
 import { applyRateLimit, getRateLimitIdentity } from "@/app/api/lib/rateLimit";
+import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 
 export interface AdminUser {
   userId: string;
@@ -36,6 +37,12 @@ export async function requireAdmin(
   const { userId } = await auth();
 
   if (!userId) {
+    logSecurityEvent({
+      type: "admin_access_attempt",
+      level: "warn",
+      message: "Admin route access denied: unauthenticated",
+      request,
+    });
     return NextResponse.json(
       { success: false, error: "Unauthorized — please sign in" },
       { status: 401 }
@@ -51,6 +58,13 @@ export async function requireAdmin(
   });
 
   if (!rateLimit.allowed) {
+    logSecurityEvent({
+      type: "admin_access_attempt",
+      level: "warn",
+      message: "Admin route access denied: rate limited",
+      request: syntheticRequest,
+      userId,
+    });
     return NextResponse.json(
       { success: false, error: "Too many requests. Please try again later." },
       { status: 429 }
@@ -65,6 +79,13 @@ export async function requireAdmin(
   const user = await User.findOne({ clerkUid: userId }).lean();
 
   if (!user) {
+    logSecurityEvent({
+      type: "admin_access_attempt",
+      level: "warn",
+      message: "Admin route access denied: user record not found",
+      request,
+      userId,
+    });
     return NextResponse.json(
       { success: false, error: "User not found" },
       { status: 401 }
@@ -78,6 +99,13 @@ export async function requireAdmin(
   const dbUserId = String(typedUser._id);
 
   if (isBanned) {
+    logSecurityEvent({
+      type: "admin_access_attempt",
+      level: "warn",
+      message: "Admin route access denied: banned account",
+      request,
+      userId,
+    });
     return NextResponse.json(
       { success: false, error: "Account is suspended" },
       { status: 403 }
@@ -86,6 +114,14 @@ export async function requireAdmin(
 
   // Admin check — role must be "admin" in the database
   if (role !== "admin") {
+    logSecurityEvent({
+      type: "admin_access_attempt",
+      level: "warn",
+      message: "Admin route access denied: missing admin role",
+      request,
+      userId,
+      details: { role },
+    });
     return NextResponse.json(
       { success: false, error: "Forbidden — admin access required" },
       { status: 403 }

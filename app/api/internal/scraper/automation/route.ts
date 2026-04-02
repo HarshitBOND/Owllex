@@ -10,12 +10,14 @@ import { enforceRateLimit } from "@/app/api/lib/routeGuards"
 const automationRequestSchema = z
   .object({
     triggerCourtDownload: z.boolean().optional(),
-    daysBack: z.number().int().min(1).max(30).optional(),
+    daysBack: z.number().int().min(1).max(365).optional(),  // Extended to 1 year
     autoDeletePdfs: z.boolean().optional(),
     startFromCheckpoint: z.boolean().optional(),
     waitForImportCompletion: z.boolean().optional(),
     maxImportPolls: z.number().int().min(1).max(120).optional(),
     importPollIntervalMs: z.number().int().min(500).max(30000).optional(),
+    maxPages: z.number().int().min(1).max(200).optional(),  // Pagination control
+    fetchAllPages: z.boolean().optional(),  // Fetch ALL pages (100+)
   })
   .partial()
 
@@ -132,6 +134,8 @@ export async function POST(request: NextRequest) {
     waitForImportCompletion: parsed.data.waitForImportCompletion ?? true,
     maxImportPolls: parsed.data.maxImportPolls ?? 20,
     importPollIntervalMs: parsed.data.importPollIntervalMs ?? 2000,
+    maxPages: parsed.data.maxPages ?? undefined,
+    fetchAllPages: parsed.data.fetchAllPages ?? false,
   })
 }
 

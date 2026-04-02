@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
+import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -12,7 +13,7 @@ cloudinary.config({
 
 export async function POST(request: NextRequest) {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(request);
     if (userContext instanceof NextResponse) {
       return userContext;
     }
@@ -43,8 +44,16 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const validation = validateUploadBuffer(file.name, new Uint8Array(buffer));
+    const validation = validateUploadBuffer(file.name, new Uint8Array(buffer), file.type);
     if (!validation.ok) {
+      logSecurityEvent({
+        type: "upload_failed",
+        level: "warn",
+        message: "File upload rejected by validation",
+        request,
+        userId: userContext.clerkUid,
+        details: { reason: validation.error, originalFileName: file.name, mimeType: file.type },
+      });
       return NextResponse.json({ error: validation.error || "Unsupported file" }, { status: 400 });
     }
 
@@ -56,7 +65,8 @@ export async function POST(request: NextRequest) {
     const result = await cloudinary.uploader.upload(dataURI, {
       folder: "file-uploads", 
       resource_type: validation.resourceType || "raw",
-      use_filename: true,
+      filename_override: validation.sanitizedFileName,
+      use_filename: false,
       unique_filename: true,
     });
 
@@ -71,6 +81,13 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error("Upload error:", error);
+    logSecurityEvent({
+      type: "upload_failed",
+      level: "error",
+      message: "File upload failed with server error",
+      request,
+      details: { error: String(error?.message || error) },
+    });
     return NextResponse.json(
       { error: "Failed to upload file" },
       { status: 500 }

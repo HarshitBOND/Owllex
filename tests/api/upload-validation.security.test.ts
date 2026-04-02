@@ -18,11 +18,11 @@ describe("upload validation security", () => {
     expect(result.error).toBe("Invalid file signature")
   })
 
-  it("rejects unsupported extensions", () => {
+  it("rejects dangerous extensions", () => {
     const randomBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46])
     const result = validateUploadBuffer("script.exe", randomBytes)
 
     expect(result.ok).toBe(false)
-    expect(result.error).toBe("Unsupported file extension")
+    expect(result.error).toBe("Dangerous file type is not allowed")
   })
 })

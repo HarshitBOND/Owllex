@@ -6,6 +6,11 @@ import os
 from pathlib import Path
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
+
+# Load environment variables from backend/.env
+load_dotenv()
+
 
 @dataclass(frozen=True)
 class Settings:

@@ -4,6 +4,7 @@ LexVert Scraper API Routes — endpoints for PDF scraper management.
 
 import logging
 import os
+import re
 import uuid
 import time
 import threading
@@ -12,7 +13,7 @@ from dataclasses import asdict
 from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .config import settings
 from .scraper import (
@@ -28,9 +29,11 @@ scraper_router = APIRouter()
 # ─── Request/Response Models ────────────────────────────────────────────────
 
 class BulkParseRequest(BaseModel):
-    days_back: int = 3
+    days_back: int = Field(default=3, ge=1, le=365)  # Default 3 days, max 1 year
     auto_delete_pdfs: bool = True
     start_from_checkpoint: bool = True
+    max_pages: Optional[int] = Field(default=None, ge=1, le=200)  # Override pagination limit
+    fetch_all_pages: bool = False  # Fetch ALL pages (100+), use with caution
 
 
 @scraper_router.post("/run-now", summary="Trigger a full scraper run manually")
@@ -41,7 +44,7 @@ async def trigger_scraper():
         return {"success": True, "result": result}
     except Exception as e:
         logger.exception("Manual scraper trigger failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Scraper run failed. Check server logs.")
 
 
 @scraper_router.post("/upload-and-parse", summary="Upload a PDF and run it through the scraper pipeline")
@@ -146,8 +149,8 @@ async def scraper_status():
 
 @scraper_router.get("/cases", summary="Get scraped cases with pagination")
 async def get_scraped_cases(
-    page: int = 1,
-    limit: int = 50,
+    page: int = Field(default=1, ge=1),
+    limit: int = Field(default=50, ge=1, le=1000),
     source_pdf: str = "",
     search: str = "",
 ):
@@ -157,13 +160,17 @@ async def get_scraped_cases(
 
         query = {}
         if source_pdf:
-            query["source_pdf"] = source_pdf
+            # Validate source_pdf is a simple string, not a MongoDB operator
+            if isinstance(source_pdf, str) and not source_pdf.startswith("$"):
+                query["source_pdf"] = source_pdf
         if search:
+            # Escape regex special characters to prevent ReDoS attacks
+            safe_search = re.escape(search)[:200]  # Limit length too
             query["$or"] = [
-                {"main_case_no": {"$regex": search, "$options": "i"}},
-                {"petitioner": {"$regex": search, "$options": "i"}},
-                {"respondent": {"$regex": search, "$options": "i"}},
-                {"judge": {"$regex": search, "$options": "i"}},
+                {"main_case_no": {"$regex": safe_search, "$options": "i"}},
+                {"petitioner": {"$regex": safe_search, "$options": "i"}},
+                {"respondent": {"$regex": safe_search, "$options": "i"}},
+                {"judge": {"$regex": safe_search, "$options": "i"}},
             ]
 
         total = db["scraped_cases"].count_documents(query)
@@ -195,7 +202,7 @@ async def get_scraped_cases(
 
     except Exception as e:
         logger.exception("Failed to fetch scraped cases")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch scraped cases")
 
 
 @scraper_router.get("/logs", summary="Get scraper run logs")
@@ -218,7 +225,7 @@ async def get_scraper_logs(limit: int = 20):
 
     except Exception as e:
         logger.exception("Failed to fetch scraper logs")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch scraper logs")
 
 
 # ─── Bulk Causelist Endpoints ───────────────────────────────────────────────
@@ -229,6 +236,13 @@ async def trigger_bulk_causelist(body: BulkParseRequest):
     """
     Start the bulk causelist scraping and parsing workflow.
     Returns immediately with an import_id for progress tracking.
+    
+    Args (in request body):
+        days_back: Number of days to look back (default 3, use 60 for ~2 months)
+        auto_delete_pdfs: Delete PDFs after processing
+        start_from_checkpoint: Skip already-processed PDFs
+        max_pages: Override max pagination pages (each page ~10 PDFs)
+        fetch_all_pages: Fetch ALL pages (100+), use with caution
     """
     import_id = str(uuid.uuid4())
 
@@ -240,6 +254,8 @@ async def trigger_bulk_causelist(body: BulkParseRequest):
             "days_back": body.days_back,
             "auto_delete_pdfs": body.auto_delete_pdfs,
             "start_from_checkpoint": body.start_from_checkpoint,
+            "max_pages": body.max_pages,
+            "fetch_all_pages": body.fetch_all_pages,
         },
         daemon=True,
     )
@@ -250,6 +266,11 @@ async def trigger_bulk_causelist(body: BulkParseRequest):
         "import_id": import_id,
         "status": "started",
         "message": "Import process started. Poll /progress/{import_id} for real-time updates.",
+        "parameters": {
+            "days_back": body.days_back,
+            "max_pages": body.max_pages,
+            "fetch_all_pages": body.fetch_all_pages,
+        },
     }
 
 

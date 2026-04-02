@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
 import CauseListCase from "../../lib/models/causelist-cases"
 import ScrapedCase from "../../lib/models/scraped-case"
 import connectMongoWithRetry from "../../lib/db/connectMongo"
+import { enforceRateLimit, parseAndValidateJson } from "@/app/api/lib/routeGuards"
 
 function escapeRegexLiteral(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -117,6 +119,16 @@ async function findCasesByParts(caseType: string, caseNumber: string, caseYear: 
 
 export async function GET(req: NextRequest) {
     try {
+    const { blockedResponse } = await enforceRateLimit(req, {
+      key: "public:cases:get",
+      max: 180,
+      windowMs: 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
+    }
+
         await connectMongoWithRetry()
         const caseId = req.nextUrl.searchParams.get("id")
         if (caseId) {
@@ -140,8 +152,30 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const caseData = await req.json()
-        const { caseNumber, caseType, forum, caseYear, advocateName } = caseData
+    const { blockedResponse } = await enforceRateLimit(req, {
+      key: "public:cases:post",
+      max: 80,
+      windowMs: 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
+    }
+
+    const requestSchema = z.object({
+      caseNumber: z.string().trim().max(30).optional().default(""),
+      caseType: z.string().trim().max(40).optional().default(""),
+      forum: z.string().trim().max(80).optional().default(""),
+      caseYear: z.string().trim().max(16).optional().default(""),
+      advocateName: z.string().trim().max(128).optional().default(""),
+    })
+
+    const parsedBody = await parseAndValidateJson(req, requestSchema)
+    if (!parsedBody.success) {
+      return parsedBody.response
+    }
+
+    const { caseNumber, caseType, forum, caseYear, advocateName } = parsedBody.data
     const safeAdvocateName = escapeRegexLiteral(String(advocateName || "").trim().slice(0, 128))
     const safeCaseYear = escapeRegexLiteral(String(caseYear || "").trim().slice(0, 16))
         await connectMongoWithRetry()

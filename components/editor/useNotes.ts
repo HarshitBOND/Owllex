@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Note, Category } from './types';
 
 const STORAGE_KEY = 'case-notes';
@@ -21,9 +21,12 @@ export const useNotes = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load notes from localStorage on mount
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const savedNotes = localStorage.getItem(STORAGE_KEY);
     const savedCategories = localStorage.getItem(CATEGORIES_KEY);
     
@@ -51,14 +54,28 @@ export const useNotes = () => {
 
   // Save notes to localStorage whenever they change
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     if (notes.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+      return;
     }
+
+    localStorage.removeItem(STORAGE_KEY);
   }, [notes]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
   }, [categories]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   const activeNote = notes.find(note => note.id === activeNoteId) || null;
 
@@ -95,8 +112,12 @@ export const useNotes = () => {
         ? { ...note, ...updates, updatedAt: new Date() }
         : note
     ));
-    // Simulate save delay for visual feedback
-    setTimeout(() => setIsSaving(false), 500);
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = setTimeout(() => setIsSaving(false), 500);
   }, []);
 
   const deleteNote = useCallback((id: string) => {

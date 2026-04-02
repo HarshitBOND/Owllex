@@ -13,6 +13,10 @@ import {
 import connectMongo from "@/app/api/lib/db/connectMongo";
 import AdminLog from "@/app/api/lib/models/admin-log";
 
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (admin instanceof NextResponse) return admin;
@@ -27,7 +31,8 @@ export async function GET(request: NextRequest) {
   const query: Record<string, unknown> = {};
 
   if (actionFilter) {
-    query.action = { $regex: actionFilter, $options: "i" };
+    const safeAction = escapeRegexLiteral(actionFilter);
+    query.action = { $regex: safeAction, $options: "i" };
   }
 
   if (

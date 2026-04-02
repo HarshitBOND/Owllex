@@ -13,6 +13,10 @@ import {
 import connectMongo from "@/app/api/lib/db/connectMongo";
 import User from "@/app/api/lib/models/user";
 
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (admin instanceof NextResponse) return admin;
@@ -29,10 +33,11 @@ export async function GET(request: NextRequest) {
   const query: Record<string, unknown> = {};
 
   if (search) {
+    const safeSearch = escapeRegexLiteral(search);
     query.$or = [
-      { firstName: { $regex: search, $options: "i" } },
-      { lastName: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
+      { firstName: { $regex: safeSearch, $options: "i" } },
+      { lastName: { $regex: safeSearch, $options: "i" } },
+      { email: { $regex: safeSearch, $options: "i" } },
     ];
   }
 

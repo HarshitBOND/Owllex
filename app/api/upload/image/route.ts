@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
+import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -12,7 +13,7 @@ cloudinary.config({
 
 export async function POST(request: NextRequest) {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(request);
     if (userContext instanceof NextResponse) {
       return userContext;
     }
@@ -43,8 +44,16 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const validation = validateUploadBuffer(file.name, new Uint8Array(buffer));
+    const validation = validateUploadBuffer(file.name, new Uint8Array(buffer), file.type);
     if (!validation.ok || validation.resourceType !== "image") {
+      logSecurityEvent({
+        type: "upload_failed",
+        level: "warn",
+        message: "Image upload rejected by validation",
+        request,
+        userId: userContext.clerkUid,
+        details: { reason: validation.error, originalFileName: file.name, mimeType: file.type },
+      });
       return NextResponse.json({ error: "Only image uploads are allowed" }, { status: 400 });
     }
 
@@ -56,6 +65,9 @@ export async function POST(request: NextRequest) {
     const result = await cloudinary.uploader.upload(dataURI, {
       folder: "rich-text-editor", // Optional: organize images
       resource_type: "image",
+      filename_override: validation.sanitizedFileName,
+      use_filename: false,
+      unique_filename: true,
     });
 
     return NextResponse.json({
@@ -66,6 +78,13 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error("Upload error:", error);
+    logSecurityEvent({
+      type: "upload_failed",
+      level: "error",
+      message: "Image upload failed with server error",
+      request,
+      details: { error: String(error?.message || error) },
+    });
     return NextResponse.json(
       { error: "Failed to upload image" },
       { status: 500 }

@@ -14,5 +14,8 @@ requests>=2.31
 APScheduler>=3.10
 beautifulsoup4>=4.12
 
+# Env loading
+python-dotenv>=1.0
+
 # Optional: Production
 gunicorn==23.*

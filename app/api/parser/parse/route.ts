@@ -11,12 +11,14 @@ import { ensureUser } from '@/app/api/lib/ensureUser';
 import { getUserSubscriptionSummary } from '@/app/api/lib/services/subscription';
 import { enforceRateLimit, requireUserContext } from '@/app/api/lib/routeGuards';
 import { getBackendInternalHeaders } from '@/app/api/lib/backendInternalAuth';
+import { validateUploadBuffer } from '@/app/api/lib/uploadValidation';
+import { logSecurityEvent } from '@/app/api/lib/securityLogger';
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || 'http://localhost:8000';
 
 export async function POST(req: NextRequest) {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(req);
     if (userContext instanceof NextResponse) {
       return userContext;
     }
@@ -55,7 +57,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!file.name.toLowerCase().endsWith('.pdf') || file.type !== 'application/pdf') {
+    const bytes = await file.arrayBuffer();
+    const buffer = new Uint8Array(bytes);
+    const validation = validateUploadBuffer(file.name, buffer, file.type);
+
+    if (!validation.ok || validation.resourceType !== 'raw' || !validation.sanitizedFileName?.toLowerCase().endsWith('.pdf')) {
+      logSecurityEvent({
+        type: 'upload_failed',
+        level: 'warn',
+        message: 'Parser upload rejected by validation',
+        request: req,
+        userId: userContext.clerkUid,
+        details: { reason: validation.error, originalFileName: file.name, mimeType: file.type },
+      });
       return NextResponse.json(
         { success: false, error: 'Only PDF files are supported' },
         { status: 400 }
@@ -63,18 +77,21 @@ export async function POST(req: NextRequest) {
     }
 
     const maxFileSizeBytes = 50 * 1024 * 1024;
-    if (file.size > maxFileSizeBytes) {
+    if (buffer.byteLength > maxFileSizeBytes) {
       return NextResponse.json(
         { success: false, error: 'PDF exceeds 50MB upload limit' },
         { status: 400 }
       );
     }
 
+    const safeFormData = new FormData();
+    safeFormData.append('file', new File([buffer], validation.sanitizedFileName, { type: 'application/pdf' }));
+
     // Forward to backend parser
     const response = await fetch(`${BACKEND_API}/api/v1/parse`, {
       method: 'POST',
       headers: getBackendInternalHeaders(),
-      body: formData,
+      body: safeFormData,
     });
 
     const data = await response.json();

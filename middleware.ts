@@ -45,7 +45,7 @@ const buildCspHeader = (nonce: string, isDevelopment: boolean) => {
 
   const styleSrc = isDevelopment
     ? "style-src 'self' 'unsafe-inline' https://*.clerk.com"
-    : `style-src 'self' 'nonce-${nonce}' https://*.clerk.com`;
+    : `style-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://*.clerk.com`;
 
   const connectSrc = isDevelopment
     ? "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com wss://*.clerk.com wss://*.clerk.accounts.dev ws://localhost:* http://localhost:*"

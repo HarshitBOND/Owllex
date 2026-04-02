@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
 import { ACTS_DATASET } from "@/app/api/lib/data/acts"
+import { enforceRateLimit } from "@/app/api/lib/routeGuards"
 
 export const revalidate = 21600
 
@@ -14,11 +16,39 @@ const clampNumber = (value: string | null, fallback: number, min: number, max: n
 
 export async function GET(request: NextRequest) {
   try {
+    const { blockedResponse } = await enforceRateLimit(request, {
+      key: "public:acts:get",
+      max: 180,
+      windowMs: 60 * 1000,
+    })
+
+    if (blockedResponse) {
+      return blockedResponse
+    }
+
     const skip = clampNumber(request.nextUrl.searchParams.get("skip"), 0, 0, 10000)
     const limit = clampNumber(request.nextUrl.searchParams.get("limit"), 50, 1, 100)
 
-    const searchQuery = (request.nextUrl.searchParams.get("search") || "").trim().toLowerCase()
-    const categoryQuery = (request.nextUrl.searchParams.get("category") || "").trim().toLowerCase()
+    const rawQuery = {
+      search: request.nextUrl.searchParams.get("search") || "",
+      category: request.nextUrl.searchParams.get("category") || "",
+    }
+
+    const querySchema = z.object({
+      search: z.string().trim().max(120),
+      category: z.string().trim().max(80),
+    })
+
+    const parsedQuery = querySchema.safeParse(rawQuery)
+    if (!parsedQuery.success) {
+      return NextResponse.json(
+        { success: false, error: "Invalid query params" },
+        { status: 400 },
+      )
+    }
+
+    const searchQuery = parsedQuery.data.search.toLowerCase()
+    const categoryQuery = parsedQuery.data.category.toLowerCase()
 
     const filteredActs = ACTS_DATASET.filter((act) => {
       if (categoryQuery && act.category.toLowerCase() !== categoryQuery) {

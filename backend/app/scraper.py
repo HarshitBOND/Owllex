@@ -62,17 +62,14 @@ def _get_db():
     return client, db
 
 
-def fetch_pdfs_from_court() -> List[Dict]:
+def _fetch_pdfs_from_single_page(page_url: str) -> List[Dict]:
     """
-    Fetch list of available PDFs from the court website.
+    Fetch PDFs from a single page of the court website.
     Returns list of dicts: [{filename, url, date_str}]
-    
-    Scrapes the Delhi High Court cause list page for PDF links.
     """
     pdfs: List[Dict] = []
     try:
-        logger.info("Fetching PDF list from %s", COURT_URL)
-        resp = requests.get(COURT_URL, timeout=30, headers={
+        resp = requests.get(page_url, timeout=30, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
         resp.raise_for_status()
@@ -99,11 +96,162 @@ def fetch_pdfs_from_court() -> List[Dict]:
                     "url": href,
                     "date_str": date_str or "",
                 })
+    except Exception as e:
+        logger.error("Failed to fetch PDFs from %s: %s", page_url, e)
+    
+    return pdfs
+
+
+def _get_max_page_number() -> int:
+    """
+    Get the maximum page number from the Delhi High Court pagination.
+    The court website uses ?page=N pagination (0-indexed).
+    """
+    try:
+        resp = requests.get(COURT_URL, timeout=30, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
         
-        logger.info("Found %d PDFs on court website", len(pdfs))
+        # Find the "Last" pagination link which shows ?page=N
+        last_link = soup.find("a", title="Go to last page")
+        if last_link and last_link.get("href"):
+            href = last_link["href"]
+            # Extract page number from ?page=120
+            match = re.search(r"[?&]page=(\d+)", href)
+            if match:
+                return int(match.group(1))
+        
+        # Fallback: count pagination items
+        pager_items = soup.find_all("li", class_="pager__item")
+        max_page = 0
+        for item in pager_items:
+            link = item.find("a")
+            if link and link.get("href"):
+                match = re.search(r"[?&]page=(\d+)", link["href"])
+                if match:
+                    max_page = max(max_page, int(match.group(1)))
+        
+        return max_page if max_page > 0 else 0
+        
+    except Exception as e:
+        logger.error("Failed to get max page number: %s", e)
+        return 0
+
+
+def fetch_pdfs_from_court(
+    max_pages: Optional[int] = None,
+    days_back: Optional[int] = None,
+    fetch_all: bool = False,
+) -> List[Dict]:
+    """
+    Fetch list of available PDFs from the court website with pagination support.
+    
+    Args:
+        max_pages: Maximum number of pages to fetch (None = auto-determine based on days_back)
+        days_back: Filter PDFs from the last N days. If provided, will fetch enough pages
+                   to cover the date range. Use days_back=60 for ~2 months.
+        fetch_all: If True, fetches ALL pages (can be 100+ pages). Use with caution.
+    
+    Returns list of dicts: [{filename, url, date_str}]
+    
+    The Delhi High Court website paginates cause lists with ~10 PDFs per page.
+    """
+    pdfs: List[Dict] = []
+    seen_urls: set = set()  # Deduplicate across pages
+    
+    try:
+        # Determine how many pages to fetch
+        total_pages = _get_max_page_number()
+        logger.info("Court website has %d total pages of PDFs", total_pages + 1)
+        
+        if fetch_all:
+            pages_to_fetch = total_pages + 1
+        elif max_pages is not None:
+            pages_to_fetch = min(max_pages, total_pages + 1)
+        elif days_back is not None:
+            # Estimate pages needed: ~5-15 PDFs per day (main + supplementary lists)
+            # ~10 PDFs per page, so roughly 1-2 days per page
+            estimated_pages = max(1, (days_back // 2) + 5)  # Extra buffer
+            pages_to_fetch = min(estimated_pages, total_pages + 1)
+            logger.info("Fetching ~%d pages to cover %d days back", pages_to_fetch, days_back)
+        else:
+            # Default: just fetch first page (original behavior for daily cron)
+            pages_to_fetch = 1
+        
+        cutoff_date = None
+        if days_back is not None and days_back > 0:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+            logger.info("Date cutoff: %s (%d days back)", cutoff_date.strftime("%Y-%m-%d"), days_back)
+        
+        for page_num in range(pages_to_fetch):
+            page_url = f"{COURT_URL}?page={page_num}"
+            logger.info("Fetching page %d/%d: %s", page_num + 1, pages_to_fetch, page_url)
+            
+            page_pdfs = _fetch_pdfs_from_single_page(page_url)
+            
+            # Filter duplicates and apply date filter
+            new_pdfs_count = 0
+            for pdf in page_pdfs:
+                if pdf["url"] in seen_urls:
+                    continue
+                seen_urls.add(pdf["url"])
+                
+                # Apply date filter if specified
+                if cutoff_date and pdf.get("date_str"):
+                    try:
+                        pdf_date = _parse_date_str(pdf["date_str"])
+                        if pdf_date and pdf_date < cutoff_date:
+                            # PDF is older than cutoff, skip
+                            continue
+                    except Exception:
+                        pass  # Can't parse date, include it anyway
+                
+                pdfs.append(pdf)
+                new_pdfs_count += 1
+            
+            logger.info("Page %d: found %d PDFs (%d new)", page_num + 1, len(page_pdfs), new_pdfs_count)
+            
+            # Early exit: if we found mostly duplicates or no new PDFs, we may have enough
+            if new_pdfs_count == 0 and page_num > 0:
+                logger.info("No new PDFs on page %d, stopping pagination", page_num + 1)
+                break
+            
+            # Be polite to the server
+            if page_num < pages_to_fetch - 1:
+                time.sleep(0.5)
+        
+        logger.info("Total: Found %d unique PDFs across %d pages", len(pdfs), pages_to_fetch)
+        
     except Exception as e:
         logger.error("Failed to fetch court PDFs: %s", e)
+    
     return pdfs
+
+
+def _parse_date_str(date_str: str) -> Optional[datetime]:
+    """Parse various date string formats into datetime."""
+    if not date_str:
+        return None
+    
+    # Normalize separators
+    normalized = date_str.replace("_", "-").replace(".", "-")
+    
+    # Try common formats
+    formats = [
+        "%Y-%m-%d",    # 2024-01-15
+        "%d-%m-%Y",    # 15-01-2024
+        "%d-%m-%y",    # 15-01-24
+    ]
+    
+    for fmt in formats:
+        try:
+            return datetime.strptime(normalized, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    
+    return None
 
 
 def _extract_date_from_text(text: str) -> Optional[str]:
@@ -347,10 +495,21 @@ def parse_causelist_bulk(
     days_back: int = 3,
     auto_delete_pdfs: bool = True,
     start_from_checkpoint: bool = True,
+    max_pages: Optional[int] = None,
+    fetch_all_pages: bool = False,
 ) -> Dict:
     """
     Full bulk workflow: fetch PDFs → filter by checkpoint → download → parse → cleanup.
     Stores progress in _active_imports for real-time polling.
+    
+    Args:
+        import_id: Unique identifier for this import session
+        days_back: Number of days to look back for PDFs (default 3, max ~365)
+                   Use 60 for ~2 months, 90 for ~3 months
+        auto_delete_pdfs: Delete PDF files after processing
+        start_from_checkpoint: Skip already-processed PDFs
+        max_pages: Maximum pagination pages to fetch (overrides days_back calculation)
+        fetch_all_pages: Fetch ALL available pages (100+), use with caution
     """
     _active_imports[import_id] = {
         "status": "running",
@@ -373,13 +532,26 @@ def parse_causelist_bulk(
         "errors": 0,
         "status": "completed",
         "results": [],
+        "days_back": days_back,
+        "max_pages": max_pages,
+        "fetch_all_pages": fetch_all_pages,
     }
 
     try:
-        # Phase 1: Fetch PDF URLs
-        _update_progress(import_id, "fetching_pdfs", "Fetching PDF list from Delhi High Court...")
+        # Phase 1: Fetch PDF URLs with pagination support
+        msg = f"Fetching PDF list from Delhi High Court ({days_back} days back"
+        if fetch_all_pages:
+            msg += ", ALL pages"
+        elif max_pages:
+            msg += f", max {max_pages} pages"
+        msg += ")..."
+        _update_progress(import_id, "fetching_pdfs", msg)
 
-        pdfs = fetch_pdfs_from_court()
+        pdfs = fetch_pdfs_from_court(
+            max_pages=max_pages,
+            days_back=days_back,
+            fetch_all=fetch_all_pages,
+        )
         summary["pdfs_found"] = len(pdfs)
 
         if not pdfs:
