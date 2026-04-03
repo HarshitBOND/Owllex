@@ -16,8 +16,9 @@ load_dotenv()
 class Settings:
     # Server
     HOST: str = os.getenv("LEXVERT_HOST", "0.0.0.0")
-    PORT: int = int(os.getenv("LEXVERT_PORT", "8000"))
+    PORT: int = int(os.getenv("PORT", os.getenv("LEXVERT_PORT", "8000")))
     DEBUG: bool = os.getenv("LEXVERT_DEBUG", "false").lower() == "true"
+    ENABLE_SCRAPER_SCHEDULER: bool = os.getenv("ENABLE_SCRAPER_SCHEDULER", "false").lower() == "true"
 
     # PDF upload
     UPLOAD_DIR: str = os.getenv("LEXVERT_UPLOAD_DIR", str(Path(__file__).resolve().parent.parent / "uploads"))
@@ -29,9 +30,18 @@ class Settings:
 
     # CORS
     CORS_ORIGINS: list = None
+    TRUSTED_HOSTS: list = None
 
     # Internal auth
     INTERNAL_TOKEN: str = os.getenv("LEXVERT_INTERNAL_TOKEN", "")
+
+    # Security
+    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("LEXVERT_RATE_LIMIT_WINDOW_SECONDS", "60"))
+    RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("LEXVERT_RATE_LIMIT_MAX_REQUESTS", "120"))
+
+    # Bulk import safety
+    MAX_CONCURRENT_BULK_IMPORTS: int = int(os.getenv("LEXVERT_MAX_CONCURRENT_BULK_IMPORTS", "1"))
+    IMPORT_PROGRESS_TTL_SECONDS: int = int(os.getenv("LEXVERT_IMPORT_PROGRESS_TTL_SECONDS", "86400"))
 
     def __post_init__(self):
         origins_raw = os.getenv("LEXVERT_CORS_ORIGINS", "").strip()
@@ -48,6 +58,30 @@ class Settings:
 
         if not self.DEBUG and "*" in parsed_origins:
             raise RuntimeError("Wildcard CORS origin is not allowed in production")
+
+        if not self.DEBUG:
+            for origin in parsed_origins:
+                if origin.startswith("http://"):
+                    raise RuntimeError("HTTP CORS origins are not allowed in production. Use HTTPS origins.")
+
+        if self.RATE_LIMIT_WINDOW_SECONDS <= 0:
+            raise RuntimeError("LEXVERT_RATE_LIMIT_WINDOW_SECONDS must be > 0")
+        if self.RATE_LIMIT_MAX_REQUESTS <= 0:
+            raise RuntimeError("LEXVERT_RATE_LIMIT_MAX_REQUESTS must be > 0")
+        if self.MAX_CONCURRENT_BULK_IMPORTS <= 0:
+            raise RuntimeError("LEXVERT_MAX_CONCURRENT_BULK_IMPORTS must be > 0")
+        if self.IMPORT_PROGRESS_TTL_SECONDS < 300:
+            raise RuntimeError("LEXVERT_IMPORT_PROGRESS_TTL_SECONDS must be >= 300")
+
+        trusted_hosts_raw = os.getenv("LEXVERT_TRUSTED_HOSTS", "").strip()
+        if trusted_hosts_raw:
+            parsed_trusted_hosts = [h.strip() for h in trusted_hosts_raw.split(",") if h.strip()]
+        elif self.DEBUG:
+            parsed_trusted_hosts = ["localhost", "127.0.0.1", "*"]
+        else:
+            parsed_trusted_hosts = ["*.onrender.com"]
+
+        object.__setattr__(self, "TRUSTED_HOSTS", parsed_trusted_hosts)
 
         object.__setattr__(self, "CORS_ORIGINS", parsed_origins)
         Path(self.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)

@@ -12,10 +12,14 @@ Usage:
 import logging
 import os
 import sys
+import time
+from collections import defaultdict, deque
 
 from fastapi import Depends, FastAPI
 from fastapi import Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from . import __version__
 from .config import settings
@@ -33,6 +37,7 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("lexvert")
+_request_buckets = defaultdict(deque)
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +52,24 @@ app = FastAPI(
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    # In-memory per-IP rate limiting for baseline abuse protection.
+    if request.url.path != "/health":
+        now = time.time()
+        client_ip = request.client.host if request.client else "unknown"
+        bucket = _request_buckets[client_ip]
+        window_start = now - settings.RATE_LIMIT_WINDOW_SECONDS
+
+        while bucket and bucket[0] < window_start:
+            bucket.popleft()
+
+        if len(bucket) >= settings.RATE_LIMIT_MAX_REQUESTS:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded"},
+            )
+
+        bucket.append(now)
+
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -54,7 +77,15 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Resource-Policy"] = "same-site"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.TRUSTED_HOSTS,
+)
 
 # CORS
 app.add_middleware(
@@ -110,7 +141,11 @@ async def on_startup():
         logger.info("MongoDB not configured (API-only mode)")
 
     # Start daily scraper scheduler
-    if os.getenv("PDF_DOWNLOAD_ENABLED", "false").lower() == "true" and settings.MONGODB_URI:
+    if (
+        settings.ENABLE_SCRAPER_SCHEDULER
+        and os.getenv("PDF_DOWNLOAD_ENABLED", "false").lower() == "true"
+        and settings.MONGODB_URI
+    ):
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
             from apscheduler.triggers.cron import CronTrigger
@@ -131,8 +166,16 @@ async def on_startup():
             logger.warning("APScheduler not installed — scheduler disabled")
         except Exception as e:
             logger.error("Failed to start scheduler: %s", e)
+    elif os.getenv("PDF_DOWNLOAD_ENABLED", "false").lower() == "true":
+        logger.info("Scheduler not started (ENABLE_SCRAPER_SCHEDULER=false)")
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    scheduler = getattr(app.state, "scheduler", None)
+    if scheduler:
+        try:
+            scheduler.shutdown(wait=False)
+        except Exception:
+            logger.warning("Scheduler shutdown failed")
     logger.info("LexVert shutting down")

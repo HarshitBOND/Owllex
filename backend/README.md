@@ -67,14 +67,6 @@ curl -X POST http://localhost:8000/api/v1/parse \
 }
 ```
 
-### `POST /api/v1/parse/path` — Parse PDF from server path
-
-For internal use / cron jobs — parse a PDF already on the server.
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/parse/path?pdf_path=./pdfs/combined_adv_04.02.2026.pdf"
-```
-
 ### `GET /health` — Health check
 
 ```json
@@ -108,12 +100,19 @@ All settings via environment variables (see `.env.example`):
 |----------|---------|-------------|
 | `LEXVERT_HOST` | `0.0.0.0` | Server bind host |
 | `LEXVERT_PORT` | `8000` | Server port |
+| `PORT` | *(empty)* | Platform-injected runtime port (Render/Heroku style) |
 | `LEXVERT_DEBUG` | `false` | Enable debug mode + auto-reload |
+| `ENABLE_SCRAPER_SCHEDULER` | `false` | Enable scheduler only on one dedicated instance |
 | `LEXVERT_UPLOAD_DIR` | `./uploads` | Temp PDF upload directory |
 | `LEXVERT_MAX_PDF_SIZE_MB` | `50` | Max upload file size |
 | `MONGODB_URI` | *(empty)* | MongoDB connection string (optional) |
 | `MONGODB_DB` | `cause_list_db` | MongoDB database name |
 | `LEXVERT_CORS_ORIGINS` | *(required in production)* | Allowed CORS origins (comma-separated, no wildcard in production) |
+| `LEXVERT_TRUSTED_HOSTS` | `localhost,127.0.0.1,*.onrender.com` | Trusted host header values |
+| `LEXVERT_RATE_LIMIT_WINDOW_SECONDS` | `60` | Rate limit time window in seconds |
+| `LEXVERT_RATE_LIMIT_MAX_REQUESTS` | `120` | Max requests per IP per window |
+| `LEXVERT_MAX_CONCURRENT_BULK_IMPORTS` | `1` | Maximum parallel bulk import sessions |
+| `LEXVERT_IMPORT_PROGRESS_TTL_SECONDS` | `86400` | Retention for completed import progress data |
 | `LEXVERT_INTERNAL_TOKEN` | *(required)* | Shared internal token expected in `x-internal-token` header |
 
 ## Docker

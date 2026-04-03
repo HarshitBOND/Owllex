@@ -6,19 +6,18 @@ import logging
 import os
 import re
 import uuid
-import time
 import threading
 from datetime import datetime, timezone
-from dataclasses import asdict
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from .config import settings
 from .scraper import (
     process_single_pdf, run_scraper, _get_db, TEMP_DIR,
-    parse_causelist_bulk, get_import_progress, _active_imports,
+    parse_causelist_bulk, get_import_progress, get_running_import_count, get_active_imports_snapshot,
 )
 
 logger = logging.getLogger("lexvert.scraper_routes")
@@ -40,9 +39,9 @@ class BulkParseRequest(BaseModel):
 async def trigger_scraper():
     """Run the scraper immediately (fetch from court website)."""
     try:
-        result = run_scraper()
+        result = await run_in_threadpool(run_scraper)
         return {"success": True, "result": result}
-    except Exception as e:
+    except Exception:
         logger.exception("Manual scraper trigger failed")
         raise HTTPException(status_code=500, detail="Scraper run failed. Check server logs.")
 
@@ -65,7 +64,8 @@ async def upload_and_parse(file: UploadFile = File(...)):
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File too large. Max {settings.MAX_PDF_SIZE_MB}MB")
 
-    temp_name = f"{uuid.uuid4().hex}_{file.filename}"
+    safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(file.filename or "upload.pdf"))
+    temp_name = f"{uuid.uuid4().hex}_{safe_filename}"
     temp_path = os.path.join(TEMP_DIR, temp_name)
 
     try:
@@ -73,7 +73,7 @@ async def upload_and_parse(file: UploadFile = File(...)):
             f.write(content)
 
         client, db = _get_db()
-        result = process_single_pdf(temp_path, db, source_url="manual_upload")
+        result = await run_in_threadpool(process_single_pdf, temp_path, db, "manual_upload")
 
         # Cleanup
         if os.path.exists(temp_path):
@@ -86,11 +86,11 @@ async def upload_and_parse(file: UploadFile = File(...)):
         client.close()
         return {"success": True, "result": result}
 
-    except Exception as e:
+    except Exception:
         logger.exception("Upload-and-parse failed")
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Upload and parse failed")
 
 
 @scraper_router.get("/status", summary="Get scraper status and recent logs")
@@ -142,17 +142,17 @@ async def scraper_status():
             "recent_pdfs": recent_pdfs,
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get scraper status")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get scraper status")
 
 
 @scraper_router.get("/cases", summary="Get scraped cases with pagination")
 async def get_scraped_cases(
-    page: int = Field(default=1, ge=1),
-    limit: int = Field(default=50, ge=1, le=1000),
-    source_pdf: str = "",
-    search: str = "",
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    source_pdf: str = Query(default="", max_length=255),
+    search: str = Query(default="", max_length=200),
 ):
     """Get extracted cases from scraper with pagination and filters."""
     try:
@@ -200,13 +200,13 @@ async def get_scraped_cases(
             "cases": cases,
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to fetch scraped cases")
         raise HTTPException(status_code=500, detail="Failed to fetch scraped cases")
 
 
 @scraper_router.get("/logs", summary="Get scraper run logs")
-async def get_scraper_logs(limit: int = 20):
+async def get_scraper_logs(limit: int = Query(default=20, ge=1, le=100)):
     """Get detailed scraper run logs."""
     try:
         client, db = _get_db()
@@ -223,7 +223,7 @@ async def get_scraper_logs(limit: int = 20):
         client.close()
         return {"success": True, "logs": logs}
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to fetch scraper logs")
         raise HTTPException(status_code=500, detail="Failed to fetch scraper logs")
 
@@ -244,6 +244,13 @@ async def trigger_bulk_causelist(body: BulkParseRequest):
         max_pages: Override max pagination pages (each page ~10 PDFs)
         fetch_all_pages: Fetch ALL pages (100+), use with caution
     """
+    active_running = get_running_import_count()
+    if active_running >= settings.MAX_CONCURRENT_BULK_IMPORTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Maximum concurrent bulk imports reached. Try again later.",
+        )
+
     import_id = str(uuid.uuid4())
 
     # Run in background thread so the endpoint returns immediately
@@ -319,7 +326,7 @@ async def causelist_status():
 
         # Check if any import is currently running
         current_session = None
-        for iid, data in _active_imports.items():
+        for iid, data in get_active_imports_snapshot().items():
             if data["status"] == "running":
                 current_session = {
                     "import_id": iid,
@@ -337,9 +344,9 @@ async def causelist_status():
             "current_session": current_session,
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get causelist status")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get causelist status")
 
 
 @scraper_router.websocket("/ws/progress/{import_id}")
@@ -379,8 +386,8 @@ async def websocket_progress(websocket: WebSocket, import_id: str):
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for import %s", import_id)
-    except Exception as e:
-        logger.error("WebSocket error for import %s: %s", import_id, e)
+    except Exception:
+        logger.exception("WebSocket error for import %s", import_id)
     finally:
         try:
             await websocket.close()

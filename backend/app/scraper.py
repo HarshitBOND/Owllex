@@ -7,9 +7,8 @@ import hashlib
 import logging
 import os
 import re
+import threading
 import time
-import uuid
-import tempfile
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
@@ -458,11 +457,42 @@ def run_scraper() -> Dict:
 # ─── In-memory progress tracking for bulk imports ─────────────────────────
 
 _active_imports: Dict[str, Dict[str, Any]] = {}
+_active_imports_lock = threading.Lock()
+
+
+def _cleanup_old_imports() -> None:
+    now_ts = time.time()
+    ttl_seconds = settings.IMPORT_PROGRESS_TTL_SECONDS
+    stale_ids: List[str] = []
+
+    for iid, data in _active_imports.items():
+        started_ts = data.get("started_ts", now_ts)
+        if data.get("status") in ("completed", "failed") and (now_ts - started_ts) > ttl_seconds:
+            stale_ids.append(iid)
+
+    for iid in stale_ids:
+        _active_imports.pop(iid, None)
 
 
 def get_import_progress(import_id: str) -> Optional[Dict]:
     """Get the current progress for an import session."""
-    return _active_imports.get(import_id)
+    with _active_imports_lock:
+        _cleanup_old_imports()
+        return _active_imports.get(import_id)
+
+
+def get_running_import_count() -> int:
+    """Count currently running import sessions."""
+    with _active_imports_lock:
+        _cleanup_old_imports()
+        return sum(1 for data in _active_imports.values() if data.get("status") == "running")
+
+
+def get_active_imports_snapshot() -> Dict[str, Dict[str, Any]]:
+    """Get a safe snapshot of active imports for status endpoints."""
+    with _active_imports_lock:
+        _cleanup_old_imports()
+        return dict(_active_imports)
 
 
 def _update_progress(
@@ -480,9 +510,11 @@ def _update_progress(
         "data": data or {},
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    if import_id in _active_imports:
-        _active_imports[import_id]["current"] = update
-        _active_imports[import_id]["log"].append(update)
+    with _active_imports_lock:
+        _cleanup_old_imports()
+        if import_id in _active_imports:
+            _active_imports[import_id]["current"] = update
+            _active_imports[import_id]["log"].append(update)
     if callback:
         try:
             callback(update)
@@ -511,13 +543,16 @@ def parse_causelist_bulk(
         max_pages: Maximum pagination pages to fetch (overrides days_back calculation)
         fetch_all_pages: Fetch ALL available pages (100+), use with caution
     """
-    _active_imports[import_id] = {
-        "status": "running",
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "current": None,
-        "log": [],
-        "summary": None,
-    }
+    with _active_imports_lock:
+        _cleanup_old_imports()
+        _active_imports[import_id] = {
+            "status": "running",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_ts": time.time(),
+            "current": None,
+            "log": [],
+            "summary": None,
+        }
 
     run_start = datetime.now(timezone.utc)
     client, db = _get_db()
@@ -559,8 +594,10 @@ def parse_causelist_bulk(
                 "pdfs_found": 0,
             })
             summary["status"] = "completed"
-            _active_imports[import_id]["status"] = "completed"
-            _active_imports[import_id]["summary"] = summary
+            with _active_imports_lock:
+                if import_id in _active_imports:
+                    _active_imports[import_id]["status"] = "completed"
+                    _active_imports[import_id]["summary"] = summary
             _save_import_log(db, summary, run_start)
             client.close()
             return summary
@@ -742,8 +779,10 @@ def parse_causelist_bulk(
 
     # Save log and finalize
     _save_import_log(db, summary, run_start)
-    _active_imports[import_id]["status"] = summary["status"]
-    _active_imports[import_id]["summary"] = summary
+    with _active_imports_lock:
+        if import_id in _active_imports:
+            _active_imports[import_id]["status"] = summary["status"]
+            _active_imports[import_id]["summary"] = summary
 
     try:
         client.close()

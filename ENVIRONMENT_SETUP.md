@@ -16,6 +16,8 @@ Use this document as the source of truth for runtime environment variables and p
 |---|---|---|
 | `MONGODB_URI` | Yes | Mongo connection for app data |
 | `MONGODB_DB` | Yes | Mongo database name used by app |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Yes | Clerk frontend auth key used by Next.js middleware/auth components |
+| `CLERK_SECRET_KEY` | Yes | Clerk server-side secret used by middleware/auth routes |
 | `CLERK_WEBHOOK_SECRET` | Yes | Verifies Clerk webhook signature at `/api/webhook/clerk` |
 | `CLOUDINARY_CLOUD_NAME` | Yes (uploads) | Cloudinary upload config |
 | `CLOUDINARY_API_KEY` | Yes (uploads) | Cloudinary upload config |

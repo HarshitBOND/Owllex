@@ -4,13 +4,14 @@ LexVert API Routes — FastAPI endpoints for cause list parsing.
 
 import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from .config import settings
 from .models import CaseResponse, ErrorResponse, ParseResponse
@@ -48,7 +49,9 @@ async def parse_cause_list(
         )
 
     # Save to temp file for pdfplumber (requires file path)
-    temp_name = f"{uuid.uuid4().hex}_{file.filename}"
+    raw_name = Path(file.filename or "upload.pdf").name
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
+    temp_name = f"{uuid.uuid4().hex}_{safe_name}"
     temp_path = os.path.join(settings.UPLOAD_DIR, temp_name)
 
     try:
@@ -56,7 +59,7 @@ async def parse_cause_list(
             f.write(content)
 
         start = time.time()
-        cases = parse_pdf(temp_path)
+        cases = await run_in_threadpool(parse_pdf, temp_path)
         elapsed = time.time() - start
 
         logger.info(
@@ -65,13 +68,20 @@ async def parse_cause_list(
         )
 
         # Optional MongoDB insert
-        db_result = None
+        if save_to_db and not settings.MONGODB_URI:
+            raise HTTPException(status_code=503, detail="MongoDB is not configured")
+
         if save_to_db and settings.MONGODB_URI:
             from .db import MongoDB
             db = MongoDB(settings.MONGODB_URI, settings.MONGODB_DB)
-            if db.connect():
-                db_result = db.insert_cases(cases)
+            if not db.connect():
+                raise HTTPException(status_code=503, detail="Failed to connect to MongoDB")
+
+            insert_result = db.insert_cases(cases)
+            if insert_result.get("error"):
                 db.close()
+                raise HTTPException(status_code=503, detail="Failed to insert records into MongoDB")
+            db.close()
 
         return ParseResponse(
             success=True,
@@ -80,7 +90,9 @@ async def parse_cause_list(
             cases=[CaseResponse(**asdict(c)) for c in cases],
         )
 
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
         logger.exception("Failed to parse %s", file.filename)
         raise HTTPException(status_code=400, detail="Failed to parse PDF file")
 
