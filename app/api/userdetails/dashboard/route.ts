@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import Case from "../../lib/models/case"
+import Client from "../../lib/models/client"
 import User from "../../lib/models/user"
 import Task from "../../lib/models/task"
 import SimpleInvoice from "../../lib/models/simple-invoice"
@@ -83,8 +85,7 @@ export async function GET(_req: NextRequest) {
     await connectMongoWithRetry()
 
     const user = await User.findOne({ clerkUid: userId })
-      .populate("cases")
-      .populate("clients")
+      .select("_id cases clients subscription")
       .lean()
       .exec()
 
@@ -127,22 +128,29 @@ export async function GET(_req: NextRequest) {
       })
     }
 
-    const typedUser = user as Record<string, unknown>
-    const cases = ((typedUser.cases as Record<string, unknown>[]) || []).map((caseRecord) => ({
-      ...caseRecord,
-      _recordDate: getBestRecordDate(caseRecord),
-    }))
-    const clients = ((typedUser.clients as Record<string, unknown>[]) || []).map((clientRecord) => ({
-      ...clientRecord,
-      _recordDate: getBestRecordDate(clientRecord),
-    }))
+    const typedUser = user as Record<string, any>
+    const caseIds = Array.isArray(typedUser.cases) ? typedUser.cases : []
+    const clientIds = Array.isArray(typedUser.clients) ? typedUser.clients : []
 
-    const [taskRows, invoices, recentTransactions, recentFailedTransactions, recentJobRuns] =
+    const [caseRows, clientRows, taskRows, completedTaskCount, invoices, recentTransactions, recentFailedTransactions, recentJobRuns] =
       await Promise.all([
-        TaskModel.find({ clerkUid: userId })
+        caseIds.length > 0
+          ? Case.find({ _id: { $in: caseIds } })
+              .select("_id caseNo caseTitle courtName courtDate status createdAt updatedAt")
+              .lean()
+              .exec()
+          : Promise.resolve([]),
+        clientIds.length > 0
+          ? Client.find({ _id: { $in: clientIds } })
+              .select("_id name email contact createdAt updatedAt")
+              .lean()
+              .exec()
+          : Promise.resolve([]),
+        TaskModel.find({ clerkUid: userId, status: "pending" })
           .select("_id task status dueDate updatedAt createdAt")
           .lean()
           .exec(),
+        TaskModel.countDocuments({ clerkUid: userId, status: "completed" }),
         SimpleInvoice.find({ clerkUid: userId })
           .select(
             "_id invoiceNumber clientName status issueDate dueDate total paidAmount currency createdAt updatedAt supportIssueStatus",
@@ -174,8 +182,16 @@ export async function GET(_req: NextRequest) {
     const next30Days = new Date(todayStart.getTime() + 30 * 24 * 60 * 60 * 1000)
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    const pendingTaskRows = (taskRows as any[]).filter((task) => task.status === "pending")
-    const completedTaskRows = (taskRows as any[]).filter((task) => task.status === "completed")
+    const cases = (caseRows as any[]).map((caseRecord) => ({
+      ...caseRecord,
+      _recordDate: getBestRecordDate(caseRecord),
+    }))
+    const clients = (clientRows as any[]).map((clientRecord) => ({
+      ...clientRecord,
+      _recordDate: getBestRecordDate(clientRecord),
+    }))
+
+    const pendingTaskRows = taskRows as any[]
 
     const overdueTasks = pendingTaskRows.filter((task) => {
       const due = parseCourtDate(task.dueDate)
@@ -327,7 +343,7 @@ export async function GET(_req: NextRequest) {
         totalCases: cases.length,
         totalClients: clients.length,
         pendingTasks: pendingTaskRows.length,
-        completedTasks: completedTaskRows.length,
+        completedTasks: Number(completedTaskCount || 0),
         upcomingHearings: upcomingHearings.length,
       },
       recentCases,

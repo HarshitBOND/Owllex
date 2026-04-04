@@ -591,7 +591,7 @@ export default function PDFScraperPage() {
     return (
       <div className="flex">
         <Sidebar />
-        <div className={cn("bg-[#F3F5F9] flex flex-col items-center justify-center min-h-screen w-full transition-all duration-300", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+        <div className={cn("bg-[#F3F5F9] flex flex-col items-center justify-center min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
           <div className="flex flex-col items-center gap-4 max-w-md text-center px-4">
             <div className="p-4 rounded-full bg-red-50 border border-red-200">
               <ShieldAlert size={40} className="text-red-500" />
@@ -643,7 +643,7 @@ export default function PDFScraperPage() {
       <Sidebar />
       <div
         className={cn(
-          "bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300",
+          "bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0",
           isOpen ? "lg:ml-48" : "lg:ml-12"
         )}
       >

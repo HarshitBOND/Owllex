@@ -1317,7 +1317,7 @@ export default function AdminDashboardPage() {
       <Sidebar />
       <div
         className={cn(
-          "bg-[#F3F5F9] dark:bg-gray-950 flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300",
+          "bg-[#F3F5F9] dark:bg-gray-950 flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0",
           isOpen ? "lg:ml-48" : "lg:ml-12"
         )}
       >

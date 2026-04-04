@@ -10,12 +10,15 @@ import { cn } from "@/lib/utils"
 import {
   FileSearch, FileText, Calendar as CalendarIcon,
   Users, Briefcase, CheckSquare, Clock, ArrowRight,
-  TrendingUp, LoaderCircle, BarChart3, Plus, Activity, AlertTriangle
+  TrendingUp, LoaderCircle, BarChart3, Plus, Activity, AlertTriangle,
+  ChevronDown
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { useUser } from "@clerk/nextjs"
-import { redirect } from "next/navigation"
+
+// Mobile Dashboard Section tabs
+type MobileSection = "overview" | "calendar" | "tasks" | "activity"
 
 interface DashboardData {
   stats: {
@@ -73,6 +76,11 @@ const Dashboard = () => {
   const { isLoaded, isSignedIn, user } = useUser()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mobileSection, setMobileSection] = useState<MobileSection>("overview")
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({
+    hearings: true,
+    stats: true,
+  })
 
   useEffect(() => {
     if (isSignedIn) {
@@ -82,6 +90,12 @@ const Dashboard = () => {
         .catch(() => setLoading(false))
     }
   }, [isSignedIn])
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.replace("/")
+    }
+  }, [isLoaded, isSignedIn, router])
 
   if (!isLoaded) {
     return (
@@ -94,7 +108,11 @@ const Dashboard = () => {
     )
   }
   if (!isSignedIn) {
-    return redirect("/")
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#F3F5F9]">
+        <div className="text-sm text-muted-foreground">Redirecting...</div>
+      </div>
+    )
   }
 
   const stats = data?.stats || { totalCases: 0, totalClients: 0, pendingTasks: 0, completedTasks: 0, upcomingHearings: 0 }
@@ -222,27 +240,332 @@ const Dashboard = () => {
     return "Good Evening"
   }
 
+  const toggleCard = (cardId: string) => {
+    setExpandedCards(prev => ({ ...prev, [cardId]: !prev[cardId] }))
+  }
+
+  const mobileSectionTabs = [
+    { id: "overview" as MobileSection, label: "Overview", icon: Briefcase },
+    { id: "calendar" as MobileSection, label: "Calendar", icon: CalendarIcon },
+    { id: "tasks" as MobileSection, label: "Tasks", icon: CheckSquare },
+    { id: "activity" as MobileSection, label: "Activity", icon: Activity },
+  ]
+
   return (
     <div className="flex">
       <Sidebar />
-      <div className={cn("bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+      <div className={cn("bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
         <div className="w-full">
           {/* Header Section */}
           <div className="bg-white border-b border-gray-200 w-full">
-            <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-4">
+            <div className="max-w-[1400px] w-full mx-auto px-3 sm:px-4 md:px-6 py-3 md:py-4">
               <Navbar location="Dashboard" />
               <div className="mb-2">
-                <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">
                   {getGreeting()}, {user?.firstName || "Counselor"} 👋
                 </h2>
-                <p className="text-sm md:text-base text-muted-foreground mt-1">
+                <p className="text-xs sm:text-sm md:text-base text-muted-foreground mt-1">
                   Here&apos;s an overview of your legal workspace
                 </p>
+              </div>
+
+              {/* Mobile Section Tabs - Only visible on mobile */}
+              <div className="flex gap-1 mt-3 overflow-x-auto pb-1 lg:hidden scrollbar-hide">
+                {mobileSectionTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setMobileSection(tab.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all",
+                      mobileSection === tab.id
+                        ? "bg-sidebar-primary text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    )}
+                  >
+                    <tab.icon size={14} />
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
-          <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-6">
+          <div className="max-w-[1400px] w-full mx-auto px-3 sm:px-4 md:px-6 py-4 md:py-6">
+            
+            {/* ===== MOBILE OVERVIEW SECTION ===== */}
+            <div className={cn("lg:hidden", mobileSection !== "overview" && "hidden")}>
+              {/* Mobile Stats Cards - Compact 2x2 grid */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {statCards.map((item) => (
+                  <div
+                    key={item.name}
+                    className={cn(
+                      "bg-white rounded-lg border p-3 shadow-sm",
+                      item.borderColor
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={cn("p-1.5 rounded-md", item.bgColor)}>
+                        <item.icon className={cn("h-4 w-4", item.color)} />
+                      </div>
+                      <p className="text-lg font-bold text-gray-900">
+                        {loading ? "—" : item.value}
+                      </p>
+                    </div>
+                    <p className="text-xs font-medium text-gray-600">{item.name}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Mobile Upcoming Hearings - Collapsible */}
+              <div className="bg-white rounded-lg border border-violet-200 shadow-sm mb-4">
+                <button
+                  onClick={() => toggleCard('hearings')}
+                  className="w-full p-3 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-violet-100 rounded-md">
+                      <Clock className="h-4 w-4 text-violet-600" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="text-sm font-semibold text-gray-900">Upcoming Hearings</h3>
+                      <p className="text-xs text-gray-500">{stats.upcomingHearings} scheduled</p>
+                    </div>
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", expandedCards.hearings && "rotate-180")} />
+                </button>
+                {expandedCards.hearings && (
+                  <div className="px-3 pb-3 space-y-2">
+                    {loading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <LoaderCircle className="animate-spin text-gray-400" size={20} />
+                      </div>
+                    ) : data?.upcomingHearings && data.upcomingHearings.length > 0 ? (
+                      data.upcomingHearings.slice(0, 3).map((hearing: any, i: number) => (
+                        <div key={hearing._id || i} className="flex items-center gap-2 p-2 rounded-md bg-violet-50/50 border border-violet-100" onClick={() => hearing._id && router.push(`/case-tracking/view/${hearing._id}`)}>
+                          <div className="flex flex-col items-center bg-violet-100 rounded px-2 py-1 min-w-[40px]">
+                            <span className="text-[10px] font-medium text-violet-600">
+                              {hearing.courtDate ? new Date(hearing.courtDate).toLocaleDateString('en-US', { month: 'short' }) : '—'}
+                            </span>
+                            <span className="text-sm font-bold text-violet-700">
+                              {hearing.courtDate ? new Date(hearing.courtDate).getDate() : '—'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-gray-900 truncate">{hearing.caseTitle || hearing.caseNo}</p>
+                            <p className="text-[10px] text-gray-500 truncate">{hearing.courtName || 'Court not specified'}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-gray-500 text-center py-2">No upcoming hearings</p>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={() => router.push("/case-tracking")} className="w-full text-xs h-8">
+                      View All Cases <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile Quick Actions */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-4">
+                <div className="p-3 border-b border-gray-100">
+                  <h3 className="text-sm font-semibold text-gray-900">Quick Actions</h3>
+                </div>
+                <div className="p-2 grid grid-cols-2 gap-2">
+                  {quickActions.slice(0, 4).map((item) => (
+                    <button
+                      key={item.name}
+                      onClick={() => router.push(item.href)}
+                      className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 text-left"
+                    >
+                      <span className={cn("p-1.5 rounded-md flex-shrink-0", item.color)}>
+                        {item.icon}
+                      </span>
+                      <span className="text-xs font-medium text-gray-900 truncate">{item.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mobile Analytics Summary */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <div className="bg-white rounded-lg border border-amber-200 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <span className="text-lg font-bold text-gray-900">{analytics.overdueTasks}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">Overdue Tasks</p>
+                </div>
+                <div className="bg-white rounded-lg border border-blue-200 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <BarChart3 className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-bold text-gray-900">{formatMoney(billing.totalOutstanding)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">Outstanding</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== MOBILE CALENDAR SECTION ===== */}
+            <div className={cn("lg:hidden", mobileSection !== "calendar" && "hidden")}>
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                <div className="p-3 border-b border-gray-100">
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <CalendarIcon className="h-4 w-4 text-sidebar-primary" />
+                    Your Calendar
+                  </h3>
+                </div>
+                <div className="p-2">
+                  <Suspense fallback={
+                    <div className="flex items-center justify-center h-64">
+                      <LoaderCircle className="animate-spin text-sidebar-primary" size={24} />
+                    </div>
+                  }>
+                    <Calendar embedded />
+                  </Suspense>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== MOBILE TASKS SECTION ===== */}
+            <div className={cn("lg:hidden", mobileSection !== "tasks" && "hidden")}>
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-4">
+                <div className="p-3 border-b border-gray-100 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                    <CheckSquare className="h-4 w-4 text-orange-600" />
+                    Pending Tasks
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/tasks")} className="text-xs h-7 px-2">
+                    View All
+                  </Button>
+                </div>
+                <div className="p-3 space-y-2">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <LoaderCircle className="animate-spin text-gray-400" size={20} />
+                    </div>
+                  ) : data?.recentTasks && data.recentTasks.length > 0 ? (
+                    data.recentTasks.slice(0, 6).map((task: any, i: number) => (
+                      <div key={task._id || i} className="flex items-center gap-2 p-2 rounded-md bg-gray-50">
+                        <div className={cn(
+                          "w-2 h-2 rounded-full flex-shrink-0",
+                          task.dueDate && new Date(task.dueDate) < new Date() ? "bg-red-500" : "bg-orange-400"
+                        )} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">{task.task}</p>
+                          <p className="text-[10px] text-gray-500">
+                            Due: {task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'}
+                          </p>
+                        </div>
+                        {task.dueDate && new Date(task.dueDate) < new Date() && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 font-medium">Overdue</span>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-xs text-gray-500">No pending tasks</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Task Stats */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white rounded-lg border p-3">
+                  <p className="text-xs text-gray-500">Tasks Due (7 days)</p>
+                  <p className="text-xl font-bold text-gray-900">{analytics.tasksDueNext7Days}</p>
+                </div>
+                <div className="bg-white rounded-lg border border-red-200 p-3">
+                  <p className="text-xs text-gray-500">Overdue</p>
+                  <p className="text-xl font-bold text-red-600">{analytics.overdueTasks}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== MOBILE ACTIVITY SECTION ===== */}
+            <div className={cn("lg:hidden", mobileSection !== "activity" && "hidden")}>
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-4">
+                <div className="p-3 border-b border-gray-100">
+                  <h3 className="text-sm font-semibold text-gray-900">Recent Activity</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {activityFeed.length > 0 ? (
+                    activityFeed.slice(0, 8).map((item: any, index: number) => (
+                      <div
+                        key={`${item.type}-${index}`}
+                        className="p-3 hover:bg-gray-50"
+                        onClick={() => item.href && router.push(item.href)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-gray-900 truncate">{item.title}</p>
+                            <p className="text-[10px] text-gray-500 truncate">{item.subtitle}</p>
+                          </div>
+                          <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                            {item.at ? new Date(item.at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "-"}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 text-xs text-gray-500 text-center">No recent activity</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Recent Cases & Clients */}
+              <div className="space-y-4">
+                {data?.recentCases && data.recentCases.length > 0 && (
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div className="p-3 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <Briefcase className="h-4 w-4 text-blue-600" />
+                        Recent Cases
+                      </h3>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {data.recentCases.slice(0, 3).map((c: any, i: number) => (
+                        <div key={c._id || i} className="p-3" onClick={() => router.push(`/case-tracking/view/${c._id}`)}>
+                          <p className="text-xs font-medium text-gray-900 truncate">{c.caseTitle || c.caseNo}</p>
+                          <p className="text-[10px] text-gray-500">{c.courtName || 'N/A'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {data?.recentClients && data.recentClients.length > 0 && (
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div className="p-3 border-b border-gray-100">
+                      <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <Users className="h-4 w-4 text-emerald-600" />
+                        Recent Clients
+                      </h3>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {data.recentClients.slice(0, 3).map((client: any, i: number) => (
+                        <div key={client._id || i} className="p-3 flex items-center gap-2" onClick={() => router.push(`/my-clients/view/${client._id}`)}>
+                          <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-semibold text-emerald-700">
+                              {(client.name || 'U')[0].toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-gray-900 truncate">{client.name}</p>
+                            <p className="text-[10px] text-gray-500 truncate">{client.email || client.contact || 'No contact'}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ===== DESKTOP LAYOUT (unchanged) ===== */}
+            <div className="hidden lg:block">
             {/* Upcoming Hearings - Primary Focus at Top */}
             <div className="bg-white rounded-xl border border-violet-200 shadow-sm mb-6">
               <div className="p-4 border-b border-gray-100 flex items-center justify-between">
@@ -677,6 +1000,9 @@ const Dashboard = () => {
                 )}
               </div>
             ) : null}
+            </div>
+            {/* End of Desktop Layout */}
+
           </div>
         </div>
       </div>

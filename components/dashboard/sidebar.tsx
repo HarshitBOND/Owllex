@@ -10,6 +10,7 @@ import { useSidebar } from "@/contexts/SidebarContext"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import React from "react"
+import MobileBottomNav from "./mobile-bottom-nav"
 
 const Sidebar = () => {
     const { isOpen, setIsOpen } = useSidebar()
@@ -199,6 +200,9 @@ const Sidebar = () => {
                     <SidebarContent isMobile />
                 </div>
             </div>
+
+            {/* Mobile Bottom Navigation */}
+            <MobileBottomNav />
         </>
     )
 }
