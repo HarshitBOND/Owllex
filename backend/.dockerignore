@@ -1,0 +1,39 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test and tooling artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Git and editor metadata
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Local environment and secrets
+.env
+.env.*
+
+# Local uploads and temp files
+uploads/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build context docs not needed in runtime image
+README.md
+tests/
