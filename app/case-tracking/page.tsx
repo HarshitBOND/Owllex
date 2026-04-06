@@ -70,7 +70,7 @@ const CaseTracking = () => {
 
     if (!isLoaded) {
         return (
-          <div className="flex items-center justify-center min-h-screen">
+          <div className="flex items-center justify-center min-h-screen dark:bg-background">
               <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
           </div>
         )
@@ -82,7 +82,7 @@ const CaseTracking = () => {
     return (
         <div className="flex">
             <Sidebar />
-            <div className={cn("min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+            <div className={cn("min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0 dark:bg-background", isOpen ? "lg:ml-48" : "lg:ml-12")}>
                 <Navbar location="Cases" />
                 <MyCases />
             </div>

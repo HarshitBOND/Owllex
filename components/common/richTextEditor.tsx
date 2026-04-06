@@ -75,7 +75,7 @@ export default function RichTextEditor({id, setTrigger, source}: {id: string, se
         Link.configure({
             openOnClick: false,
             HTMLAttributes: {
-            class: "text-blue-600 underline cursor-pointer",
+            class: "text-primary underline cursor-pointer dark:text-cyan-400",
             },
         }),
         Image,

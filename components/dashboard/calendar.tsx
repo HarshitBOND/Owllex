@@ -64,11 +64,11 @@ export default function Calendar({ isOpen }: { isOpen: boolean }) {
 
       {/* Add Event Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
+          <div className="bg-white dark:bg-card rounded-xl shadow-lg dark:shadow-2xl dark:shadow-cyan-500/5 p-6 w-full max-w-sm mx-4 border dark:border-border" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Add Event — {modalDate}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-md"><X size={18} /></button>
+              <h3 className="font-semibold text-gray-900 dark:text-foreground">Add Event — {modalDate}</h3>
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-muted rounded-md text-gray-600 dark:text-muted-foreground"><X size={18} /></button>
             </div>
             <input
               ref={inputRef}
@@ -77,10 +77,10 @@ export default function Calendar({ isOpen }: { isOpen: boolean }) {
               onChange={e => setNewTitle(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleAddEvent()}
               placeholder="Event title..."
-              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sidebar-primary/30 focus:border-sidebar-primary mb-4"
+              className="w-full px-3 py-2 border-2 border-gray-200 dark:border-border dark:bg-input rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sidebar-primary/30 focus:border-sidebar-primary mb-4"
             />
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-muted rounded-lg">Cancel</button>
               <button onClick={handleAddEvent} className="px-4 py-2 text-sm bg-sidebar-primary text-white rounded-lg hover:bg-sidebar-primary/90">Add Event</button>
             </div>
           </div>

@@ -248,10 +248,10 @@ const ClientDashboard = () => {
                   <div className={`flex flex-col items-center justify-center rounded-lg px-2 py-1.5 min-w-[44px] ${
                     h.daysUntil <= 7 ? "bg-red-100 dark:bg-red-500/20" : "bg-violet-100 dark:bg-violet-500/20"
                   }`}>
-                    <span className={`text-[10px] font-medium ${h.daysUntil <= 7 ? "text-red-600" : "text-violet-600"}`}>
+                    <span className={`text-[10px] font-medium ${h.daysUntil <= 7 ? "text-red-600 dark:text-red-400" : "text-violet-600 dark:text-violet-400"}`}>
                       {h.parsedDate.toLocaleDateString('en-US', { month: 'short' })}
                     </span>
-                    <span className={`text-sm font-bold ${h.daysUntil <= 7 ? "text-red-700" : "text-violet-700"}`}>
+                    <span className={`text-sm font-bold ${h.daysUntil <= 7 ? "text-red-700 dark:text-red-400" : "text-violet-700 dark:text-violet-400"}`}>
                       {h.parsedDate.getDate()}
                     </span>
                   </div>

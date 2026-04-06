@@ -56,9 +56,9 @@ const statusFilters: Array<{ label: string; value: "all" | SuggestionStatus }> =
 ]
 
 function getStatusStyle(status: SuggestionStatus) {
-  if (status === "approved") return "bg-emerald-50 text-emerald-700 border-emerald-200"
-  if (status === "rejected") return "bg-red-50 text-red-700 border-red-200"
-  return "bg-amber-50 text-amber-700 border-amber-200"
+  if (status === "approved") return "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30"
+  if (status === "rejected") return "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/30"
+  return "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30"
 }
 
 const Suggestions = () => {
@@ -184,7 +184,7 @@ const Suggestions = () => {
 
   if (!isLoaded) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#F3F5F9]">
+      <div className="flex items-center justify-center min-h-screen bg-[#F3F5F9] dark:bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-sidebar-primary" />
       </div>
     )
@@ -196,18 +196,18 @@ const Suggestions = () => {
   return (
     <div className="flex">
       <Sidebar />
-      <div className={cn("bg-[#F3F5F9] min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
-        <div className="bg-white border-b border-gray-200 w-full">
+      <div className={cn("bg-[#F3F5F9] dark:bg-background min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-border w-full">
           <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-4">
             <Navbar location="Suggestions" />
             <div className="mb-2">
               <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-amber-50 rounded-lg">
-                  <WandSparkles className="h-6 w-6 text-amber-600" />
+                <div className="p-2 bg-amber-50 dark:bg-amber-500/10 rounded-lg">
+                  <WandSparkles className="h-6 w-6 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Smart Suggestions</h2>
-                  <p className="text-sm text-gray-500">Submit ideas, track moderation, and rate approved suggestions</p>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-foreground">Smart Suggestions</h2>
+                  <p className="text-sm text-gray-500 dark:text-muted-foreground">Submit ideas, track moderation, and rate approved suggestions</p>
                 </div>
               </div>
             </div>
@@ -215,22 +215,22 @@ const Suggestions = () => {
         </div>
 
         <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-border p-5 mb-6">
             <div className="flex items-center gap-2 mb-1">
               <Send className="h-4 w-4 text-sidebar-primary" />
-              <p className="font-semibold text-gray-900">Submit a new suggestion</p>
+              <p className="font-semibold text-gray-900 dark:text-foreground">Submit a new suggestion</p>
             </div>
-            <p className="text-sm text-gray-500 mb-4">Suggestions are reviewed by support/admin before being publicly visible.</p>
+            <p className="text-sm text-gray-500 dark:text-muted-foreground mb-4">Suggestions are reviewed by support/admin before being publicly visible.</p>
 
             {notice?.kind === "success" && (
-              <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 flex items-center gap-2">
+              <div className="mb-4 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
                 {notice.text}
               </div>
             )}
 
             {notice?.kind === "error" && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 flex items-center gap-2">
+              <div className="mb-4 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400 flex items-center gap-2">
                 <CircleAlert className="h-4 w-4" />
                 {notice.text}
               </div>
@@ -249,7 +249,7 @@ const Suggestions = () => {
                 <select
                   value={formData.category}
                   onChange={(event) => setFormData((prev) => ({ ...prev, category: event.target.value }))}
-                  className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                  className="w-full h-10 rounded-md border border-gray-200 dark:border-border bg-white dark:bg-input px-3 text-sm dark:text-foreground"
                 >
                   {categories.filter((cat) => cat !== "All").map((category) => (
                     <option key={category} value={category}>
@@ -289,12 +289,12 @@ const Suggestions = () => {
           {/* Search & Filters */}
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-muted-foreground" />
               <Input
                 placeholder="Search suggestions..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 bg-white h-11"
+                className="pl-10 bg-white dark:bg-card h-11"
               />
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
@@ -306,7 +306,7 @@ const Suggestions = () => {
                     "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
                     selectedCategory === cat
                       ? "bg-sidebar-primary text-white"
-                      : "bg-white text-gray-600 border-2 border-gray-200 hover:bg-gray-50"
+                      : "bg-white dark:bg-card text-gray-600 dark:text-foreground border-2 border-gray-200 dark:border-border hover:bg-gray-50 dark:hover:bg-muted"
                   )}
                 >
                   {cat}
@@ -325,7 +325,7 @@ const Suggestions = () => {
                   "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
                   statusFilter === item.value
                     ? "bg-sidebar-primary text-white border-sidebar-primary"
-                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
+                    : "bg-white dark:bg-card text-gray-600 dark:text-foreground border-gray-200 dark:border-border hover:bg-gray-50 dark:hover:bg-muted",
                 )}
               >
                 {item.label}
@@ -335,7 +335,7 @@ const Suggestions = () => {
 
           {/* Suggestions Grid */}
           {loading ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-10 flex items-center justify-center">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-border p-10 flex items-center justify-center">
               <Loader2 className="h-6 w-6 text-sidebar-primary animate-spin" />
             </div>
           ) : (
@@ -343,24 +343,24 @@ const Suggestions = () => {
               {visibleItems.map((suggestion) => (
                 <div
                   key={suggestion._id}
-                  className="bg-white rounded-xl border-2 border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 p-5 group"
+                  className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border shadow-sm hover:shadow-md dark:shadow-none transition-all duration-300 p-5 group"
                 >
                   <div className="flex items-start justify-between mb-3 gap-2">
                     <div>
-                      <h3 className="font-semibold text-gray-900 mb-1 leading-snug">{suggestion.title}</h3>
-                      <p className="text-xs text-gray-400">{suggestion.category}</p>
+                      <h3 className="font-semibold text-gray-900 dark:text-foreground mb-1 leading-snug">{suggestion.title}</h3>
+                      <p className="text-xs text-gray-400 dark:text-muted-foreground">{suggestion.category}</p>
                     </div>
                     <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold", getStatusStyle(suggestion.status))}>
                       {suggestion.status.replace("_", " ")}
                     </span>
                   </div>
 
-                  <p className="text-sm text-gray-600 mb-4 line-clamp-4">{suggestion.description}</p>
+                  <p className="text-sm text-gray-600 dark:text-muted-foreground mb-4 line-clamp-4">{suggestion.description}</p>
 
                   {suggestion.isMine && suggestion.adminNotes ? (
-                    <div className="mb-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-                      <p className="text-[11px] font-medium text-gray-700">Admin note</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{suggestion.adminNotes}</p>
+                    <div className="mb-3 rounded-md border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted px-3 py-2">
+                      <p className="text-[11px] font-medium text-gray-700 dark:text-foreground">Admin note</p>
+                      <p className="text-xs text-gray-600 dark:text-muted-foreground mt-0.5">{suggestion.adminNotes}</p>
                     </div>
                   ) : null}
 
@@ -383,7 +383,7 @@ const Suggestions = () => {
                             <Star
                               className={cn(
                                 "h-4 w-4",
-                                active ? "fill-amber-400 text-amber-400" : "text-gray-300",
+                                active ? "fill-amber-400 text-amber-400" : "text-gray-300 dark:text-gray-600",
                               )}
                             />
                           </button>
@@ -391,11 +391,11 @@ const Suggestions = () => {
                       })}
                     </div>
 
-                    <div className="text-xs text-gray-500 flex items-center gap-1">
+                    <div className="text-xs text-gray-500 dark:text-muted-foreground flex items-center gap-1">
                       <span>{suggestion.ratingAverage.toFixed(1)}</span>
                       <span>·</span>
                       <span>{suggestion.ratingCount} rating{suggestion.ratingCount === 1 ? "" : "s"}</span>
-                      <ArrowRight className="h-3.5 w-3.5 text-gray-400" />
+                      <ArrowRight className="h-3.5 w-3.5 text-gray-400 dark:text-muted-foreground" />
                     </div>
                   </div>
                 </div>

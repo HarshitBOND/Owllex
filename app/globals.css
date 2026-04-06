@@ -56,38 +56,39 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  /* Rich, modern dark theme with cyan/teal accents */
+  --background: #0a0f14;
+  --foreground: #e8ecf0;
+  --card: #111820;
+  --card-foreground: #e8ecf0;
+  --popover: #111820;
+  --popover-foreground: #e8ecf0;
+  --primary: #22d3ee;
+  --primary-foreground: #0a0f14;
+  --secondary: #1e293b;
+  --secondary-foreground: #e8ecf0;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #14b8a6;
+  --accent-foreground: #0a0f14;
+  --destructive: #ef4444;
+  --destructive-foreground: #fef2f2;
+  --border: #1e3a5f;
+  --input: #1e293b;
+  --ring: #22d3ee;
+  --chart-1: #22d3ee;
+  --chart-2: #14b8a6;
+  --chart-3: #f59e0b;
+  --chart-4: #a855f7;
+  --chart-5: #ec4899;
+  --sidebar: #0d1117;
+  --sidebar-foreground: #e8ecf0;
+  --sidebar-primary: #22d3ee;
+  --sidebar-primary-foreground: #0a0f14;
+  --sidebar-accent: #1e3a5f;
+  --sidebar-accent-foreground: #e8ecf0;
+  --sidebar-border: #1e3a5f;
+  --sidebar-ring: #22d3ee;
 }
 
 @theme inline {
@@ -156,7 +157,7 @@
 
 .ProseMirror table td,
 .ProseMirror table th {
-  border: 2px solid #cbd5e0;
+  border: 2px solid var(--border);
   padding: 8px;
   vertical-align: top;
   box-sizing: border-box;
@@ -165,7 +166,7 @@
 }
 
 .ProseMirror table th {
-  background-color: #f7fafc;
+  background-color: var(--muted);
   font-weight: bold;
   text-align: left;
 }
@@ -186,18 +187,25 @@
 }
 
 .ProseMirror code {
-  background-color: #f3f4f6;
+  background-color: var(--muted);
   border-radius: 4px;
   padding: 2px 6px;
   font-family: 'Courier New', monospace;
+  color: var(--foreground);
 }
 
 .ProseMirror pre {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: #0d1117;
+  color: #e8ecf0;
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
+  border: 1px solid var(--border);
+}
+
+.dark .ProseMirror pre {
+  background: #0a0f14;
+  border-color: #1e3a5f;
 }
 
 .ProseMirror pre code {
@@ -207,16 +215,16 @@
 }
 
 .ProseMirror blockquote {
-  border-left: 4px solid #3b82f6;
+  border-left: 4px solid var(--primary);
   padding-left: 16px;
   margin-left: 0;
-  color: #6b7280;
+  color: var(--muted-foreground);
   font-style: italic;
 }
 
 .ProseMirror hr {
   border: none;
-  border-top: 2px solid #e5e7eb;
+  border-top: 2px solid var(--border);
   margin: 2em 0;
 }
 
@@ -224,6 +232,17 @@
   max-width: 100%;
   height: auto;
   border-radius: 8px;
+}
+
+/* ProseMirror link styling for dark mode */
+.ProseMirror a {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.dark .ProseMirror a {
+  color: #22d3ee;
 }
 
 /* Hide the native clock icon in time inputs */
@@ -287,4 +306,206 @@
 
 .slide-in-from-bottom-5 {
   animation-name: slide-in-from-bottom-5;
+}
+
+/* FullCalendar Dark Mode */
+.dark .fc {
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: #111820;
+  --fc-neutral-text-color: #94a3b8;
+  --fc-border-color: #1e3a5f;
+  --fc-button-bg-color: #1e293b;
+  --fc-button-border-color: #1e3a5f;
+  --fc-button-hover-bg-color: #334155;
+  --fc-button-hover-border-color: #22d3ee;
+  --fc-button-active-bg-color: #0e7490;
+  --fc-button-active-border-color: #22d3ee;
+  --fc-event-bg-color: #0e7490;
+  --fc-event-border-color: #22d3ee;
+  --fc-event-text-color: #ffffff;
+  --fc-today-bg-color: rgba(34, 211, 238, 0.1);
+  --fc-list-event-hover-bg-color: #1e293b;
+}
+
+.dark .fc .fc-toolbar-title {
+  color: #e8ecf0;
+}
+
+.dark .fc .fc-col-header-cell-cushion,
+.dark .fc .fc-daygrid-day-number {
+  color: #e8ecf0;
+}
+
+.dark .fc .fc-button {
+  color: #e8ecf0 !important;
+}
+
+.dark .fc .fc-button:disabled {
+  opacity: 0.5;
+}
+
+.dark .fc .fc-daygrid-day.fc-day-today {
+  background-color: rgba(34, 211, 238, 0.08) !important;
+}
+
+.dark .fc .fc-daygrid-day:hover {
+  background-color: rgba(34, 211, 238, 0.05);
+}
+
+/* Dark mode stat card colors - improved contrast */
+.dark .stat-card-blue {
+  --stat-color: #38bdf8;
+  --stat-bg: rgba(56, 189, 248, 0.12);
+  --stat-border: rgba(56, 189, 248, 0.25);
+}
+
+.dark .stat-card-emerald {
+  --stat-color: #34d399;
+  --stat-bg: rgba(52, 211, 153, 0.12);
+  --stat-border: rgba(52, 211, 153, 0.25);
+}
+
+.dark .stat-card-orange {
+  --stat-color: #fb923c;
+  --stat-bg: rgba(251, 146, 60, 0.12);
+  --stat-border: rgba(251, 146, 60, 0.25);
+}
+
+.dark .stat-card-violet {
+  --stat-color: #a78bfa;
+  --stat-bg: rgba(167, 139, 250, 0.12);
+  --stat-border: rgba(167, 139, 250, 0.25);
+}
+
+/* Dark mode override for common bg-white patterns */
+.dark .bg-white {
+  background-color: var(--card) !important;
+}
+
+/* Improved focus rings for dark mode */
+.dark *:focus-visible {
+  outline-color: #22d3ee;
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #0a0f14;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #1e3a5f;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Calendar event colors for dark mode */
+:root {
+  --calendar-event: #164e63;
+  --calendar-event-light: rgba(22, 78, 99, 0.15);
+  --calendar-hover: rgba(22, 78, 99, 0.05);
+  --shadow-calendar: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dark {
+  --calendar-event: #22d3ee;
+  --calendar-event-light: rgba(34, 211, 238, 0.15);
+  --calendar-hover: rgba(34, 211, 238, 0.05);
+  --shadow-calendar: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+}
+
+/* Lexvert calendar custom colors */
+.bg-calendar-event-light {
+  background-color: var(--calendar-event-light);
+}
+
+.text-calendar-event {
+  color: var(--calendar-event);
+}
+
+.hover\:bg-calendar-hover:hover {
+  background-color: var(--calendar-hover);
+}
+
+.shadow-calendar {
+  box-shadow: var(--shadow-calendar);
+}
+
+/* Text color overrides for common gray patterns */
+.dark .text-gray-900 {
+  color: var(--foreground);
+}
+
+.dark .text-gray-700 {
+  color: var(--foreground);
+}
+
+.dark .text-gray-600 {
+  color: var(--muted-foreground);
+}
+
+.dark .text-gray-500 {
+  color: var(--muted-foreground);
+}
+
+.dark .text-gray-400 {
+  color: var(--muted-foreground);
+}
+
+/* Border color overrides */
+.dark .border-gray-200 {
+  border-color: var(--border);
+}
+
+.dark .border-gray-100 {
+  border-color: var(--border);
+}
+
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border);
+}
+
+/* Background overrides */
+.dark .bg-gray-50 {
+  background-color: var(--muted);
+}
+
+.dark .bg-gray-100 {
+  background-color: var(--muted);
+}
+
+.dark .hover\:bg-gray-50:hover {
+  background-color: var(--muted);
+}
+
+.dark .hover\:bg-gray-100:hover {
+  background-color: var(--secondary);
+}
+
+/* Override hardcoded light gray background used as page background */
+.dark .bg-\[\#F3F5F9\] {
+  background-color: var(--background) !important;
+}
+
+/* Override common color pattern hardcoding in light mode */
+.dark .text-\[\#164e63\] {
+  color: #22d3ee;
+}
+
+.dark .border-\[\#164e63\] {
+  border-color: #22d3ee;
+}
+
+/* Color scheme enforcement for inputs */
+.dark select,
+.dark input,
+.dark textarea {
+  color-scheme: dark;
 }

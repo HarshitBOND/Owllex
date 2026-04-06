@@ -311,7 +311,7 @@ export default function SettingsPage() {
 
   if (!isLoaded) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#F3F5F9]">
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-sidebar-primary" />
       </div>
     )
@@ -324,37 +324,37 @@ export default function SettingsPage() {
   return (
     <div className="flex">
       <Sidebar />
-      <div className={cn("bg-[#F3F5F9] min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
-        <div className="bg-white border-b border-gray-200 w-full">
+      <div className={cn("bg-[#F3F5F9] dark:bg-background min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-border w-full">
           <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-4">
             <Navbar location="Settings" />
             <div className="flex items-center gap-2 mt-1">
               <Settings className="h-5 w-5 text-sidebar-primary" />
-              <p className="text-sm text-gray-600">Manage account, notifications, and billing preferences</p>
+              <p className="text-sm text-gray-600 dark:text-muted-foreground">Manage account, notifications, and billing preferences</p>
             </div>
           </div>
         </div>
 
         <div className="max-w-[1400px] w-full mx-auto px-4 md:px-6 py-6 space-y-5">
           {loading ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-10 flex items-center justify-center">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-border p-10 flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-sidebar-primary" />
             </div>
           ) : (
             <>
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="bg-white dark:bg-card border border-gray-200 dark:border-border rounded-xl p-5">
                 <div className="flex items-center gap-2 mb-1">
-                  <UserRound className="h-4 w-4 text-blue-600" />
-                  <h3 className="font-semibold text-gray-900">Account Preferences</h3>
+                  <UserRound className="h-4 w-4 text-blue-600 dark:text-sky-400" />
+                  <h3 className="font-semibold text-gray-900 dark:text-foreground">Account Preferences</h3>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">Update profile metadata and account-level preferences.</p>
+                <p className="text-xs text-gray-500 dark:text-muted-foreground mb-4">Update profile metadata and account-level preferences.</p>
 
                 {accountNotice && (
                   <div className={cn(
                     "mb-4 rounded-md border px-3 py-2 text-sm flex items-center gap-2",
                     accountNotice.kind === "success"
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                      : "bg-red-50 border-red-200 text-red-700",
+                      ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                      : "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400",
                   )}>
                     {accountNotice.kind === "success" ? (
                       <CheckCircle2 className="h-4 w-4" />
@@ -397,7 +397,7 @@ export default function SettingsPage() {
                         defaultLandingPage: event.target.value as AccountSettingsState["defaultLandingPage"],
                       }))
                     }
-                    className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                    className="h-10 rounded-md border border-gray-200 dark:border-border bg-white dark:bg-input px-3 text-sm dark:text-foreground"
                   >
                     <option value="/dashboard">Default Landing: Dashboard</option>
                     <option value="/case-tracking">Default Landing: Case Tracking</option>
@@ -405,7 +405,7 @@ export default function SettingsPage() {
                     <option value="/invoices">Default Landing: Invoices</option>
                   </select>
 
-                  <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 h-10 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 rounded-md border border-gray-200 dark:border-border px-3 h-10 text-sm text-gray-700 dark:text-foreground">
                     <input
                       type="checkbox"
                       checked={account.weeklyDigestEnabled}
@@ -419,7 +419,7 @@ export default function SettingsPage() {
                     Weekly digest email
                   </label>
 
-                  <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 h-10 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 rounded-md border border-gray-200 dark:border-border px-3 h-10 text-sm text-gray-700 dark:text-foreground">
                     <input
                       type="checkbox"
                       checked={account.showBillingSummary}
@@ -448,19 +448,19 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="bg-white dark:bg-card border border-gray-200 dark:border-border rounded-xl p-5">
                 <div className="flex items-center gap-2 mb-1">
-                  <BellRing className="h-4 w-4 text-violet-600" />
-                  <h3 className="font-semibold text-gray-900">Notification Preferences</h3>
+                  <BellRing className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  <h3 className="font-semibold text-gray-900 dark:text-foreground">Notification Preferences</h3>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">Set timezone, send window, and reminder offsets.</p>
+                <p className="text-xs text-gray-500 dark:text-muted-foreground mb-4">Set timezone, send window, and reminder offsets.</p>
 
                 {notificationNotice && (
                   <div className={cn(
                     "mb-4 rounded-md border px-3 py-2 text-sm flex items-center gap-2",
                     notificationNotice.kind === "success"
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                      : "bg-red-50 border-red-200 text-red-700",
+                      ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                      : "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400",
                   )}>
                     {notificationNotice.kind === "success" ? (
                       <CheckCircle2 className="h-4 w-4" />
@@ -472,7 +472,7 @@ export default function SettingsPage() {
                 )}
 
                 <div className="grid lg:grid-cols-4 gap-3">
-                  <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 h-10 text-sm text-gray-700 lg:col-span-1">
+                  <label className="flex items-center gap-2 rounded-md border border-gray-200 dark:border-border px-3 h-10 text-sm text-gray-700 dark:text-foreground lg:col-span-1">
                     <input
                       type="checkbox"
                       checked={notificationPreferences.emailEnabled}
@@ -508,7 +508,7 @@ export default function SettingsPage() {
                         sendWindowStartHour: Number(event.target.value),
                       }))
                     }
-                    className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                    className="h-10 rounded-md border border-gray-200 dark:border-border bg-white dark:bg-input px-3 text-sm dark:text-foreground"
                   >
                     {hourOptions.map((hour) => (
                       <option key={`start-${hour}`} value={hour}>
@@ -525,7 +525,7 @@ export default function SettingsPage() {
                         sendWindowEndHour: Number(event.target.value),
                       }))
                     }
-                    className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                    className="h-10 rounded-md border border-gray-200 dark:border-border bg-white dark:bg-input px-3 text-sm dark:text-foreground"
                   >
                     {hourOptions
                       .map((hour) => hour + 1)
@@ -539,7 +539,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-3">
-                  <p className="text-xs text-gray-500 mb-2">Reminder offsets</p>
+                  <p className="text-xs text-gray-500 dark:text-muted-foreground mb-2">Reminder offsets</p>
                   <div className="flex flex-wrap gap-2">
                     {[7, 3, 1].map((offset) => {
                       const isActive = notificationPreferences.reminderOffsets.includes(offset)
@@ -552,7 +552,7 @@ export default function SettingsPage() {
                             "px-3 py-1.5 rounded-md text-xs border",
                             isActive
                               ? "bg-sidebar-primary text-white border-sidebar-primary"
-                              : "bg-white text-gray-600 border-gray-200",
+                              : "bg-white dark:bg-input text-gray-600 dark:text-foreground border-gray-200 dark:border-border",
                           )}
                         >
                           {offset} day{offset === 1 ? "" : "s"} before
@@ -576,19 +576,19 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="bg-white dark:bg-card border border-gray-200 dark:border-border rounded-xl p-5">
                 <div className="flex items-center gap-2 mb-1">
-                  <ReceiptText className="h-4 w-4 text-emerald-600" />
-                  <h3 className="font-semibold text-gray-900">Billing Settings</h3>
+                  <ReceiptText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="font-semibold text-gray-900 dark:text-foreground">Billing Settings</h3>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">Monitor plan lifecycle and transaction history.</p>
+                <p className="text-xs text-gray-500 dark:text-muted-foreground mb-4">Monitor plan lifecycle and transaction history.</p>
 
                 {billingNotice && (
                   <div className={cn(
                     "mb-4 rounded-md border px-3 py-2 text-sm flex items-center gap-2",
                     billingNotice.kind === "success"
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                      : "bg-red-50 border-red-200 text-red-700",
+                      ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                      : "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400",
                   )}>
                     {billingNotice.kind === "success" ? (
                       <CheckCircle2 className="h-4 w-4" />
@@ -600,17 +600,17 @@ export default function SettingsPage() {
                 )}
 
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                    <p className="text-xs text-gray-500">Plan</p>
-                    <p className="font-semibold text-gray-900 mt-0.5 uppercase">{subscription?.plan || "free"}</p>
+                  <div className="rounded-md border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted p-3">
+                    <p className="text-xs text-gray-500 dark:text-muted-foreground">Plan</p>
+                    <p className="font-semibold text-gray-900 dark:text-foreground mt-0.5 uppercase">{subscription?.plan || "free"}</p>
                   </div>
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                    <p className="text-xs text-gray-500">Status</p>
-                    <p className="font-semibold text-gray-900 mt-0.5 capitalize">{subscription?.status || "active"}</p>
+                  <div className="rounded-md border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted p-3">
+                    <p className="text-xs text-gray-500 dark:text-muted-foreground">Status</p>
+                    <p className="font-semibold text-gray-900 dark:text-foreground mt-0.5 capitalize">{subscription?.status || "active"}</p>
                   </div>
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                    <p className="text-xs text-gray-500">Case Usage</p>
-                    <p className="font-semibold text-gray-900 mt-0.5">
+                  <div className="rounded-md border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted p-3">
+                    <p className="text-xs text-gray-500 dark:text-muted-foreground">Case Usage</p>
+                    <p className="font-semibold text-gray-900 dark:text-foreground mt-0.5">
                       {subscription
                         ? subscription.caseLimit === null
                           ? `${subscription.casesUsed} / Unlimited`
@@ -618,9 +618,9 @@ export default function SettingsPage() {
                         : "—"}
                     </p>
                   </div>
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                    <p className="text-xs text-gray-500">Renewal</p>
-                    <p className="font-semibold text-gray-900 mt-0.5">
+                  <div className="rounded-md border border-gray-200 dark:border-border bg-gray-50 dark:bg-muted p-3">
+                    <p className="text-xs text-gray-500 dark:text-muted-foreground">Renewal</p>
+                    <p className="font-semibold text-gray-900 dark:text-foreground mt-0.5">
                       {subscription?.renewalDate
                         ? new Date(subscription.renewalDate).toLocaleDateString("en-IN")
                         : subscription?.cancelAtPeriodEnd
@@ -650,46 +650,46 @@ export default function SettingsPage() {
                   </Button>
                 </div>
 
-                <div className="rounded-lg border border-gray-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <p className="font-medium text-gray-900">Recent Transactions</p>
-                    <p className="text-xs text-gray-500">{transactions.length} shown</p>
+                <div className="rounded-lg border border-gray-200 dark:border-border overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-border flex items-center justify-between">
+                    <p className="font-medium text-gray-900 dark:text-foreground">Recent Transactions</p>
+                    <p className="text-xs text-gray-500 dark:text-muted-foreground">{transactions.length} shown</p>
                   </div>
 
                   {transactions.length === 0 ? (
-                    <div className="p-6 text-sm text-gray-500 text-center">No transactions available.</div>
+                    <div className="p-6 text-sm text-gray-500 dark:text-muted-foreground text-center">No transactions available.</div>
                   ) : (
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-gray-100 dark:divide-border">
                       {transactions.map((transaction) => (
                         <div key={transaction._id} className="p-4 text-sm space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-gray-900">
+                            <p className="font-medium text-gray-900 dark:text-foreground">
                               {formatAmount(transaction.amount, transaction.currency || "INR")}
                             </p>
                             <span
                               className={cn(
                                 "text-xs px-2 py-1 rounded-full border",
                                 transaction.status === "completed"
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30"
                                   : transaction.status === "failed"
-                                    ? "bg-red-50 text-red-700 border-red-200"
-                                    : "bg-amber-50 text-amber-700 border-amber-200",
+                                    ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/30"
+                                    : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30",
                               )}
                             >
                               {transaction.status}
                             </span>
                           </div>
 
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-muted-foreground">
                             {transaction.paymentGateway} • {formatDateValue(transaction.createdAt)}
                           </p>
 
                           {transaction.description ? (
-                            <p className="text-xs text-gray-600">{transaction.description}</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">{transaction.description}</p>
                           ) : null}
 
                           {transaction.failureReason ? (
-                            <p className="text-xs text-red-600">Failure: {transaction.failureReason}</p>
+                            <p className="text-xs text-red-600 dark:text-red-400">Failure: {transaction.failureReason}</p>
                           ) : null}
 
                           <div className="flex items-center gap-3 text-xs">

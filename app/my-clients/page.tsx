@@ -49,7 +49,7 @@ const MyClients = () => {
 
     if (!isLoaded) {
         return (
-          <div className="flex items-center justify-center min-h-screen">
+          <div className="flex items-center justify-center min-h-screen dark:bg-background">
               <div className="w-12 h-12 border-5 border-t-transparent border-sidebar-primary rounded-full scale-175 animate-spin" />
           </div>
         )
@@ -62,7 +62,7 @@ const MyClients = () => {
     return (
     <div className="flex">
         <Sidebar />
-        <div className={cn("bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+        <div className={cn("bg-[#F3F5F9] dark:bg-background flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
             <div className="w-full">
                 <ClientDashboard />
             </div>

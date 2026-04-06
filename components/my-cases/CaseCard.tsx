@@ -130,21 +130,21 @@ export function CaseCard({ caseData, view, index, onClick }: CaseCardProps) {
 
         {/* Court Date */}
         {caseData.courtDate && (
-          <div className={`rounded-lg p-3 mb-3 border-2 ${daysUntil !== null && daysUntil >= 0 && daysUntil <= 3 ? "bg-destructive/5 border-destructive/20" : "bg-violet-50/50 border-violet-100"}`}>
+          <div className={`rounded-lg p-3 mb-3 border-2 ${daysUntil !== null && daysUntil >= 0 && daysUntil <= 3 ? "bg-destructive/5 border-destructive/20" : "bg-violet-50/50 dark:bg-violet-500/10 border-violet-100 dark:border-violet-500/20"}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Calendar className={`h-4 w-4 ${daysUntil !== null && daysUntil >= 0 && daysUntil <= 3 ? "text-destructive" : "text-violet-600"}`} />
+                <Calendar className={`h-4 w-4 ${daysUntil !== null && daysUntil >= 0 && daysUntil <= 3 ? "text-destructive" : "text-violet-600 dark:text-violet-400"}`} />
                 <div>
                   <p className="text-[10px] text-muted-foreground font-medium">Next Hearing</p>
                   <p className="text-sm font-bold text-foreground">{formatDate(caseData.courtDate)}</p>
                 </div>
               </div>
               {daysUntil !== null && daysUntil <= 0 ? (
-                <span className="flex items-center gap-1 text-xs text-destructive font-bold px-2.5 py-1 bg-red-100 rounded-full">
+                <span className="flex items-center gap-1 text-xs text-destructive font-bold px-2.5 py-1 bg-red-100 dark:bg-red-500/20 rounded-full">
                   <AlertTriangle className="h-3 w-3" /> TODAY
                 </span>
               ) : daysUntil !== null ? (
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${daysUntil <= 3 ? "bg-red-100 text-destructive" : daysUntil <= 7 ? "bg-amber-100 text-amber-700" : "bg-violet-100 text-violet-700"}`}>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${daysUntil <= 3 ? "bg-red-100 dark:bg-red-500/20 text-destructive" : daysUntil <= 7 ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-400"}`}>
                   {daysUntil}d left
                 </span>
               ) : null}

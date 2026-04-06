@@ -412,7 +412,7 @@ export function InvoiceDashboard() {
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-sidebar-primary" />
-          <p className="text-sm text-gray-500">Loading your invoices...</p>
+          <p className="text-sm text-gray-500 dark:text-muted-foreground">Loading your invoices...</p>
         </div>
       </div>
     );
@@ -421,11 +421,11 @@ export function InvoiceDashboard() {
   return (
     <>
       {/* Header Section with Title */}
-      <div className="bg-white border-b border-gray-200 w-full mb-6">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-border w-full mb-6">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Invoice Dashboard</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">Invoice Dashboard</h2>
               <p className="text-sm md:text-base text-muted-foreground mt-1">
                 Track, manage, and monitor all your invoices and payments
               </p>
@@ -450,98 +450,98 @@ export function InvoiceDashboard() {
 
       {/* Stats Cards Grid - Stronger borders */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-        <div className="bg-white rounded-xl border-2 border-emerald-200 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
+        <div className="bg-white dark:bg-card rounded-xl border-2 border-emerald-200 dark:border-emerald-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
           <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-emerald-50">
-              <DollarSign className="h-5 w-5 text-emerald-600" />
+            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
+              <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900">{formatCurrency(stats.totalRevenue)}</p>
-          <p className="text-sm font-semibold text-gray-700 mt-1">Total Revenue</p>
-          <p className="text-xs text-gray-500 hidden md:block">{stats.paidCount} invoices paid</p>
+          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{formatCurrency(stats.totalRevenue)}</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Total Revenue</p>
+          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.paidCount} invoices paid</p>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-amber-200 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
+        <div className="bg-white dark:bg-card rounded-xl border-2 border-amber-200 dark:border-amber-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
           <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-amber-50">
-              <Clock className="h-5 w-5 text-amber-600" />
+            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-500/10">
+              <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900">{formatCurrency(stats.totalPending)}</p>
-          <p className="text-sm font-semibold text-gray-700 mt-1">Pending Amount</p>
-          <p className="text-xs text-gray-500 hidden md:block">{stats.pendingCount} invoices pending</p>
+          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{formatCurrency(stats.totalPending)}</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Pending Amount</p>
+          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.pendingCount} invoices pending</p>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-rose-200 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
+        <div className="bg-white dark:bg-card rounded-xl border-2 border-rose-200 dark:border-rose-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
           <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-rose-50">
-              <AlertTriangle className="h-5 w-5 text-rose-600" />
+            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-500/10">
+              <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900">{formatCurrency(stats.totalOverdue)}</p>
-          <p className="text-sm font-semibold text-gray-700 mt-1">Overdue Amount</p>
-          <p className="text-xs text-gray-500 hidden md:block">{stats.overdueCount} invoices overdue</p>
+          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{formatCurrency(stats.totalOverdue)}</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Overdue Amount</p>
+          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.overdueCount} invoices overdue</p>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-blue-200 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
+        <div className="bg-white dark:bg-card rounded-xl border-2 border-blue-200 dark:border-blue-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
           <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-blue-50">
-              <FileText className="h-5 w-5 text-blue-600" />
+            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-500/10">
+              <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900">{stats.invoiceCount}</p>
-          <p className="text-sm font-semibold text-gray-700 mt-1">Total Invoices</p>
-          <p className="text-xs text-gray-500 hidden md:block">{stats.collectionRate.toFixed(0)}% collection rate</p>
+          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{stats.invoiceCount}</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Total Invoices</p>
+          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.collectionRate.toFixed(0)}% collection rate</p>
         </div>
       </div>
 
       {/* Quick Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-md transition-all duration-300">
+        <div className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-md transition-all duration-300">
           <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50">
-              <ArrowUpRight className="h-5 w-5 text-emerald-600" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
+              <ArrowUpRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <p className="text-lg md:text-2xl font-bold text-gray-900">{stats.paidCount}</p>
-              <p className="text-sm text-gray-600">Invoices Paid</p>
+              <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-foreground">{stats.paidCount}</p>
+              <p className="text-sm text-gray-600 dark:text-muted-foreground">Invoices Paid</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-md transition-all duration-300">
+        <div className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-md transition-all duration-300">
           <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
-              <Activity className="h-5 w-5 text-amber-600" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-500/10">
+              <Activity className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
-              <p className="text-lg md:text-2xl font-bold text-gray-900">{stats.avgPaymentTime}d</p>
-              <p className="text-sm text-gray-600">Avg. Payment Time</p>
+              <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-foreground">{stats.avgPaymentTime}d</p>
+              <p className="text-sm text-gray-600 dark:text-muted-foreground">Avg. Payment Time</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:shadow-md transition-all duration-300">
+        <div className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-md transition-all duration-300">
           <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-              <Users className="h-5 w-5 text-blue-600" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-500/10">
+              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-lg md:text-2xl font-bold text-gray-900">{clientsWithStats.length}</p>
-              <p className="text-sm text-gray-600">Total Clients</p>
+              <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-foreground">{clientsWithStats.length}</p>
+              <p className="text-sm text-gray-600 dark:text-muted-foreground">Total Clients</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Revenue Chart */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)] mb-6">
-        <div className="p-4 md:p-5 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+      <div className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none mb-6">
+        <div className="p-4 md:p-5 border-b border-gray-100 dark:border-border">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-foreground flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-sidebar-primary" />
             Revenue Overview
           </h3>
@@ -553,10 +553,10 @@ export function InvoiceDashboard() {
       </div>
 
       {/* Tabs Section */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+      <div className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none">
         <Tabs defaultValue="invoices" className="w-full">
-          <div className="p-4 md:p-5 border-b border-gray-100">
-            <TabsList className="grid w-full grid-cols-3 lg:w-[400px] h-9 md:h-10 bg-gray-100 p-1">
+          <div className="p-4 md:p-5 border-b border-gray-100 dark:border-border">
+            <TabsList className="grid w-full grid-cols-3 lg:w-[400px] h-9 md:h-10 bg-gray-100 dark:bg-muted p-1">
               <TabsTrigger value="invoices" className="gap-1 md:gap-2 text-xs md:text-sm">
                 <FileText className="h-3 w-3 md:h-4 md:w-4" />
                 <span className="hidden sm:inline">Invoices</span>
@@ -584,15 +584,15 @@ export function InvoiceDashboard() {
               <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1">
                   <div className="sticky top-24">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-900">Client Directory</h3>
+                    <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-foreground">Client Directory</h3>
                     <ClientList clients={clientsWithStats} onSelectClient={handleSelectClient} selectedClientId={selectedClient?.id} />
                   </div>
                 </div>
                 <div className="lg:col-span-2">
                   {selectedClient ? (
                     <div className="space-y-6">
-                      <div className="rounded-xl border-2 border-gray-200 bg-white p-4 md:p-6">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">
+                      <div className="rounded-xl border-2 border-gray-200 dark:border-border bg-white dark:bg-card p-4 md:p-6">
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-foreground">
                           {selectedClient.name}'s Invoices
                         </h3>
                         {clientInvoices.length > 0 ? (
@@ -605,9 +605,9 @@ export function InvoiceDashboard() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center h-64 rounded-xl border-2 border-gray-200 bg-white">
+                    <div className="flex items-center justify-center h-64 rounded-xl border-2 border-gray-200 dark:border-border bg-white dark:bg-card">
                       <div className="text-center">
-                        <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                        <Users className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
                         <p className="text-muted-foreground font-medium">
                           Select a client to view their invoices
                         </p>
@@ -620,43 +620,43 @@ export function InvoiceDashboard() {
 
             <TabsContent value="payments" className="space-y-4 mt-0">
               <div className="grid lg:grid-cols-2 gap-6">
-                <div className="rounded-xl border-2 border-gray-200 bg-white p-4 md:p-6">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-900">Recent Payments</h3>
+                <div className="rounded-xl border-2 border-gray-200 dark:border-border bg-white dark:bg-card p-4 md:p-6">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-foreground">Recent Payments</h3>
                   <PaymentHistory payments={payments} invoices={invoices} />
                 </div>
                 <div className="space-y-6">
-                  <div className="rounded-xl border-2 border-gray-200 bg-white p-4 md:p-6">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-900">Payment Summary</h3>
+                  <div className="rounded-xl border-2 border-gray-200 dark:border-border bg-white dark:bg-card p-4 md:p-6">
+                    <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-foreground">Payment Summary</h3>
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-50 border-2 border-emerald-100">
-                        <span className="text-sm font-medium text-gray-700">Total Received</span>
-                        <span className="text-lg font-bold text-emerald-600">
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border-2 border-emerald-100 dark:border-emerald-500/20">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Received</span>
+                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(payments.reduce((sum, p) => sum + p.amount, 0))}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border-2 border-amber-100">
-                        <span className="text-sm font-medium text-gray-700">Pending</span>
-                        <span className="text-lg font-bold text-amber-600">
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border-2 border-amber-100 dark:border-amber-500/20">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Pending</span>
+                        <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
                           {formatCurrency(stats.totalPending)}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-rose-50 border-2 border-rose-100">
-                        <span className="text-sm font-medium text-gray-700">Overdue</span>
-                        <span className="text-lg font-bold text-rose-600">
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border-2 border-rose-100 dark:border-rose-500/20">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Overdue</span>
+                        <span className="text-lg font-bold text-rose-600 dark:text-rose-400">
                           {formatCurrency(stats.totalOverdue)}
                         </span>
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-xl border-2 border-gray-200 bg-white p-4 md:p-6">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-900">Payment Methods</h3>
+                  <div className="rounded-xl border-2 border-gray-200 dark:border-border bg-white dark:bg-card p-4 md:p-6">
+                    <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-foreground">Payment Methods</h3>
                     <div className="space-y-3">
                       {['Bank Transfer', 'Credit Card', 'PayPal', 'Cash', 'Check'].map((method) => {
                         const count = payments.filter(p => p.method === method.toLowerCase().replace(' ', '_')).length;
                         return (
-                          <div key={method} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                            <span className="text-sm font-medium text-gray-700">{method}</span>
-                            <span className="text-sm font-semibold text-gray-600">
+                          <div key={method} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-muted transition-colors">
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{method}</span>
+                            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">
                               {count} {count !== 1 ? 'payments' : 'payment'}
                             </span>
                           </div>
