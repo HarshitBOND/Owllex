@@ -28,7 +28,10 @@ export async function requireUserContext(request?: NextRequest): Promise<Authent
         message: "Authenticated endpoint access without valid session",
         request,
       })
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json(
+        { success: false, error: "Unauthorized", details: { message: "Missing session" } },
+        { status: 401 },
+      )
     }
 
     await ensureUser(userId)
@@ -37,16 +40,17 @@ export async function requireUserContext(request?: NextRequest): Promise<Authent
       clerkUid: userId,
     }
   } catch (error) {
-    console.error("[ROUTE_GUARD] Auth error:", error instanceof Error ? error.message : String(error))
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error("[ROUTE_GUARD] Auth error:", errorMessage)
     logSecurityEvent({
       type: "auth_failed",
       level: "error",
       message: "Auth function threw error",
       request,
-      details: error instanceof Error ? error.message : String(error),
+      details: { message: errorMessage },
     })
     return NextResponse.json(
-      { success: false, error: "Authentication service unavailable" },
+      { success: false, error: "Authentication service unavailable", details: { message: errorMessage } },
       { status: 503 }
     )
   }
@@ -71,7 +75,10 @@ export async function parseAndValidateJson<T extends z.ZodTypeAny>(
   if (!jsonBody) {
     return {
       success: false,
-      response: NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 }),
+      response: NextResponse.json(
+        { success: false, error: "Invalid JSON body", details: { message: "Invalid JSON body" } },
+        { status: 400 },
+      ),
     }
   }
 
@@ -80,7 +87,10 @@ export async function parseAndValidateJson<T extends z.ZodTypeAny>(
     const firstIssue = parsed.error.issues[0]?.message || "Invalid payload"
     return {
       success: false,
-      response: NextResponse.json({ success: false, error: firstIssue }, { status: 400 }),
+      response: NextResponse.json(
+        { success: false, error: firstIssue, details: { message: firstIssue } },
+        { status: 400 },
+      ),
     }
   }
 
@@ -122,7 +132,7 @@ export async function enforceRateLimit(
         {
           success: false,
           error: "Too many requests. Please try again later.",
-          retryAfterSeconds: result.retryAfterSeconds,
+          details: { message: "Rate limit exceeded" },
         },
         {
           status: 429,
