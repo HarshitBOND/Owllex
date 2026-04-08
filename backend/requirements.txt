@@ -19,4 +19,4 @@ python-dotenv>=1.0
 PyJWT[crypto]>=2.9
 
 # Optional: Production
-gunicorn==23.*
+gunicorn==25.*
