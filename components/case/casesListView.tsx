@@ -6,15 +6,6 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
 import { Loader2 } from "lucide-react"
 import { Case } from "@/app/case-tracking/page"
 import { useRouter } from "next/navigation"

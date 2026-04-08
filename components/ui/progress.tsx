@@ -3,10 +3,9 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-interface ProgressProps {
+interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   value?: number
   className?: string
-  [key: string]: any
 }
 
 const WIDTH_CLASS_BY_BUCKET: Record<number, string> = {
