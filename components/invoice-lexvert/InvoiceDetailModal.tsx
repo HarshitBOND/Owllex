@@ -2,6 +2,7 @@ import { Invoice, PaymentRecord } from '@/components/types/invoice';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -81,6 +82,9 @@ export function InvoiceDetailModal({
               <StatusBadge status={invoice.status} />
             </div>
           </div>
+          <DialogDescription>
+            View and manage invoice details, payments, and actions
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 sm:space-y-6">

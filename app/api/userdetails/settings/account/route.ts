@@ -20,7 +20,7 @@ const updateAccountPreferencesSchema = z
 
 export async function GET() {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(undefined);
     if (userContext instanceof NextResponse) {
       return userContext;
     }
@@ -60,7 +60,7 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(request);
     if (userContext instanceof NextResponse) {
       return userContext;
     }

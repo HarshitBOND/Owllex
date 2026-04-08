@@ -35,6 +35,10 @@ class Settings:
     # Internal auth
     INTERNAL_TOKEN: str = os.getenv("LEXVERT_INTERNAL_TOKEN", "")
 
+    # Clerk JWT auth for user-facing APIs
+    CLERK_JWT_ISSUER: str = os.getenv("CLERK_JWT_ISSUER", "")
+    CLERK_JWT_AUDIENCE: str = os.getenv("CLERK_JWT_AUDIENCE", "")
+
     # Security
     RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("LEXVERT_RATE_LIMIT_WINDOW_SECONDS", "60"))
     RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("LEXVERT_RATE_LIMIT_MAX_REQUESTS", "120"))

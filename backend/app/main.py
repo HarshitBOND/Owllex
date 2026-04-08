@@ -27,6 +27,7 @@ from .models import HealthResponse
 from .routes import router
 from .scraper_routes import scraper_router
 from .security import require_internal_token
+from .userdetails_routes import userdetails_router
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -109,6 +110,7 @@ app.include_router(
     tags=["Scraper"],
     dependencies=[Depends(require_internal_token)],
 )
+app.include_router(userdetails_router)
 
 
 # ─── Health check ────────────────────────────────────────────────────────────

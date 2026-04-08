@@ -1,6 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import User from "@/app/api/lib/models/user";
 
 export interface SupportUser {
@@ -54,7 +54,7 @@ export async function requireSupport(
   const clerkEmail =
     clerkUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || "";
 
-  await connectMongo();
+  await connectMongoWithRetry();
   const user = await User.findOne({ clerkUid: userId }).lean();
 
   if (!user) {

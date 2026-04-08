@@ -2,7 +2,7 @@ import sgMail from "@sendgrid/mail";
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import Complaint from "@/app/api/lib/models/complaint";
 import { enforceRateLimit } from "@/app/api/lib/routeGuards";
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     const { userId } = await auth();
 
-    await connectMongo();
+    await connectMongoWithRetry();
 
     const complaint = await Complaint.create({
       source: "contact-us",

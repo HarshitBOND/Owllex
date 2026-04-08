@@ -326,7 +326,7 @@ const refreshOverdueInvoices = async (clerkUid: string) => {
 
 export async function GET(req: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(req)
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -403,7 +403,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(req)
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -413,7 +413,14 @@ export async function POST(req: NextRequest) {
 
     await ensureUser(userId)
 
-    const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+    let rawBody: Record<string, unknown> | null = null
+    try {
+      rawBody = (await req.json()) as Record<string, unknown> | null
+    } catch (parseError) {
+      console.error("[INVOICE_POST] JSON parse error:", parseError instanceof Error ? parseError.message : String(parseError))
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+
     if (!rawBody) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
@@ -441,18 +448,35 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     })
 
-    await invoice.save()
+    const savedInvoice = await invoice.save()
+    console.log("[INVOICE_POST] Created invoice:", {
+      _id: savedInvoice._id,
+      invoiceNumber: savedInvoice.invoiceNumber,
+      status: savedInvoice.status,
+      clientName: data.clientName,
+    })
 
-    return NextResponse.json({ invoice })
+    return NextResponse.json({ 
+      success: true,
+      invoice: {
+        _id: savedInvoice._id,
+        invoiceNumber: savedInvoice.invoiceNumber,
+        status: savedInvoice.status,
+        clientName: data.clientName,
+        clientEmail: data.clientEmail,
+        total: data.total,
+      }
+    })
   } catch (error) {
-    console.error("Invoice POST error:", error)
-    return NextResponse.json({ error: "Failed to create invoice" }, { status: 500 })
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error("[INVOICE_POST] Error:", errMsg)
+    return NextResponse.json({ error: "Failed to create invoice", details: errMsg }, { status: 500 })
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(req)
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -465,7 +489,14 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Invoice ID required" }, { status: 400 })
     }
 
-    const rawBody = (await req.json().catch(() => null)) as Record<string, unknown> | null
+    let rawBody: Record<string, unknown> | null = null
+    try {
+      rawBody = (await req.json()) as Record<string, unknown> | null
+    } catch (parseError) {
+      console.error("[INVOICE_PUT] JSON parse error:", parseError instanceof Error ? parseError.message : String(parseError))
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+
     if (!rawBody) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
@@ -506,7 +537,18 @@ export async function PUT(req: NextRequest) {
     } | null = null
 
     if (createPaymentLink) {
-      paymentLink = await createInvoicePaymentCheckout({ invoice, clerkUid: userId })
+      try {
+        paymentLink = await createInvoicePaymentCheckout({ invoice, clerkUid: userId })
+      } catch (paymentError) {
+        console.error("[INVOICE_PUT] Payment link creation error:", paymentError instanceof Error ? paymentError.message : String(paymentError))
+        // Continue without payment link on error
+        paymentLink = {
+          created: false,
+          error: paymentError instanceof Error ? paymentError.message : "Failed to create payment link",
+          paymentLinkUrl: null,
+          checkoutSessionId: null,
+        }
+      }
     }
 
     let emailResult: { sent: boolean; reason: string | null } | null = null
@@ -519,10 +561,15 @@ export async function PUT(req: NextRequest) {
       invoice.updatedAt = new Date()
       await invoice.save()
 
-      emailResult = await sendInvoiceEmail({
-        invoice,
-        paymentLinkUrl: paymentLink?.paymentLinkUrl || invoice.paymentLinkUrl || null,
-      })
+      try {
+        emailResult = await sendInvoiceEmail({
+          invoice,
+          paymentLinkUrl: paymentLink?.paymentLinkUrl || invoice.paymentLinkUrl || null,
+        })
+      } catch (emailError) {
+        console.error("[INVOICE_PUT] Email sending error:", emailError instanceof Error ? emailError.message : String(emailError))
+        emailResult = { sent: false, reason: "email-send-failed" }
+      }
     }
 
     return NextResponse.json({
@@ -531,14 +578,19 @@ export async function PUT(req: NextRequest) {
       paymentLink,
     })
   } catch (error) {
-    console.error("Invoice PUT error:", error)
-    return NextResponse.json({ error: "Failed to update invoice" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error("[INVOICE_PUT] Unhandled error:", { message: errorMessage, stack: errorStack })
+    return NextResponse.json(
+      { error: "Failed to update invoice", details: errorMessage },
+      { status: 500 }
+    )
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(req)
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -565,7 +617,7 @@ export async function DELETE(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(req)
     if (userContext instanceof NextResponse) {
       return userContext
     }

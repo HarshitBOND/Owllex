@@ -213,6 +213,18 @@ export default function AdminDashboardPage() {
   const [clFromCheckpoint, setClFromCheckpoint] = useState(true)
   const [clBackendError, setClBackendError] = useState<string | null>(null)
 
+  const openDocument = useCallback((doc: DocumentRecord) => {
+    if (!doc.filePath) return
+
+    const target = doc.filePath.startsWith("http")
+      ? doc.filePath
+      : doc.filePath.startsWith("/")
+        ? doc.filePath
+        : `/${doc.filePath}`
+
+    window.open(target, "_blank", "noopener,noreferrer")
+  }, [])
+
   // ── Admin check ──────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -851,7 +863,7 @@ export default function AdminDashboardPage() {
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{formatBytes(doc.fileSize)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap text-xs">{formatDateTime(doc.createdAt)}</td>
                     <td className="px-4 py-3">
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => openDocument(doc)}>
                         <Eye size={12} /> View
                       </Button>
                     </td>

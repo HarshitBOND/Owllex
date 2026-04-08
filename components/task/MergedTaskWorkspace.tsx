@@ -5,8 +5,10 @@ import { ListTodo, Sparkles, Plus, LoaderCircle, Gavel, CalendarClock } from "lu
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { backendApiUrl } from "@/lib/backendApi";
 import { parseCourtDate } from "@/lib/utils";
 import type { Task as BackendTask } from "@/app/tasks/page";
+import { useAuth } from "@clerk/nextjs";
 import {
   TaskFilters,
   TaskList,
@@ -217,6 +219,7 @@ const mapBackendTaskToProTask = (task: BackendTask): ProTask => {
 
 export default function MergedTaskWorkspace({ tasks, loading, onAddTask, onRefresh }: MergedTaskWorkspaceProps) {
   const { toast } = useToast();
+  const { getToken } = useAuth();
   const [filter, setFilter] = useState<TaskFilter>({
     search: "",
     priority: "all",
@@ -347,9 +350,20 @@ export default function MergedTaskWorkspace({ tasks, loading, onAddTask, onRefre
       dueDate: updates.dueDate ? new Date(updates.dueDate).toISOString() : currentTask.dueDate,
     };
 
-    const response = await fetch("/api/userdetails/tasks", {
+    console.log("[tasks] PUT /api/userdetails/tasks payload", nextPayload);
+
+    const token = await getToken();
+    if (!token) {
+      toast({ title: "Authentication required", description: "Please sign in again.", variant: "destructive" });
+      return;
+    }
+
+    const response = await fetch(backendApiUrl("/api/userdetails/tasks"), {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(nextPayload),
     });
 
@@ -374,9 +388,18 @@ export default function MergedTaskWorkspace({ tasks, loading, onAddTask, onRefre
   };
 
   const deleteTask = async (taskId: string) => {
-    const response = await fetch("/api/userdetails/tasks", {
+    const token = await getToken();
+    if (!token) {
+      toast({ title: "Authentication required", description: "Please sign in again.", variant: "destructive" });
+      return;
+    }
+
+    const response = await fetch(backendApiUrl("/api/userdetails/tasks"), {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ _id: taskId }),
     });
 
@@ -402,11 +425,20 @@ export default function MergedTaskWorkspace({ tasks, loading, onAddTask, onRefre
   };
 
   const handleDeleteCompleted = async () => {
+    const token = await getToken();
+    if (!token) {
+      toast({ title: "Authentication required", description: "Please sign in again.", variant: "destructive" });
+      return;
+    }
+
     const completedTasks = tasks.filter((task) => task.status === "completed");
     for (const task of completedTasks) {
-      await fetch("/api/userdetails/tasks", {
+      await fetch(backendApiUrl("/api/userdetails/tasks"), {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ _id: task._id }),
       });
     }

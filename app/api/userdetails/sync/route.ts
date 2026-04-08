@@ -10,7 +10,7 @@ import { ensureUser } from "../../lib/ensureUser";
  */
 export async function POST() {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(undefined);
     if (userContext instanceof NextResponse) {
       return userContext;
     }

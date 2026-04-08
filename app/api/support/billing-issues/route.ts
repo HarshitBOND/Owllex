@@ -4,7 +4,7 @@ import {
   parsePagination,
   sanitizeQuery,
 } from "@/app/api/lib/adminMiddleware";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import Transaction from "@/app/api/lib/models/transaction";
 import { requireSupport } from "@/app/api/lib/supportMiddleware";
 
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   const support = await requireSupport(request);
   if (support instanceof NextResponse) return support;
 
-  await connectMongo();
+  await connectMongoWithRetry();
 
   const { searchParams } = new URL(request.url);
   const { page, limit, skip } = parsePagination(searchParams);
@@ -101,7 +101,7 @@ export async function PATCH(request: NextRequest) {
   const support = await requireSupport(request);
   if (support instanceof NextResponse) return support;
 
-  await connectMongo();
+  await connectMongoWithRetry();
 
   const body = (await request.json().catch(() => ({}))) as {
     transactionId?: string;

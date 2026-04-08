@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import ScrapedCase from "@/app/api/lib/models/scraped-case";
 import { requireAdmin } from "@/app/api/lib/adminAuth";
 
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (admin instanceof NextResponse) return admin;
 
   try {
-    await connectMongo();
+    await connectMongoWithRetry();
 
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));

@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import ScraperLog from "@/app/api/lib/models/scraper-log";
 import { requireAdmin } from "@/app/api/lib/adminAuth";
 
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (admin instanceof NextResponse) return admin;
 
   try {
-    await connectMongo();
+    await connectMongoWithRetry();
 
     const { searchParams } = new URL(req.url);
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20")));

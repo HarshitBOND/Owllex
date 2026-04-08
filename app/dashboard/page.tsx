@@ -171,7 +171,8 @@ const Dashboard = () => {
       color: "text-blue-600 dark:text-sky-400",
       bgColor: "bg-blue-50 dark:bg-sky-500/10",
       borderColor: "border-blue-200 dark:border-sky-500/30",
-      description: "Total cases in your portfolio"
+      description: "Total cases in your portfolio",
+      href: "/case-tracking",
     },
     {
       name: "Total Clients",
@@ -180,7 +181,8 @@ const Dashboard = () => {
       color: "text-emerald-600 dark:text-emerald-400",
       bgColor: "bg-emerald-50 dark:bg-emerald-500/10",
       borderColor: "border-emerald-200 dark:border-emerald-500/30",
-      description: "Clients under management"
+      description: "Clients under management",
+      href: "/my-clients",
     },
     {
       name: "Pending Tasks",
@@ -189,7 +191,8 @@ const Dashboard = () => {
       color: "text-orange-600 dark:text-orange-400",
       bgColor: "bg-orange-50 dark:bg-orange-500/10",
       borderColor: "border-orange-200 dark:border-orange-500/30",
-      description: "Tasks awaiting completion"
+      description: "Tasks awaiting completion",
+      href: "/tasks",
     },
     {
       name: "Upcoming Hearings",
@@ -198,7 +201,8 @@ const Dashboard = () => {
       color: "text-violet-600 dark:text-violet-400",
       bgColor: "bg-violet-50 dark:bg-violet-500/10",
       borderColor: "border-violet-200 dark:border-violet-500/30",
-      description: "Hearings on schedule"
+      description: "Hearings on schedule",
+      href: "/case-tracking",
     },
   ]
 
@@ -297,10 +301,11 @@ const Dashboard = () => {
               {/* Mobile Stats Cards - Compact 2x2 grid */}
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {statCards.map((item) => (
-                  <div
+                  <button
                     key={item.name}
+                    onClick={() => router.push(item.href)}
                     className={cn(
-                      "bg-white dark:bg-card rounded-lg border p-3 shadow-sm",
+                      "bg-white dark:bg-card rounded-lg border p-3 shadow-sm text-left transition-all hover:shadow-md",
                       item.borderColor
                     )}
                   >
@@ -313,7 +318,7 @@ const Dashboard = () => {
                       </p>
                     </div>
                     <p className="text-xs font-medium text-gray-600 dark:text-muted-foreground">{item.name}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
 
@@ -390,20 +395,26 @@ const Dashboard = () => {
 
               {/* Mobile Analytics Summary */}
               <div className="grid grid-cols-2 gap-2 mb-4">
-                <div className="bg-white dark:bg-card rounded-lg border border-amber-200 dark:border-amber-500/30 p-3">
+                <button
+                  onClick={() => router.push("/tasks")}
+                  className="bg-white dark:bg-card rounded-lg border border-amber-200 dark:border-amber-500/30 p-3 text-left transition-all hover:shadow-md"
+                >
                   <div className="flex items-center justify-between mb-1">
                     <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                     <span className="text-lg font-bold text-gray-900 dark:text-foreground">{analytics.overdueTasks}</span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Overdue Tasks</p>
-                </div>
-                <div className="bg-white dark:bg-card rounded-lg border border-blue-200 dark:border-sky-500/30 p-3">
+                </button>
+                <button
+                  onClick={() => router.push("/invoices")}
+                  className="bg-white dark:bg-card rounded-lg border border-blue-200 dark:border-sky-500/30 p-3 text-left transition-all hover:shadow-md"
+                >
                   <div className="flex items-center justify-between mb-1">
                     <BarChart3 className="h-4 w-4 text-blue-600 dark:text-sky-400" />
                     <span className="text-sm font-bold text-gray-900 dark:text-foreground">{formatMoney(billing.totalOutstanding)}</span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Outstanding</p>
-                </div>
+                </button>
               </div>
             </div>
 
@@ -635,10 +646,11 @@ const Dashboard = () => {
             {/* Stats Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
               {statCards.map((item) => (
-                <div
+                <button
                   key={item.name}
+                  onClick={() => router.push(item.href)}
                   className={cn(
-                    "bg-white dark:bg-card rounded-xl border p-4 md:p-5 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer group",
+                    "bg-white dark:bg-card rounded-xl border p-4 md:p-5 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer group text-left",
                     item.borderColor
                   )}
                 >
@@ -657,7 +669,7 @@ const Dashboard = () => {
                   </p>
                   <p className="text-sm font-medium text-gray-700 dark:text-foreground mt-1">{item.name}</p>
                   <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{item.description}</p>
-                </div>
+                </button>
               ))}
             </div>
 
@@ -705,41 +717,53 @@ const Dashboard = () => {
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-              <div className="bg-white dark:bg-card rounded-xl border border-amber-200 dark:border-amber-500/30 p-4 shadow-sm">
+              <button
+                onClick={() => router.push("/tasks")}
+                className="bg-white dark:bg-card rounded-xl border border-amber-200 dark:border-amber-500/30 p-4 shadow-sm text-left transition-all hover:shadow-md"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Overdue Tasks</p>
                   <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-foreground mt-2">{analytics.overdueTasks}</p>
                 <p className="text-xs text-gray-500 dark:text-muted-foreground mt-1">Pending work past due date</p>
-              </div>
+              </button>
 
-              <div className="bg-white dark:bg-card rounded-xl border border-violet-200 dark:border-violet-500/30 p-4 shadow-sm">
+              <button
+                onClick={() => router.push("/case-tracking")}
+                className="bg-white dark:bg-card rounded-xl border border-violet-200 dark:border-violet-500/30 p-4 shadow-sm text-left transition-all hover:shadow-md"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Hearings (30d)</p>
                   <Clock className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-foreground mt-2">{analytics.hearingsNext30Days}</p>
                 <p className="text-xs text-gray-500 dark:text-muted-foreground mt-1">Scheduled court appearances</p>
-              </div>
+              </button>
 
-              <div className="bg-white dark:bg-card rounded-xl border border-blue-200 dark:border-sky-500/30 p-4 shadow-sm">
+              <button
+                onClick={() => router.push("/invoices")}
+                className="bg-white dark:bg-card rounded-xl border border-blue-200 dark:border-sky-500/30 p-4 shadow-sm text-left transition-all hover:shadow-md"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Outstanding</p>
                   <BarChart3 className="h-4 w-4 text-blue-600 dark:text-sky-400" />
                 </div>
                 <p className="text-xl font-bold text-gray-900 dark:text-foreground mt-2">{formatMoney(billing.totalOutstanding)}</p>
                 <p className="text-xs text-gray-500 dark:text-muted-foreground mt-1">Uncollected invoice amount</p>
-              </div>
+              </button>
 
-              <div className="bg-white dark:bg-card rounded-xl border border-rose-200 dark:border-rose-500/30 p-4 shadow-sm">
+              <button
+                onClick={() => router.push("/invoices")}
+                className="bg-white dark:bg-card rounded-xl border border-rose-200 dark:border-rose-500/30 p-4 shadow-sm text-left transition-all hover:shadow-md"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Failed Txn (30d)</p>
                   <Activity className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-foreground mt-2">{analytics.recentFailedTransactions}</p>
                 <p className="text-xs text-gray-500 dark:text-muted-foreground mt-1">Recent payment failures</p>
-              </div>
+              </button>
             </div>
 
             <div className="grid lg:grid-cols-2 gap-6 mb-6">

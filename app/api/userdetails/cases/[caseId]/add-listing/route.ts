@@ -39,7 +39,7 @@ export async function POST(
   { params }: { params: Promise<{ caseId: string }> },
 ) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(request)
     if (userContext instanceof NextResponse) {
       return userContext
     }

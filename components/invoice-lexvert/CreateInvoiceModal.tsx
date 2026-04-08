@@ -3,6 +3,7 @@ import { Client, Invoice, InvoiceItem } from '@/components/types/invoice';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -104,7 +105,7 @@ export function CreateInvoiceModal({
     }).format(amount);
   };
 
-  const handleSave = (send: boolean = false) => {
+  const handleSave = async (send: boolean = false) => {
     const invoiceData = {
       ...(editInvoice ? { id: editInvoice.id } : {}),
       clientId: selectedClient,
@@ -119,12 +120,17 @@ export function CreateInvoiceModal({
       total,
     };
     
-    if (send) {
-      onSaveAndSend(invoiceData);
-    } else {
-      onSave(invoiceData);
+    try {
+      if (send) {
+        await onSaveAndSend(invoiceData);
+      } else {
+        await onSave(invoiceData);
+      }
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Failed to save invoice:', error);
+      // Don't close modal on error
     }
-    onOpenChange(false);
   };
 
   const resetForm = () => {

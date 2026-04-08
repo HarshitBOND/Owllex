@@ -17,22 +17,38 @@ export type AuthenticatedUserContext = {
 }
 
 export async function requireUserContext(request?: NextRequest): Promise<AuthenticatedUserContext | NextResponse> {
-  const { userId } = await auth()
+  try {
+    const session = await auth()
+    const { userId } = session || {}
 
-  if (!userId) {
+    if (!userId) {
+      logSecurityEvent({
+        type: "auth_failed",
+        level: "warn",
+        message: "Authenticated endpoint access without valid session",
+        request,
+      })
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    await ensureUser(userId)
+
+    return {
+      clerkUid: userId,
+    }
+  } catch (error) {
+    console.error("[ROUTE_GUARD] Auth error:", error instanceof Error ? error.message : String(error))
     logSecurityEvent({
       type: "auth_failed",
-      level: "warn",
-      message: "Authenticated endpoint access without valid session",
+      level: "error",
+      message: "Auth function threw error",
       request,
+      details: error instanceof Error ? error.message : String(error),
     })
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-  }
-
-  await ensureUser(userId)
-
-  return {
-    clerkUid: userId,
+    return NextResponse.json(
+      { success: false, error: "Authentication service unavailable" },
+      { status: 503 }
+    )
   }
 }
 

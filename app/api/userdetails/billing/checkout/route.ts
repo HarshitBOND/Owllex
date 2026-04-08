@@ -31,7 +31,7 @@ const normalizePath = (path: string | undefined, fallback: string) => {
 
 export async function POST(request: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(request)
     if (userContext instanceof NextResponse) {
       return userContext
     }

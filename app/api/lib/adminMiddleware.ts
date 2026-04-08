@@ -11,7 +11,7 @@
 
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import User from "@/app/api/lib/models/user";
 import AdminLog from "@/app/api/lib/models/admin-log";
 import { applyRateLimit, getRateLimitIdentity } from "@/app/api/lib/rateLimit";
@@ -75,7 +75,7 @@ export async function requireAdmin(
   const clerkEmail =
     clerkUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || "";
 
-  await connectMongo();
+  await connectMongoWithRetry();
   const user = await User.findOne({ clerkUid: userId }).lean();
 
   if (!user) {
@@ -158,7 +158,7 @@ export async function logAdminAction(
   }
 ) {
   try {
-    await connectMongo();
+    await connectMongoWithRetry();
 
     const ipAddress =
       request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||

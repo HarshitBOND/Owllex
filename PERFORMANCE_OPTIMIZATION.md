@@ -23,7 +23,7 @@
 - **Impact**: 40-60% faster database queries
 
 #### Optimized Routes:
-- `/api/userdetails/tasks` - GET, PUT methods
+- Backend `/api/userdetails/tasks` (Render FastAPI) - GET, PUT methods
 - `/api/userdetails/clients` - GET method
 
 ### 4. **Component Code Splitting** (app/dashboard/page.tsx)
@@ -114,7 +114,7 @@ npm run build
 - ✅ `next.config.mjs` - Build optimization
 - ✅ `middleware.ts` - Caching headers
 - ✅ `app/api/lib/db/connectMongo.ts` - Connection pooling
-- ✅ `app/api/userdetails/tasks/route.ts` - Query optimization
+- ✅ `backend/app/userdetails_routes.py` - Task API query/update optimization
 - ✅ `app/api/userdetails/clients/route.ts` - Query optimization
 - ✅ `app/dashboard/page.tsx` - Component code splitting
 - ✅ `app/api/lib/cache.ts` - NEW: Cache utility

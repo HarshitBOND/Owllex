@@ -76,12 +76,15 @@ const Sidebar = () => {
         router.push(href)
     }
 
-    const NavItem = ({ item }: { item: { name: string; icon: React.ReactElement; href: string } }) => (
+    const NavItem = ({ item, isMobile = false }: { item: { name: string; icon: React.ReactElement; href: string }; isMobile?: boolean }) => (
         <div className="cursor-pointer" key={item.name} onClick={() => handleNavigation(item.href)}>
             <div className={cn(
-                "flex items-center gap-x-2 h-9 px-2 rounded-lg transition-all duration-200",
+                "flex items-center h-9 rounded-lg transition-all duration-200",
+                isOpen || isMobile ? "gap-x-2 px-2" : "justify-center px-0",
                 pathname.includes(item.href)
-                    ? "bg-sidebar-primary/10 text-sidebar-primary border-r-2 border-sidebar-primary"
+                    ? isOpen || isMobile
+                        ? "bg-sidebar-primary/10 text-sidebar-primary border-r-2 border-sidebar-primary"
+                        : "bg-sidebar-primary/10 text-sidebar-primary"
                     : "text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-gray-400"
             )}>
                 <span className="flex-shrink-0">{item.icon && React.cloneElement(item.icon, { size: 16 } as any)}</span>
@@ -93,12 +96,33 @@ const Sidebar = () => {
     const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
         <div className="relative h-full w-full flex flex-col">
             {/* Logo */}
-            <div className="flex items-center justify-between px-2 pt-1 pb-4">
-                <div className="flex items-center gap-1">
-                    <Image className="w-8 h-8" src="/main-logo.png" alt="Logo" width={32} height={32} priority loading="eager" />
-                    {(isOpen || isMobile) && (
-                        <Image className="w-20 h-8" src="/word-logo.png" alt="Logo" width={80} height={32} priority loading="eager" />
-                    )}
+            <div className={cn("flex items-center px-2 pt-1 pb-4", isMobile || isOpen ? "justify-between" : "justify-center")}>
+                <div className="flex items-center min-w-0 flex-shrink-0">
+                    <Image
+                        className="h-9 w-9 min-h-9 min-w-9 flex-shrink-0 object-contain"
+                        src="/main-logo.png"
+                        alt="Logo"
+                        width={32}
+                        height={32}
+                        priority
+                        loading="eager"
+                    />
+                    <div
+                        className={cn(
+                            "overflow-hidden transition-all duration-300 ease-in-out",
+                            isOpen || isMobile ? "max-w-[90px] opacity-100 ml-1" : "max-w-0 opacity-0 ml-0"
+                        )}
+                    >
+                        <Image
+                            className="h-8 w-20 min-w-20 flex-shrink-0 object-contain"
+                            src="/word-logo.png"
+                            alt="Logo"
+                            width={80}
+                            height={32}
+                            priority
+                            loading="eager"
+                        />
+                    </div>
                 </div>
                 {isMobile && (
                     <button onClick={() => setIsOpen(false)} className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
@@ -112,7 +136,7 @@ const Sidebar = () => {
                 {(isOpen || isMobile) && (
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Main</p>
                 )}
-                {mainNavItems.map((item) => <NavItem key={item.name} item={item} />)}
+                {mainNavItems.map((item) => <NavItem key={item.name} item={item} isMobile={isMobile} />)}
             </div>
 
             {/* Tools */}
@@ -121,7 +145,7 @@ const Sidebar = () => {
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Tools</p>
                 )}
                 {!isOpen && !isMobile && <hr className="mb-2 border-gray-200 dark:border-gray-700" />}
-                {toolNavItems.map((item) => <NavItem key={item.name} item={item} />)}
+                {toolNavItems.map((item) => <NavItem key={item.name} item={item} isMobile={isMobile} />)}
             </div>
 
             {/* Admin/Support Panels */}
@@ -131,8 +155,8 @@ const Sidebar = () => {
                         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Panels</p>
                     )}
                     {!isOpen && !isMobile && <hr className="mb-2 border-gray-200 dark:border-gray-700" />}
-                    {isAdmin && <NavItem item={{ name: "Admin Panel", icon: <ShieldCheck size={20} />, href: "/admin/dashboard" }} />}
-                    {isSupport && <NavItem item={{ name: "Support Panel", icon: <LifeBuoy size={20} />, href: "/support/dashboard" }} />}
+                    {isAdmin && <NavItem isMobile={isMobile} item={{ name: "Admin Panel", icon: <ShieldCheck size={20} />, href: "/admin/dashboard" }} />}
+                    {isSupport && <NavItem isMobile={isMobile} item={{ name: "Support Panel", icon: <LifeBuoy size={20} />, href: "/support/dashboard" }} />}
                 </div>
             )}
 
@@ -145,7 +169,7 @@ const Sidebar = () => {
                     className="flex items-center gap-x-2 h-9 px-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer w-full transition-colors text-gray-600 dark:text-gray-400"
                     aria-label="Toggle theme"
                 >
-                    {mounted && theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                    {mounted && theme === 'dark' ? <Sun size={19} className="flex-shrink-0" /> : <Moon size={19} className="flex-shrink-0" />}
                     {(isOpen || isMobile) && (
                         <p className="font-medium whitespace-nowrap text-sm">
                             {mounted && theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
@@ -155,14 +179,14 @@ const Sidebar = () => {
 
                 <Link href="/contact-us">
                     <div className="flex items-center gap-x-2 h-9 px-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-gray-600 dark:text-gray-400">
-                        <HelpCircle size={16} />
+                        <HelpCircle size={19} className="flex-shrink-0" />
                         {(isOpen || isMobile) && <p className="font-medium whitespace-nowrap text-sm">Help & Support</p>}
                     </div>
                 </Link>
 
                 <Link href="/terms-of-use" target="_blank">
                     <div className="flex items-center gap-x-2 h-9 px-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-gray-600 dark:text-gray-400">
-                        <ExternalLink size={16} />
+                        <ExternalLink size={19} className="flex-shrink-0" />
                         {(isOpen || isMobile) && <p className="font-medium whitespace-nowrap text-sm">Terms of Use</p>}
                     </div>
                 </Link>
@@ -174,7 +198,7 @@ const Sidebar = () => {
         <>
             {/* Desktop Sidebar */}
             <div className={cn(
-                "fixed top-0 left-0 h-screen transition-all duration-300 pt-5 z-50 border-r-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 group hidden lg:block px-2",
+                "fixed top-0 left-0 h-screen transition-all duration-300 ease-in-out pt-5 z-50 border-r-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 group hidden lg:block px-2",
                 isOpen ? "lg:w-48" : "lg:w-12"
             )}>
                 <div className="absolute top-10 -right-2.5 p-1 border shadow-md border-gray-300 bg-white dark:bg-gray-900 dark:border-gray-700 rounded-md z-60 hidden group-hover:block cursor-pointer" onClick={() => toggleSidebar()}>

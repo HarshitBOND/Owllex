@@ -7,7 +7,7 @@ import { requireOwnedCase, requireUserContext } from "@/app/api/lib/routeGuards"
 
 export async function GET(request: NextRequest) {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(request);
     if (userContext instanceof NextResponse) {
       return userContext;
     }
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(request);
     if (userContext instanceof NextResponse) {
       return userContext;
     }
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userContext = await requireUserContext();
+    const userContext = await requireUserContext(request);
     if (userContext instanceof NextResponse) {
       return userContext;
     }

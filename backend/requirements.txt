@@ -16,6 +16,7 @@ beautifulsoup4>=4.12
 
 # Env loading
 python-dotenv>=1.0
+PyJWT[crypto]>=2.9
 
 # Optional: Production
 gunicorn==23.*

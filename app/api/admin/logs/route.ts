@@ -10,7 +10,7 @@ import {
   sanitizeQuery,
   parsePagination,
 } from "@/app/api/lib/adminMiddleware";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import AdminLog from "@/app/api/lib/models/admin-log";
 
 function escapeRegexLiteral(s: string): string {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (admin instanceof NextResponse) return admin;
 
-  await connectMongo();
+  await connectMongoWithRetry();
 
   const { searchParams } = new URL(request.url);
   const { page, limit, skip } = parsePagination(searchParams);

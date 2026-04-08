@@ -8,6 +8,8 @@ import { useState, useEffect } from "react"
 import AddTaskForm from "@/components/Forms/addTaskForm"
 import MergedTaskWorkspace from "@/components/task/MergedTaskWorkspace"
 import { Case } from "../case-tracking/page"
+import { backendApiUrl } from "@/lib/backendApi"
+import { useAuth } from "@clerk/nextjs"
 
 export interface Task {
     _id: string;
@@ -30,6 +32,7 @@ export interface Task {
 
 const Tasks = () => {
     const { isOpen } = useSidebar()
+  const { getToken } = useAuth()
     const [showTaskForm, setShowTaskForm] = useState(false);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [updateTrigger, setUpdateTrigger] = useState(0);
@@ -45,9 +48,16 @@ const Tasks = () => {
 
         const fetchTasks = async () => {
             try {
+              const token = await getToken()
+              if (!token) {
+                throw new Error("Missing auth token")
+              }
+
+              const authHeaders = { Authorization: `Bearer ${token}` }
+
               const [pendingResponse, completedResponse] = await Promise.all([
-                fetch(`/api/userdetails/tasks?status=pending`),
-                fetch(`/api/userdetails/tasks?status=completed`),
+                fetch(backendApiUrl(`/api/userdetails/tasks?status=pending`), { headers: authHeaders }),
+                fetch(backendApiUrl(`/api/userdetails/tasks?status=completed`), { headers: authHeaders }),
               ])
 
               const [pendingData, completedData] = await Promise.all([
@@ -66,7 +76,7 @@ const Tasks = () => {
         }
 
         fetchTasks()
-    }, [updateTrigger])
+    }, [getToken, updateTrigger])
 
     return (
     <div className="flex">

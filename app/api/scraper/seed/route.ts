@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from "next/server";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import DownloadedPDF from "@/app/api/lib/models/downloaded-pdf";
 import ScrapedCase from "@/app/api/lib/models/scraped-case";
 import ScraperLog from "@/app/api/lib/models/scraper-log";
@@ -135,7 +135,7 @@ export async function POST() {
   if (admin instanceof NextResponse) return admin;
 
   try {
-    await connectMongo();
+    await connectMongoWithRetry();
 
     // Clear existing scraper data first
     await Promise.all([

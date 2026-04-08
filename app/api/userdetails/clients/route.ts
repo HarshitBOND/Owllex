@@ -86,7 +86,7 @@ async function ensureClientsSyncedFromCases(userId: string) {
 
 export async function GET(req: NextRequest) {
     try {
-        const userContext = await requireUserContext();
+        const userContext = await requireUserContext(req);
         if (userContext instanceof NextResponse) {
             return userContext;
         }
@@ -181,7 +181,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const userContext = await requireUserContext();
+        const userContext = await requireUserContext(req);
         if (userContext instanceof NextResponse) {
             return userContext;
         }
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
     try {
-        const userContext = await requireUserContext();
+        const userContext = await requireUserContext(req);
         if (userContext instanceof NextResponse) {
             return userContext;
         }
@@ -251,7 +251,7 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
     try {
-        const userContext = await requireUserContext();
+        const userContext = await requireUserContext(req);
         if (userContext instanceof NextResponse) {
             return userContext;
         }

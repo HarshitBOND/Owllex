@@ -73,7 +73,7 @@ const buildActivityItem = ({
 
 export async function GET(_req: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(_req)
     if (userContext instanceof NextResponse) {
       return userContext
     }

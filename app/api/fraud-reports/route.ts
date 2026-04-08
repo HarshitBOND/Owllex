@@ -2,7 +2,7 @@ import sgMail from "@sendgrid/mail";
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import FraudReport from "@/app/api/lib/models/fraud-report";
 import { ensureUser } from "@/app/api/lib/ensureUser";
 import { enforceRateLimit } from "@/app/api/lib/routeGuards";
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await connectMongo();
+    await connectMongoWithRetry();
     await ensureUser(userId);
 
     const fraudReport = await FraudReport.create({

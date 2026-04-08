@@ -22,16 +22,23 @@ import { useRouter } from "next/navigation"
 import { AlertPopup } from "../common/AlertPopup"
 import { Task } from "@/app/tasks/page"
 import { useState } from "react"
+import { backendApiUrl } from "@/lib/backendApi"
+import { useAuth } from "@clerk/nextjs"
 
 const TasksListView = ({status, tasks, loading, caseDetails, setTrigger}: {status: string, tasks: Task[], loading: boolean, caseDetails?: {fileNo: string, caseTitle: string, caseNo: string}, setTrigger: React.Dispatch<React.SetStateAction<number>>}) => {
   const router = useRouter();
+  const { getToken } = useAuth();
   const [remark, setRemark] = useState<string>("")
 
   const handleDeleteTask = async (_id: string) => {
-    const response = await fetch(`/api/userdetails/tasks`, {
+    const token = await getToken();
+    if (!token) return;
+
+    const response = await fetch(backendApiUrl(`/api/userdetails/tasks`), {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
       },
       body: JSON.stringify({_id}),
     });
@@ -52,10 +59,16 @@ const TasksListView = ({status, tasks, loading, caseDetails, setTrigger}: {statu
       taskCompletedRemarks: ""
     }
 
-    const response = await fetch(`/api/userdetails/tasks`, {
+    console.log("[tasks] PUT /api/userdetails/tasks payload", taskData)
+
+    const token = await getToken();
+    if (!token) return;
+
+    const response = await fetch(backendApiUrl(`/api/userdetails/tasks`), {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
       },
       body: JSON.stringify(taskData),
     });

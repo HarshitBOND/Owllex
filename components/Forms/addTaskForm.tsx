@@ -16,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { backendApiUrl } from "@/lib/backendApi"
+import { useAuth } from "@clerk/nextjs"
 
 type TaskPriority = "low" | "medium" | "high" | "urgent"
 type TaskCategory =
@@ -47,6 +49,7 @@ const CATEGORY_OPTIONS: { value: TaskCategory; label: string }[] = [
 ]
 
 const AddTaskForm = ( {setShowTaskForm, setUpdateTrigger}: {setShowTaskForm: (showTaskForm: boolean) => void, setUpdateTrigger: React.Dispatch<React.SetStateAction<number>>} ) => {
+    const { getToken } = useAuth()
     const [resourceType, setResourceType] = useState<"None" | "Case">("None");
     const [clientCases, setClientCases] = useState([]);
     const [selectedClientCase, setSelectedClientCase] = useState("");
@@ -141,10 +144,18 @@ const AddTaskForm = ( {setShowTaskForm, setUpdateTrigger}: {setShowTaskForm: (sh
                 resourceName,
             }
 
-        const response = await fetch(`/api/userdetails/tasks`, {
+        const token = await getToken()
+        if (!token) {
+            setSubmitError("Authentication token missing. Please sign in again.")
+            setAddingTask(false)
+            return
+        }
+
+        const response = await fetch(backendApiUrl(`/api/userdetails/tasks`), {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
             },
             body: JSON.stringify(formData)
         })

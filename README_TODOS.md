@@ -26,7 +26,7 @@ These are not primary backlog items anymore and should not be re-added as "missi
 - Client CRUD exists in `app/api/userdetails/clients/route.ts`
 - Case CRUD exists in `app/api/userdetails/cases/route.ts`
 - Case-to-client linking and unlinking already exists in `app/api/userdetails/cases/route.ts`
-- Task CRUD exists in `app/api/userdetails/tasks/route.ts`
+- Task CRUD exists in `backend/app/userdetails_routes.py` (`/api/userdetails/tasks`)
 - Invoice CRUD and manual payment recording exist in `app/api/userdetails/invoices/route.ts`
 - Dashboard stats and upcoming hearing aggregation exist in `app/api/userdetails/dashboard/route.ts`
 - Notification MVP is implemented in `app/api/lib/services/notifications.ts`, `app/api/userdetails/notifications/route.ts`, `app/api/internal/notifications/run/route.ts`, and `vercel.json`

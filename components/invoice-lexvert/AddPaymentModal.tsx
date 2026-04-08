@@ -5,6 +5,7 @@ import { Invoice } from '@/components/types/invoice';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -97,6 +98,9 @@ export function AddPaymentModal({ invoice, open, onOpenChange, onPaymentAdded }:
             <CreditCard className="h-5 w-5 text-primary" />
             Record Payment
           </DialogTitle>
+          <DialogDescription>
+            Add a payment record for invoice {invoice?.invoiceNumber}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Invoice summary */}

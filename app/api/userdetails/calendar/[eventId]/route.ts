@@ -20,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(request)
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -64,7 +64,7 @@ export async function PUT(
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(request)
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -127,7 +127,7 @@ export async function DELETE(
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(request)
     if (userContext instanceof NextResponse) {
       return userContext
     }

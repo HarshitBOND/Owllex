@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, logAdminAction } from "@/app/api/lib/adminMiddleware";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import User from "@/app/api/lib/models/user";
 import mongoose from "mongoose";
 
@@ -43,7 +43,7 @@ export async function PATCH(
     );
   }
 
-  await connectMongo();
+  await connectMongoWithRetry();
 
   const targetUser = await User.findById(id);
   if (!targetUser) {

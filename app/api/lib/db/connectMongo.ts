@@ -1,36 +1,78 @@
 import mongoose from "mongoose";
 
+// Global cache for connection state (survives hot reloads in dev)
+declare global {
+  // eslint-disable-next-line no-var
+  var mongooseCache: {
+    conn: typeof mongoose | null;
+    promise: Promise<typeof mongoose> | null;
+    modelsRegistered: boolean;
+  } | undefined;
+}
+
+let cached = global.mongooseCache;
+
+if (!cached) {
+  cached = global.mongooseCache = {
+    conn: null,
+    promise: null,
+    modelsRegistered: false,
+  };
+}
+
 let hasSyncedIndexes = false;
 
-const connectMongo = async () => {
+const connectMongo = async (): Promise<typeof mongoose> => {
+  // If already connected and cached, return immediately
+  if (cached!.conn && mongoose.connection.readyState === 1) {
+    return cached!.conn;
+  }
+
+  // If connection is in progress, wait for it
+  if (cached!.promise) {
+    try {
+      cached!.conn = await cached!.promise;
+      return cached!.conn;
+    } catch {
+      // If the cached promise failed, reset and try again
+      cached!.promise = null;
+    }
+  }
+
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error("MONGODB_URI is not defined in environment variables.");
+  }
+
+  console.log("Attempting to connect to MongoDB...");
+
+  cached!.promise = mongoose.connect(uri, {
+    dbName: process.env.MONGODB_DB || "LexVert",
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 30000,
+    serverSelectionTimeoutMS: 30000,
+  });
+
   try {
-    if (mongoose.connection.readyState === 1) {
-      console.log("MongoDB is already connected.");
-      return mongoose.connection.asPromise();
-    }
-
-    const uri = process.env.MONGODB_URI;
-    if (!uri) {
-      throw new Error("MONGODB_URI is not defined in environment variables.");
-    }
-
-    console.log("Attempting to connect to MongoDB...");
-    await mongoose.connect(uri, {
-      dbName: process.env.MONGODB_DB || "LexVert",
-      maxPoolSize: 10,
-      minPoolSize: 2,
-      socketTimeoutMS: 45000,
-      connectTimeoutMS: 10000,
-    });
+    cached!.conn = await cached!.promise;
     console.log("MongoDB connection successful.");
-    
-    // Register all models on first connection
-    await registerModels();
 
-    // Optional controlled index sync for production hardening.
-    // Enable only when intentionally auditing/updating indexes.
+    // Register all models once per process
+    if (!cached!.modelsRegistered) {
+      await registerModels();
+      cached!.modelsRegistered = true;
+    }
+
+    // Optional controlled index sync
     await syncIndexesIfEnabled();
+
+    return cached!.conn;
   } catch (error) {
+    // Reset cache on failure so next call can retry
+    cached!.promise = null;
+    cached!.conn = null;
     console.error("MongoDB connection error:", error);
     throw error;
   }
@@ -38,31 +80,32 @@ const connectMongo = async () => {
 
 const registerModels = async () => {
   try {
-    
-    // Import all your model files
-    await import("../models/case");
-    await import("../models/causelist-cases");
-    await import("../models/client");
-    await import("../models/invoice");
-    await import("../models/note");
-    await import("../models/task");
-    await import("../models/user");
-    await import("../models/notification");
-    await import("../models/downloaded-pdf");
-    await import("../models/scraped-case");
-    await import("../models/scraper-log");
-    await import("../models/transaction");
-    await import("../models/document");
-    await import("../models/admin-log");
-    await import("../models/calendar-event");
-    await import("../models/support-message");
-    await import("../models/complaint");
-    await import("../models/fraud-report");
-    await import("../models/suggestion");
-    await import("../models/simple-invoice");
-    await import("../models/firm");
-    await import("../models/team-membership");
-    await import("../models/job-run");
+    // Import all model files in parallel for faster startup
+    await Promise.all([
+      import("../models/case"),
+      import("../models/causelist-cases"),
+      import("../models/client"),
+      import("../models/invoice"),
+      import("../models/note"),
+      import("../models/task"),
+      import("../models/user"),
+      import("../models/notification"),
+      import("../models/downloaded-pdf"),
+      import("../models/scraped-case"),
+      import("../models/scraper-log"),
+      import("../models/transaction"),
+      import("../models/document"),
+      import("../models/admin-log"),
+      import("../models/calendar-event"),
+      import("../models/support-message"),
+      import("../models/complaint"),
+      import("../models/fraud-report"),
+      import("../models/suggestion"),
+      import("../models/simple-invoice"),
+      import("../models/firm"),
+      import("../models/team-membership"),
+      import("../models/job-run"),
+    ]);
 
     console.log("All models registered successfully.");
   } catch (error) {

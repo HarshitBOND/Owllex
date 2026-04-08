@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, logAdminAction } from "@/app/api/lib/adminMiddleware";
-import connectMongo from "@/app/api/lib/db/connectMongo";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import User from "@/app/api/lib/models/user";
 import Transaction from "@/app/api/lib/models/transaction";
 import Document from "@/app/api/lib/models/document";
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (admin instanceof NextResponse) return admin;
 
-  await connectMongo();
+  await connectMongoWithRetry();
 
   const [
     totalUsers,

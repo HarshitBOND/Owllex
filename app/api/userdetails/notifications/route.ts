@@ -28,7 +28,7 @@ const parseLimit = (rawValue: string | null) => {
 
 export async function GET(request: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(request)
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const userContext = await requireUserContext()
+    const userContext = await requireUserContext(request)
     if (userContext instanceof NextResponse) {
       return userContext
     }
