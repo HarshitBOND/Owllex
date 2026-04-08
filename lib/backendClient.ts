@@ -65,7 +65,7 @@ export async function parsePDFFromPath(filePath: string) {
   return response.json();
 }
 
-export default {
+const backendClient = {
   parsePDFFile,
   checkBackendHealth,
   parsePDFFromPath,
@@ -73,6 +73,8 @@ export default {
   getCauselistImportProgress,
   getCauselistStatus,
 };
+
+export default backendClient;
 
 /**
  * Trigger bulk cause list import
