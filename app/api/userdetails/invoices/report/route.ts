@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
         total: clampNumber(total),
         paidAmount: clampNumber(paidAmount),
         outstanding: clampNumber(outstanding),
-        currency: invoice.currency || "USD",
+        currency: invoice.currency || "INR",
         isOverdue,
       }
     })

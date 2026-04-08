@@ -15,9 +15,9 @@ const isAuthorized = (request: NextRequest) =>
     authorizationHeader: request.headers.get("authorization"),
   })
 
-const normalizeCurrency = (currency?: string | null) => (currency || "USD").toUpperCase()
+const normalizeCurrency = (currency?: string | null) => (currency || "INR").toUpperCase()
 
-const formatCurrency = (amount: number, currency = "USD") => {
+const formatCurrency = (amount: number, currency = "INR") => {
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",

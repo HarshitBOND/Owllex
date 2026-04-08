@@ -40,16 +40,16 @@ const isAllowedOrigin = (originHeader: string, request: NextRequest) => {
 
 const buildCspHeader = (nonce: string, isDevelopment: boolean) => {
   const scriptSrc = isDevelopment
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com"
-    : `script-src 'self' 'nonce-${nonce}' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com`;
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com"
+    : `script-src 'self' 'nonce-${nonce}' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com`;
 
   const styleSrc = isDevelopment
     ? "style-src 'self' 'unsafe-inline' https://*.clerk.com"
     : `style-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://*.clerk.com`;
 
   const connectSrc = isDevelopment
-    ? "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com wss://*.clerk.com wss://*.clerk.accounts.dev ws://localhost:* http://localhost:*"
-    : "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com wss://*.clerk.com wss://*.clerk.accounts.dev";
+    ? "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://clerk-telemetry.com https://vitals.vercel-insights.com wss://*.clerk.com wss://*.clerk.accounts.dev ws://localhost:* http://localhost:*"
+    : "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://clerk-telemetry.com https://vitals.vercel-insights.com wss://*.clerk.com wss://*.clerk.accounts.dev";
 
   const parts = [
     "default-src 'self'",

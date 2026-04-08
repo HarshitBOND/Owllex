@@ -10,7 +10,7 @@ import { PaymentHistory } from '@/components/invoice-lexvert/PaymentHistory';
 import { RevenueChart } from '@/components/invoice-lexvert/RevenueChart';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DollarSign, Clock, AlertTriangle, FileText, Plus, TrendingUp, Users, Receipt, Activity, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
+import { IndianRupee, Clock, AlertTriangle, FileText, Plus, TrendingUp, Users, Receipt, Activity, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -110,7 +110,7 @@ export function InvoiceDashboard() {
         tax: inv.tax || 0,
         taxRate: inv.taxRate || 0,
         discount: inv.discount || 0,
-        currency: inv.currency || 'USD',
+        currency: inv.currency || 'INR',
         total: inv.total,
         paidAmount: inv.paidAmount || 0,
         payments: inv.payments || [],
@@ -154,9 +154,9 @@ export function InvoiceDashboard() {
   }, [realClients, invoices]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
@@ -187,7 +187,7 @@ export function InvoiceDashboard() {
     });
     if (!res.ok) throw new Error('Failed to record payment');
     await fetchInvoices();
-    toast({ title: 'Payment Recorded', description: `Payment of ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(payment.amount)} recorded.` });
+    toast({ title: 'Payment Recorded', description: `Payment of ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(payment.amount)} recorded.` });
   };
 
   const handleDeleteInvoice = async (invoice: Invoice) => {
@@ -448,59 +448,59 @@ export function InvoiceDashboard() {
         </div>
       </div>
 
-      {/* Stats Cards Grid - Stronger borders */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-        <div className="bg-white dark:bg-card rounded-xl border-2 border-emerald-200 dark:border-emerald-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
-              <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+      {/* Stats Cards Grid - Mobile optimized */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
+        <div className="bg-white dark:bg-card rounded-lg sm:rounded-xl border-2 border-emerald-200 dark:border-emerald-500/30 p-3 sm:p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group overflow-hidden">
+          <div className="flex items-start justify-between mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
+              <IndianRupee className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{formatCurrency(stats.totalRevenue)}</p>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Total Revenue</p>
-          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.paidCount} invoices paid</p>
+          <p className="text-base sm:text-xl md:text-3xl font-bold text-gray-900 dark:text-foreground truncate">{formatCurrency(stats.totalRevenue)}</p>
+          <p className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mt-0.5 sm:mt-1">Revenue</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-muted-foreground hidden sm:block">{stats.paidCount} paid</p>
         </div>
 
-        <div className="bg-white dark:bg-card rounded-xl border-2 border-amber-200 dark:border-amber-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-500/10">
-              <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+        <div className="bg-white dark:bg-card rounded-lg sm:rounded-xl border-2 border-amber-200 dark:border-amber-500/30 p-3 sm:p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group overflow-hidden">
+          <div className="flex items-start justify-between mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-amber-50 dark:bg-amber-500/10">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{formatCurrency(stats.totalPending)}</p>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Pending Amount</p>
-          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.pendingCount} invoices pending</p>
+          <p className="text-base sm:text-xl md:text-3xl font-bold text-gray-900 dark:text-foreground truncate">{formatCurrency(stats.totalPending)}</p>
+          <p className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mt-0.5 sm:mt-1">Pending</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-muted-foreground hidden sm:block">{stats.pendingCount} pending</p>
         </div>
 
-        <div className="bg-white dark:bg-card rounded-xl border-2 border-rose-200 dark:border-rose-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-500/10">
-              <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+        <div className="bg-white dark:bg-card rounded-lg sm:rounded-xl border-2 border-rose-200 dark:border-rose-500/30 p-3 sm:p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group overflow-hidden">
+          <div className="flex items-start justify-between mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-rose-50 dark:bg-rose-500/10">
+              <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-rose-600 dark:text-rose-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{formatCurrency(stats.totalOverdue)}</p>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Overdue Amount</p>
-          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.overdueCount} invoices overdue</p>
+          <p className="text-base sm:text-xl md:text-3xl font-bold text-gray-900 dark:text-foreground truncate">{formatCurrency(stats.totalOverdue)}</p>
+          <p className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mt-0.5 sm:mt-1">Overdue</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-muted-foreground hidden sm:block">{stats.overdueCount} overdue</p>
         </div>
 
-        <div className="bg-white dark:bg-card rounded-xl border-2 border-blue-200 dark:border-blue-500/30 p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-500/10">
-              <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+        <div className="bg-white dark:bg-card rounded-lg sm:rounded-xl border-2 border-blue-200 dark:border-blue-500/30 p-3 sm:p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group overflow-hidden">
+          <div className="flex items-start justify-between mb-2 sm:mb-3">
+            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-blue-50 dark:bg-blue-500/10">
+              <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{stats.invoiceCount}</p>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-1">Total Invoices</p>
-          <p className="text-xs text-gray-500 dark:text-muted-foreground hidden md:block">{stats.collectionRate.toFixed(0)}% collection rate</p>
+          <p className="text-base sm:text-xl md:text-3xl font-bold text-gray-900 dark:text-foreground">{stats.invoiceCount}</p>
+          <p className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 mt-0.5 sm:mt-1">Invoices</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-muted-foreground hidden sm:block">{stats.collectionRate.toFixed(0)}% collected</p>
         </div>
       </div>
 
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
+      {/* Quick Stats Row - Hidden on mobile, visible on tablet+ */}
+      <div className="hidden sm:grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
         <div className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-md transition-all duration-300">
           <div className="flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
@@ -568,7 +568,7 @@ export function InvoiceDashboard() {
                 <span className="sm:hidden">Cli</span>
               </TabsTrigger>
               <TabsTrigger value="payments" className="gap-1 md:gap-2 text-xs md:text-sm">
-                <DollarSign className="h-3 w-3 md:h-4 md:w-4" />
+                <IndianRupee className="h-3 w-3 md:h-4 md:w-4" />
                 <span className="hidden sm:inline">Payments</span>
                 <span className="sm:hidden">Pay</span>
               </TabsTrigger>

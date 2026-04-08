@@ -64,9 +64,9 @@ export function InvoiceDetailModal({
   const payments: PaymentRecord[] = (invoice as any).payments || [];
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
     }).format(amount);
   };
 
@@ -88,35 +88,34 @@ export function InvoiceDetailModal({
         </DialogHeader>
 
         <div className="space-y-4 sm:space-y-6">
-          {/* Actions */}
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2">
-            <Button variant="outline" size="sm" onClick={() => onEdit(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm">
+          {/* Actions - Scrollable on mobile */}
+          <div className="flex flex-wrap gap-1.5 sm:gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            <Button variant="outline" size="sm" onClick={() => onEdit(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm shrink-0">
               <Edit className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={() => onSend(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm">
+            <Button variant="outline" size="sm" onClick={() => onSend(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm shrink-0">
               <Send className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               Send
             </Button>
-            <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm" onClick={() => onDownload(invoice)}>
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm shrink-0" onClick={() => onDownload(invoice)}>
               <Download className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Download</span>
-              <span className="xs:hidden">DL</span>
+              PDF
             </Button>
-            <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm" onClick={() => window.print()}>
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm shrink-0" onClick={() => window.print()}>
               <Printer className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               Print
             </Button>
             {invoice.status !== 'paid' && (
-              <Button size="sm" variant="outline" onClick={() => onRecordPayment(invoice)} className="col-span-2 sm:col-span-1 h-8 sm:h-9 text-xs sm:text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+              <Button size="sm" variant="outline" onClick={() => onRecordPayment(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50 shrink-0">
                 <PlusCircle className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                Record Payment
+                <span className="hidden xs:inline">Record</span> Pay
               </Button>
             )}
             {invoice.status !== 'paid' && invoice.status !== 'draft' && (
-              <Button size="sm" onClick={() => onMarkAsPaid(invoice)} className="col-span-2 sm:col-span-1 sm:ml-auto h-8 sm:h-9 text-xs sm:text-sm">
+              <Button size="sm" onClick={() => onMarkAsPaid(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm shrink-0 sm:ml-auto">
                 <CreditCard className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                Mark as Paid
+                Paid
               </Button>
             )}
           </div>

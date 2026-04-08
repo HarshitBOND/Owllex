@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import {
   Users, CreditCard, FileText, Shield, LayoutDashboard,
   Search, ChevronLeft, ChevronRight, RefreshCw, Ban, CheckCircle2,
-  XCircle, Loader2, TrendingUp, DollarSign, Activity, Eye,
+  XCircle, Loader2, TrendingUp, IndianRupee, Activity, Eye,
   Download, Filter, Calendar, AlertTriangle, FileSearch, Play,
   Trash2, Clock, Terminal,
 } from "lucide-react"
@@ -437,7 +437,7 @@ export default function AdminDashboardPage() {
         {[
           { name: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-200 dark:border-blue-800" },
           { name: "Total Transactions", value: stats?.totalTransactions ?? 0, icon: CreditCard, color: "text-violet-600", bg: "bg-violet-50 dark:bg-violet-900/20", border: "border-violet-200 dark:border-violet-800" },
-          { name: "Total Revenue", value: formatCurrency(stats?.totalRevenue ?? 0), icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-200 dark:border-emerald-800", isText: true },
+          { name: "Total Revenue", value: formatCurrency(stats?.totalRevenue ?? 0), icon: IndianRupee, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-200 dark:border-emerald-800", isText: true },
           { name: "Documents Generated", value: stats?.totalDocuments ?? 0, icon: FileText, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", border: "border-amber-200 dark:border-amber-800" },
         ].map((item) => (
           <div

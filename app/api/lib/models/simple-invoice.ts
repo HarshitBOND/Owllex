@@ -50,7 +50,7 @@ const SimpleInvoiceSchema = new mongoose.Schema(
     tax: { type: Number, default: 0 },
     taxRate: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
-    currency: { type: String, default: "USD" },
+    currency: { type: String, default: "INR" },
     total: { type: Number, required: true },
     paidAmount: { type: Number, default: 0 },
     payments: { type: [PaymentRecordSchema], default: [] },

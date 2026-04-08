@@ -118,9 +118,9 @@ export function InvoiceList({
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
     }).format(amount);
   };
 
@@ -167,7 +167,7 @@ export function InvoiceList({
           paginatedInvoices.map((invoice) => (
             <div
               key={invoice.id}
-              className="bg-card rounded-lg border p-3 active:bg-muted/50 animate-fade-in w-[95vw] max-w-[500px] mx-auto"
+              className="bg-card rounded-lg border p-3 active:bg-muted/50 animate-fade-in w-full max-w-full overflow-hidden"
               onClick={() => onViewInvoice(invoice)}
             >
               <div className="flex items-start justify-between gap-2 mb-2">

@@ -13,7 +13,7 @@ import { canAccessFirm, type TeamPermission } from "@/app/api/lib/services/rbac"
 
 const normalizeCurrency = (currency?: string | null) => (currency || "INR").toUpperCase()
 
-const toDisplayCurrency = (amount: number, currency = "USD") => {
+const toDisplayCurrency = (amount: number, currency = "INR") => {
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
