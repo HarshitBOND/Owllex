@@ -15,7 +15,7 @@ APScheduler>=3.10
 beautifulsoup4>=4.12
 
 # Env loading
-python-dotenv>=1.0
+python-dotenv>=1.2.2
 PyJWT[crypto]>=2.9
 
 # Optional: Production
