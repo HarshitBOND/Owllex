@@ -7,7 +7,7 @@ pydantic==2.*
 python-multipart==0.0.*
 
 # Optional: MongoDB
-pymongo==4.10.*
+pymongo==4.17.*
 
 # Scraper
 requests>=2.31
