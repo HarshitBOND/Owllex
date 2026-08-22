@@ -2,13 +2,21 @@
 
 import { Button } from "@/components/ui/button"
 import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
-import { LayoutDashboard, Moon, Sun } from "lucide-react"
+import { LayoutDashboard, Menu, Moon, Sun, X } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
+
+const navLinks = [
+  { href: "#services", label: "Services" },
+  { href: "#features", label: "Features" },
+  { href: "#how-it-works", label: "How It Works" },
+  { href: "#contact", label: "Contact" },
+]
 
 export function Header() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -20,42 +28,38 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
-      <div className="container flex h-16 items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <span className="font-serif text-xl font-bold text-primary">
-            <img src="/logo.png" width={140} alt="" />
-          </span>
-        </div>
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
+      <div className="container flex h-16 items-center justify-between gap-2">
+        <a href="/" className="flex shrink-0 items-center">
+          <img src="/logo.png" alt="lexvert" className="h-7 w-auto sm:h-8 md:h-9" />
+        </a>
 
         <nav className="hidden md:flex items-center space-x-6">
-          <a href="#services" className="text-sm font-medium hover:text-primary transition-colors">
-            Services
-          </a>
-          <a href="#features" className="text-sm font-medium hover:text-primary transition-colors">
-            Features
-          </a>
-          <a href="#how-it-works" className="text-sm font-medium hover:text-primary transition-colors">
-            How It Works
-          </a>
-          <a href="#contact" className="text-sm font-medium hover:text-primary transition-colors">
-            Contact
-          </a>
+          {navLinks.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="text-sm font-medium hover:text-primary transition-colors"
+            >
+              {link.label}
+            </a>
+          ))}
         </nav>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            className="h-9 w-9"
+            className="h-9 w-9 shrink-0"
           >
             {mounted && theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </Button>
 
-          <SignedIn>
-          <UserButton showName={true}>
+          <div className="hidden items-center gap-3 md:flex">
+            <SignedIn>
+              <UserButton showName={true}>
                 <UserButton.MenuItems>
                   <UserButton.Link
                     label="Dashboard"
@@ -63,22 +67,77 @@ export function Header() {
                     href="/dashboard"
                   />
                 </UserButton.MenuItems>
-            </UserButton>
-          </SignedIn>
-          <SignedOut>
-            <SignInButton>
-              <Button variant="ghost" size="sm">
-                Sign In
-              </Button>
-            </SignInButton>
-            <SignUpButton>
-              <Button size="sm" className="bg-secondary hover:bg-secondary/90">
-                Get Started
-              </Button>
-            </SignUpButton>
-          </SignedOut>
+              </UserButton>
+            </SignedIn>
+            <SignedOut>
+              <SignInButton>
+                <Button variant="ghost" size="sm">
+                  Sign In
+                </Button>
+              </SignInButton>
+              <SignUpButton>
+                <Button size="sm" className="bg-secondary hover:bg-secondary/90">
+                  Get Started
+                </Button>
+              </SignUpButton>
+            </SignedOut>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0 md:hidden"
+            aria-label="Toggle menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen((open) => !open)}
+          >
+            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+          </Button>
         </div>
       </div>
+
+      {mobileMenuOpen && (
+        <div className="border-t bg-background px-4 py-4 md:hidden">
+          <nav className="flex flex-col space-y-1">
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-md px-2 py-2.5 text-sm font-medium hover:bg-muted hover:text-primary transition-colors"
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="mt-3 flex flex-col gap-2 border-t pt-3">
+            <SignedIn>
+              <UserButton showName={true}>
+                <UserButton.MenuItems>
+                  <UserButton.Link
+                    label="Dashboard"
+                    labelIcon={<LayoutDashboard size={16} />}
+                    href="/dashboard"
+                  />
+                </UserButton.MenuItems>
+              </UserButton>
+            </SignedIn>
+            <SignedOut>
+              <SignInButton>
+                <Button variant="ghost" className="w-full justify-center">
+                  Sign In
+                </Button>
+              </SignInButton>
+              <SignUpButton>
+                <Button className="w-full justify-center bg-secondary hover:bg-secondary/90">
+                  Get Started
+                </Button>
+              </SignUpButton>
+            </SignedOut>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

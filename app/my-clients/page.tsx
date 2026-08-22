@@ -1,14 +1,14 @@
 "use client"
 
-import Sidebar from "@/components/dashboard/sidebar"
-import Navbar from "@/components/dashboard/navbar"
+import Sidebar from "@/components/layout/sidebar"
+import Navbar from "@/components/layout/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import { useUser } from "@clerk/nextjs"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
-const ClientDashboard = dynamic(() => import("@/components/clientsec/ClientDashboard"), {
+const ClientDashboard = dynamic(() => import("@/features/clients/components/ClientDashboard"), {
   loading: () => (
     <div className="flex items-center justify-center py-20">
       <div className="w-10 h-10 border-4 border-t-transparent border-sidebar-primary rounded-full animate-spin" />

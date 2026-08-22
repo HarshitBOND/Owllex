@@ -1,26 +1,12 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { headers } from "next/headers"
-import { DM_Sans, Space_Grotesk, Outfit, Amethysta } from "next/font/google"
+import { Outfit, Amethysta, Averia_Serif_Libre, Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
 import { SidebarProvider } from "@/contexts/SidebarContext"
 import { ThemeProvider } from "@/components/theme-provider"
-
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-dm-sans",
-  weight: ["400", "500", "600", "700"],
-})
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-space-grotesk",
-  weight: ["400", "500", "600", "700"],
-})
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -34,6 +20,20 @@ const amethysta = Amethysta({
   display: "swap",
   variable: "--font-amethysta",
   weight: ["400"],
+})
+
+const averiaSerifLibre = Averia_Serif_Libre({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-averia-serif-libre",
+  weight: ["400", "700"],
+})
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+  weight: ["400", "500", "600", "700"],
 })
 
 export const metadata: Metadata = {
@@ -54,10 +54,10 @@ export default async function RootLayout({
   const nonce = requestHeaders.get("x-nonce") || undefined
 
   return (
-    <html lang="en" className={`${dmSans.variable} ${spaceGrotesk.variable} ${outfit.variable} ${amethysta.variable} antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${outfit.variable} ${amethysta.variable} ${averiaSerifLibre.variable} ${inter.variable} antialiased`} suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <ClerkProvider dynamic nonce={nonce}>
+          <ClerkProvider dynamic nonce={nonce} signInUrl="/sign-in" signUpUrl="/sign-up">
             <SidebarProvider>
               {children}
             </SidebarProvider>

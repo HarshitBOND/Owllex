@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import Sidebar from "@/components/dashboard/sidebar"
-import Navbar from "@/components/dashboard/navbar"
+import Sidebar from "@/components/layout/sidebar"
+import Navbar from "@/components/layout/navbar"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import {

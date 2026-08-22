@@ -1,108 +1,88 @@
-import { Scale } from "lucide-react"
+import { Scale, Mail } from "lucide-react"
+import { Reveal } from "@/components/motion/reveal"
+
+const linkGroups = [
+  {
+    title: "Services",
+    links: [
+      { label: "Document Generation", href: "/generate-affidavit" },
+      { label: "Legal Consultation", href: "/contact-us" },
+      { label: "Case Tracking", href: "/case-tracking" },
+      { label: "Get Started", href: "/sign-up" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { label: "About Us", href: "/contact-us" },
+      { label: "Careers", href: "/contact-us" },
+      { label: "Press", href: "/contact-us" },
+      { label: "Contact", href: "/contact-us" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Privacy Policy", href: "/terms-of-use" },
+      { label: "Terms of Service", href: "/terms-of-use" },
+      { label: "Cookie Policy", href: "/terms-of-use" },
+      { label: "Compliance", href: "/terms-of-use" },
+    ],
+  },
+]
 
 export function Footer() {
   return (
-    <footer className="bg-muted/30 border-t px-6">
-      <div className="container py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="relative overflow-hidden bg-[#0b1720] px-6 text-slate-300">
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-32 left-1/2 h-[320px] w-[600px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl"
+      />
+
+      <Reveal className="container relative py-16">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <span className="font-serif text-xl font-bold text-primary">
-                <img src="/logo.png" width={140} alt="" />
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground max-w-xs">
+            <img src="/logo.png" width={140} alt="lexvert" className="brightness-0 invert opacity-90" />
+            <p className="max-w-xs text-sm leading-relaxed text-slate-400">
               Your complete legal ecosystem. Revolutionizing how you handle legal work with cutting-edge technology.
             </p>
+            <a
+              href="mailto:support@lexvert.com"
+              className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-primary"
+            >
+              <Mail className="h-4 w-4" />
+              support@lexvert.com
+            </a>
           </div>
 
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Services</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a href="/generate-affidavit" className="hover:text-primary transition-colors">
-                  Document Generation
-                </a>
-              </li>
-              <li>
-                <a href="/contact-us" className="hover:text-primary transition-colors">
-                  Legal Consultation
-                </a>
-              </li>
-              <li>
-                <a href="/case-tracking" className="hover:text-primary transition-colors">
-                  Case Tracking
-                </a>
-              </li>
-              <li>
-                <a href="/sign-up" className="hover:text-primary transition-colors">
-                  Get Started
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Company</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a href="/contact-us" className="hover:text-primary transition-colors">
-                  About Us
-                </a>
-              </li>
-              <li>
-                <a href="/contact-us" className="hover:text-primary transition-colors">
-                  Careers
-                </a>
-              </li>
-              <li>
-                <a href="/contact-us" className="hover:text-primary transition-colors">
-                  Press
-                </a>
-              </li>
-              <li>
-                <a href="/contact-us" className="hover:text-primary transition-colors">
-                  Contact
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Legal</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a href="/terms-of-use" className="hover:text-primary transition-colors">
-                  Privacy Policy
-                </a>
-              </li>
-              <li>
-                <a href="/terms-of-use" className="hover:text-primary transition-colors">
-                  Terms of Service
-                </a>
-              </li>
-              <li>
-                <a href="/terms-of-use" className="hover:text-primary transition-colors">
-                  Cookie Policy
-                </a>
-              </li>
-              <li>
-                <a href="/terms-of-use" className="hover:text-primary transition-colors">
-                  Compliance
-                </a>
-              </li>
-            </ul>
-          </div>
+          {linkGroups.map((group) => (
+            <div key={group.title}>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-white/70">{group.title}</h3>
+              <ul className="mt-4 space-y-3 text-sm">
+                {group.links.map((link) => (
+                  <li key={link.label}>
+                    <a href={link.href} className="text-slate-400 transition-colors hover:text-primary">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        <div className="border-t mt-8 pt-8 flex flex-col sm:flex-row justify-between items-center">
-          <p className="text-sm text-muted-foreground">© 2026 lexvert. All rights reserved.</p>
-          <div className="flex items-center space-x-4 mt-4 sm:mt-0">
-            <Scale className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Trusted Legal Technology</span>
+        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-8 sm:flex-row">
+          <p className="text-sm text-slate-500">© 2026 lexvert. All rights reserved.</p>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Scale className="h-4 w-4" />
+            Legal technology, built for India
           </div>
         </div>
-      </div>
+      </Reveal>
     </footer>
   )
 }

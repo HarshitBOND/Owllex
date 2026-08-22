@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react"
 import dynamic from "next/dynamic"
-import Sidebar from "@/components/dashboard/sidebar"
-import Navbar from "@/components/dashboard/navbar"
-const Calendar = dynamic(() => import("@/components/lexvert-calendar").then(mod => ({ default: mod.Calendar })), { ssr: false })
+import Sidebar from "@/components/layout/sidebar"
+import Navbar from "@/components/layout/navbar"
+const Calendar = dynamic(() => import("@/features/calendar").then(mod => ({ default: mod.Calendar })), { ssr: false })
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import {

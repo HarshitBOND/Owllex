@@ -28,11 +28,11 @@ vi.mock("@/contexts/SidebarContext", () => ({
   useSidebar: mockState.useSidebar,
 }))
 
-vi.mock("@/components/dashboard/sidebar", () => ({
+vi.mock("@/components/layout/sidebar", () => ({
   default: () => "sidebar-mock",
 }))
 
-vi.mock("@/components/dashboard/navbar", () => ({
+vi.mock("@/components/layout/navbar", () => ({
   default: () => "navbar-mock",
 }))
 
@@ -40,15 +40,15 @@ vi.mock("@/components/ui/button", () => ({
   Button: ({ children }: { children?: unknown }) => children ?? null,
 }))
 
-vi.mock("@/components/clientsec/ClientDashboard", () => ({
+vi.mock("@/features/clients/components/ClientDashboard", () => ({
   default: () => "client-dashboard-mock",
 }))
 
-vi.mock("@/components/task/MergedTaskWorkspace", () => ({
+vi.mock("@/features/tasks/components/MergedTaskWorkspace", () => ({
   default: () => "merged-task-workspace-mock",
 }))
 
-vi.mock("@/components/Forms/addTaskForm", () => ({
+vi.mock("@/features/tasks/components/addTaskForm", () => ({
   default: () => "add-task-form-mock",
 }))
 
@@ -56,23 +56,23 @@ vi.mock("@/components/layout/header", () => ({
   Header: () => "header-mock",
 }))
 
-vi.mock("@/components/landingPage/hero-section", () => ({
+vi.mock("@/features/landing/hero-section", () => ({
   HeroSection: () => "hero-section-mock",
 }))
 
-vi.mock("@/components/landingPage/services-grid", () => ({
+vi.mock("@/features/landing/services-grid", () => ({
   ServicesGrid: () => "services-grid-mock",
 }))
 
-vi.mock("@/components/landingPage/why-choose-section", () => ({
+vi.mock("@/features/landing/why-choose-section", () => ({
   WhyChooseSection: () => "why-choose-mock",
 }))
 
-vi.mock("@/components/landingPage/how-it-works-section", () => ({
+vi.mock("@/features/landing/how-it-works-section", () => ({
   HowItWorksSection: () => "how-it-works-mock",
 }))
 
-vi.mock("@/components/landingPage/waitlist-section", () => ({
+vi.mock("@/features/landing/waitlist-section", () => ({
   WaitlistSection: () => "waitlist-mock",
 }))
 
@@ -84,6 +84,15 @@ import HomePage from "@/app/page"
 import DashboardPage from "@/app/dashboard/page"
 import MyClientsPage from "@/app/my-clients/page"
 import TasksPage from "@/app/tasks/page"
+import SettingsPage from "@/app/settings/page"
+import SuggestionsPage from "@/app/suggestions/page"
+import ReportFraudPage from "@/app/report-fraud/page"
+import GenerateAffidavitPage from "@/app/generate-affidavit/page"
+import ActsPage from "@/app/acts/page"
+import ContactUsPage from "@/app/contact-us/page"
+import TermsOfUsePage from "@/app/terms-of-use/page"
+import AdminDashboardPage from "@/app/admin/dashboard/page"
+import SupportDashboardPage from "@/app/support/dashboard/page"
 
 describe("major page smoke tests", () => {
   beforeEach(() => {
@@ -126,5 +135,62 @@ describe("major page smoke tests", () => {
     const markup = renderToString(React.createElement(TasksPage))
 
     expect(markup).toContain("merged-task-workspace-mock")
+  })
+
+  it("renders settings page shell", () => {
+    const markup = renderToString(React.createElement(SettingsPage))
+
+    expect(markup).toContain("Manage account, notifications, and billing preferences")
+  })
+
+  it("renders suggestions page shell", () => {
+    const markup = renderToString(React.createElement(SuggestionsPage))
+
+    expect(markup).toContain("Submit ideas, track moderation, and rate approved suggestions")
+  })
+
+  it("renders report-fraud page shell", () => {
+    const markup = renderToString(React.createElement(ReportFraudPage))
+
+    expect(markup).toContain("Fraud Incident Report")
+  })
+
+  it("renders generate-affidavit page shell", () => {
+    const markup = renderToString(React.createElement(GenerateAffidavitPage))
+
+    expect(markup).toContain("AI-powered affidavit generation with legal templates")
+  })
+
+  it("renders acts page shell", () => {
+    const markup = renderToString(React.createElement(ActsPage))
+
+    expect(markup).toContain("Browse Indian bare acts and legislation")
+  })
+
+  it("renders contact-us page shell", () => {
+    const markup = renderToString(React.createElement(ContactUsPage))
+
+    expect(markup).toContain("Send us a message")
+  })
+
+  it("renders terms-of-use page shell", () => {
+    const markup = renderToString(React.createElement(TermsOfUsePage))
+
+    expect(markup).toContain("header-mock")
+    expect(markup).toContain("11. Contact Us")
+    expect(markup).toContain("footer-mock")
+  })
+
+  it("renders admin dashboard page shell", () => {
+    const markup = renderToString(React.createElement(AdminDashboardPage))
+
+    expect(markup).toContain("Verifying admin access...")
+  })
+
+  it("renders support dashboard page shell", () => {
+    const markup = renderToString(React.createElement(SupportDashboardPage))
+
+    expect(markup).toContain("navbar-mock")
+    expect(markup).toContain("sidebar-mock")
   })
 })

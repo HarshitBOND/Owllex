@@ -1,10 +1,10 @@
 "use client"
 
-import AddCaseForm from "@/components/Forms/addCaseForm"
-import Sidebar from "@/components/dashboard/sidebar"
+import AddCaseForm from "@/features/case-tracking/components/addCaseForm"
+import Sidebar from "@/components/layout/sidebar"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/contexts/SidebarContext"
-import Navbar from "@/components/dashboard/navbar"
+import Navbar from "@/components/layout/navbar"
 
 const AddCase = () => {
     const { isOpen } = useSidebar()

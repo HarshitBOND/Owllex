@@ -1,10 +1,10 @@
 "use client"
 
-import AddClientForm from "@/components/Forms/addClientForm"
-import Sidebar from "@/components/dashboard/sidebar"
+import AddClientForm from "@/features/clients/components/addClientForm"
+import Sidebar from "@/components/layout/sidebar"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/contexts/SidebarContext"
-import Navbar from "@/components/dashboard/navbar"
+import Navbar from "@/components/layout/navbar"
 import { useParams } from "next/navigation"
 import { redirect } from "next/navigation"
 

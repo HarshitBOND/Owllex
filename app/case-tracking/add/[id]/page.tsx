@@ -1,10 +1,10 @@
 "use client"
 
-import AssignAddCaseForm from "@/components/Forms/assignAddCaseForm"
-import Sidebar from "@/components/dashboard/sidebar"
+import AssignAddCaseForm from "@/features/case-tracking/components/assignAddCaseForm"
+import Sidebar from "@/components/layout/sidebar"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/contexts/SidebarContext"
-import Navbar from "@/components/dashboard/navbar"
+import Navbar from "@/components/layout/navbar"
 import { useParams } from "next/navigation"
 import { redirect } from "next/navigation"
 

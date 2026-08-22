@@ -1,13 +1,13 @@
 "use client"
 
-import Sidebar from "@/components/dashboard/sidebar"
+import Sidebar from "@/components/layout/sidebar"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/contexts/SidebarContext"
-import Navbar from "@/components/dashboard/navbar"
+import Navbar from "@/components/layout/navbar"
 import { useParams } from "next/navigation"
-import ClientView from "@/components/client/clientView"
+import ClientView from "@/features/clients/components/clientView"
 import { redirect } from "next/navigation"
-import CaseView from "@/components/case/caseView"
+import CaseView from "@/features/case-tracking/components/caseView"
 
 const ViewClient = () => {
     const { isOpen } = useSidebar()
