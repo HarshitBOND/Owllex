@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Search, FileEdit, Sparkles } from "lucide-react"
 import { Reveal, RevealGroup, RevealItem } from "@/components/motion/reveal"
+import Link from "next/link"
 
 const steps = [
   {
@@ -66,12 +67,12 @@ export function HowItWorksSection() {
         </RevealGroup>
 
         <Reveal delay={0.2} className="text-center mt-16">
-          <a href="/sign-up">
+          <Link href="/sign-up">
             <Button size="lg" className="bg-secondary hover:bg-secondary/90 text-secondary-foreground">
               Start for Free
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
-          </a>
+          </Link>
         </Reveal>
       </div>
     </section>

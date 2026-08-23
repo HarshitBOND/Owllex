@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
 import { LayoutDashboard, Menu, Moon, Sun, X } from "lucide-react"
 import { useTheme } from "next-themes"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
 const navLinks = [
@@ -30,9 +31,9 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
       <div className="container flex h-16 items-center justify-between gap-2">
-        <a href="/" className="flex shrink-0 items-center">
+        <Link href="/" className="flex shrink-0 items-center">
           <img src="/logo.png" alt="lexvert" className="h-7 w-auto sm:h-8 md:h-9" />
-        </a>
+        </Link>
 
         <nav className="hidden md:flex items-center space-x-6">
           {navLinks.map((link) => (
