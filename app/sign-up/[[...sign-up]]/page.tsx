@@ -4,6 +4,7 @@ import Image from "next/image"
 import { SignUp } from "@clerk/nextjs"
 
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
+import { imageBlurDataURL } from "@/lib/image-placeholders"
 
 export const metadata: Metadata = {
   title: "Sign Up | Lexvert",
@@ -62,6 +63,8 @@ export default function SignUpPage() {
         alt=""
         fill
         priority
+        placeholder="blur"
+        blurDataURL={imageBlurDataURL["/images/auth-mountain-bg.jpg"]}
         sizes="100vw"
         className="object-cover"
       />

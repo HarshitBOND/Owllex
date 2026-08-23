@@ -12,6 +12,7 @@
     "security:audit": "npm audit --audit-level=high",
     "security:test": "vitest run tests/api/rate-limit.utility.test.ts tests/api/upload-validation.security.test.ts tests/api/notification-runner-auth.security.test.ts",
     "audit:indexes": "node scripts/audit-mongo-indexes.mjs",
+    "optimize:images": "node scripts/optimize-images.mjs",
     "start": "next start",
     "test": "vitest run",
     "test:notifications": "vitest run tests/notifications/notification-mvp.smoke.test.ts"

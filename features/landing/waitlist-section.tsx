@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ArrowRight, Mail, Users, Sparkles } from "lucide-react"
 import { Reveal } from "@/components/motion/reveal"
+import { imageBlurDataURL } from "@/lib/image-placeholders"
 
 export function WaitlistSection() {
   const [email, setEmail] = useState("")
@@ -33,6 +34,8 @@ export function WaitlistSection() {
         src="/images/waitlist-pont-alexandre.jpg"
         alt="Pont Alexandre III at golden hour, Paris"
         fill
+        placeholder="blur"
+        blurDataURL={imageBlurDataURL["/images/waitlist-pont-alexandre.jpg"]}
         sizes="100vw"
         className="object-cover"
       />

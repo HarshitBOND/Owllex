@@ -30,7 +30,12 @@ const nextConfig = {
   images: {
     unoptimized: false,
     formats: ['image/avif', 'image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    // No source image in public/images is wider than 1920. Next clamps a
+    // variant to the source width, so 2048/3840 only ever re-encoded the same
+    // pixels into extra cache entries -- and for `fill` images Next uses the
+    // largest entry as the fallback `src`, which pointed the most expensive
+    // transcode of all at the hero.
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 31536000,
   },

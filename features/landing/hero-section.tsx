@@ -2,6 +2,7 @@ import Image from "next/image"
 import { Scale } from "lucide-react"
 import { HeroButtons } from "./hero-buttons"
 import { Reveal } from "@/components/motion/reveal"
+import { imageBlurDataURL } from "@/lib/image-placeholders"
 
 export function HeroSection() {
   return (
@@ -48,6 +49,8 @@ export function HeroSection() {
                 alt="Ornate neoclassical facade of the Louvre, Paris"
                 fill
                 priority
+                placeholder="blur"
+                blurDataURL={imageBlurDataURL["/images/hero-paris-louvre.jpg"]}
                 sizes="(min-width: 1024px) 40vw, 90vw"
                 className="object-cover"
               />

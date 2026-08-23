@@ -1,6 +1,7 @@
 import Image from "next/image"
 import { Zap, Smartphone, Shield, BarChart3 } from "lucide-react"
 import { Reveal, RevealGroup, RevealItem } from "@/components/motion/reveal"
+import { imageBlurDataURL } from "@/lib/image-placeholders"
 
 const features = [
   {
@@ -40,6 +41,8 @@ export function WhyChooseSection() {
                 src="/images/why-choose-palais-garnier.jpg"
                 alt="Ornate neoclassical facade detail, Paris"
                 fill
+                placeholder="blur"
+                blurDataURL={imageBlurDataURL["/images/why-choose-palais-garnier.jpg"]}
                 sizes="(min-width: 1024px) 40vw, 90vw"
                 className="object-cover"
               />
