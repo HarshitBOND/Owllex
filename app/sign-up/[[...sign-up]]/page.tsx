@@ -54,13 +54,6 @@ const clerkAppearance = {
   },
 }
 
-const signUpLocalization = {
-  formFieldLabel__emailAddress: "Email",
-  formFieldInputPlaceholder__emailAddress: "m@example.com",
-  formFieldLabel__password: "Password",
-  socialButtonsBlockButton: "Sign up with Google",
-}
-
 export default function SignUpPage() {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
@@ -96,7 +89,6 @@ export default function SignUpPage() {
             path="/sign-up"
             signInUrl="/sign-in"
             appearance={clerkAppearance}
-            localization={signUpLocalization}
           />
         </GlassCardContent>
       </GlassCard>

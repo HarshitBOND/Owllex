@@ -36,6 +36,14 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 })
 
+const clerkLocalization = {
+  formFieldLabel__emailAddress: "Email",
+  formFieldInputPlaceholder__emailAddress: "m@example.com",
+  formFieldLabel__password: "Password",
+  formFieldAction__forgotPassword: "Forgot your password?",
+  socialButtonsBlockButton: "Continue with Google",
+}
+
 export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
@@ -57,7 +65,13 @@ export default async function RootLayout({
     <html lang="en" className={`${outfit.variable} ${amethysta.variable} ${averiaSerifLibre.variable} ${inter.variable} antialiased`} suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <ClerkProvider dynamic nonce={nonce} signInUrl="/sign-in" signUpUrl="/sign-up">
+          <ClerkProvider
+            dynamic
+            nonce={nonce}
+            signInUrl="/sign-in"
+            signUpUrl="/sign-up"
+            localization={clerkLocalization}
+          >
             <SidebarProvider>
               {children}
             </SidebarProvider>
