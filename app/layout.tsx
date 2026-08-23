@@ -64,7 +64,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${outfit.variable} ${amethysta.variable} ${averiaSerifLibre.variable} ${inter.variable} antialiased`} suppressHydrationWarning>
       <body>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem nonce={nonce}>
           <ClerkProvider
             dynamic
             nonce={nonce}

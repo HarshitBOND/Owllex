@@ -43,9 +43,13 @@ const buildCspHeader = (nonce: string, isDevelopment: boolean) => {
     ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com"
     : `script-src 'self' 'nonce-${nonce}' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com`;
 
-  const styleSrc = isDevelopment
-    ? "style-src 'self' 'unsafe-inline' https://*.clerk.com"
-    : `style-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://*.clerk.com`;
+  // Deliberately no nonce here. Two CSP rules combine badly for a React app:
+  // a directive containing a nonce makes browsers ignore 'unsafe-inline', and
+  // nonces only ever authorise <style> *elements* -- never inline style
+  // *attributes*. next/image's `fill` mode positions itself with a style
+  // attribute, so the nonce silently stripped the positioning off every fill
+  // image in production while dev (no nonce) looked perfect.
+  const styleSrc = "style-src 'self' 'unsafe-inline' https://*.clerk.com";
 
   const connectSrc = isDevelopment
     ? "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://clerk-telemetry.com https://vitals.vercel-insights.com wss://*.clerk.com wss://*.clerk.accounts.dev ws://localhost:* http://localhost:*"
