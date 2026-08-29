@@ -145,7 +145,7 @@ export default function AiWorkflowPage() {
   return (
     <div className="flex">
       <Sidebar />
-      <div className={cn("bg-[#F3F5F9] dark:bg-background min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+      <div className={cn("bg-[#F3F5F9] dark:bg-background min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", "lg:ml-[var(--sidebar-offset)]")}>
         <div className="max-w-[1400px] w-full mx-auto px-3 sm:px-4 md:px-6 py-3 md:py-4">
           <Navbar location="AI Workflow" />
 
@@ -161,7 +161,8 @@ export default function AiWorkflowPage() {
             <p className="text-sm text-muted-foreground max-w-2xl">
               Chain the AI tools into a repeatable pipeline — intake a document, extract
               its clauses, check risk and citations, then draft and send the response.
-              Drag nodes to rearrange the flow.
+              Drag nodes to rearrange them, click a dot to pull a wire to another node,
+              and click a wire to break it.
             </p>
           </div>
 

@@ -82,7 +82,7 @@ const CaseTracking = () => {
     return (
         <div className="flex">
             <Sidebar />
-            <div className={cn("min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0 dark:bg-background", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+            <div className={cn("min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0 dark:bg-background", "lg:ml-[var(--sidebar-offset)]")}>
                 <Navbar location="Cases" />
                 <MyCases />
             </div>

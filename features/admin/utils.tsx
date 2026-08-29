@@ -1,6 +1,6 @@
 import {
   Activity, CheckCircle2, CreditCard, FileSearch, FileText,
-  LayoutDashboard, Loader2, RefreshCw, Shield, Users, XCircle,
+  LayoutDashboard, Loader2, RefreshCw, Shield, UploadCloud, Users, XCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { TabDefinition } from "./types"
@@ -12,6 +12,7 @@ export const tabs: TabDefinition[] = [
   { id: "documents", label: "Documents", icon: FileText },
   { id: "logs", label: "Logs", icon: Activity },
   { id: "causelist", label: "Cause List Parser", icon: FileSearch },
+  { id: "rag", label: "Knowledge Base", icon: UploadCloud },
 ]
 
 export function formatDate(iso: string) {

@@ -91,10 +91,7 @@ import DashboardOverviewPage from "@/app/dashboard/overview/page"
 import MyClientsPage from "@/app/my-clients/page"
 import TasksPage from "@/app/tasks/page"
 import SettingsPage from "@/app/settings/page"
-import SuggestionsPage from "@/app/suggestions/page"
 import ReportFraudPage from "@/app/report-fraud/page"
-import GenerateAffidavitPage from "@/app/generate-affidavit/page"
-import ActsPage from "@/app/acts/page"
 import ContactUsPage from "@/app/contact-us/page"
 import TermsOfUsePage from "@/app/terms-of-use/page"
 import AdminDashboardPage from "@/app/admin/dashboard/page"
@@ -172,28 +169,10 @@ describe("major page smoke tests", () => {
     expect(markup).toContain("Manage account, notifications, and billing preferences")
   })
 
-  it("renders suggestions page shell", () => {
-    const markup = renderToString(React.createElement(SuggestionsPage))
-
-    expect(markup).toContain("Submit ideas, track moderation, and rate approved suggestions")
-  })
-
   it("renders report-fraud page shell", () => {
     const markup = renderToString(React.createElement(ReportFraudPage))
 
     expect(markup).toContain("Fraud Incident Report")
-  })
-
-  it("renders generate-affidavit page shell", () => {
-    const markup = renderToString(React.createElement(GenerateAffidavitPage))
-
-    expect(markup).toContain("AI-powered affidavit generation with legal templates")
-  })
-
-  it("renders acts page shell", () => {
-    const markup = renderToString(React.createElement(ActsPage))
-
-    expect(markup).toContain("Browse Indian bare acts and legislation")
   })
 
   it("renders contact-us page shell", () => {

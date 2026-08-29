@@ -3,16 +3,22 @@
 import { cn } from "@/lib/utils"
 import {
     ChevronRight, ChevronDown, FileSearch, ExternalLink, UsersRound, ReceiptText,
-    WandSparkles, Scale, ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck,
+    ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck,
     LifeBuoy, Settings, Sparkles, CirclePlus, History, Search, Gavel, FileEdit,
     FileCheck2, MessageCircleQuestion, Quote, Settings2, Briefcase, LayoutDashboard,
-    CalendarDays, BookOpen, ClipboardList, Workflow,
+    CalendarDays, Workflow,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
-import { useSidebar } from "@/contexts/SidebarContext"
+import {
+    useSidebar,
+    SIDEBAR_MIN_WIDTH,
+    SIDEBAR_MAX_WIDTH,
+    SIDEBAR_DEFAULT_WIDTH,
+    SIDEBAR_COLLAPSED_WIDTH,
+} from "@/contexts/SidebarContext"
 import { useAiChat } from "@/contexts/AiChatContext"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
@@ -50,21 +56,14 @@ const workspaceGroupItems: NavLeaf[] = [
     { name: "Tasks", icon: <ListTodo size={16} />, href: "/tasks" },
 ]
 
-const researchToolsItems: NavLeaf[] = [
-    { name: "Suggestions", icon: <WandSparkles size={16} />, href: "/suggestions" },
-    { name: "Acts & Bare Acts", icon: <Scale size={16} />, href: "/acts" },
-    { name: "Affidavit Templates", icon: <FileText size={16} />, href: "/generate-affidavit" },
-    { name: "Legal Forms", icon: <ClipboardList size={16} />, href: "/legal-forms" },
-]
-
 const sections: { label: string; groups: NavGroup[] }[] = [
     { label: "AI", groups: [{ name: "AI Assistant", icon: <Sparkles size={18} />, items: aiGroupItems }] },
     { label: "Main", groups: [{ name: "Workspace", icon: <Briefcase size={18} />, items: workspaceGroupItems }] },
-    { label: "Tools", groups: [{ name: "Research Tools", icon: <BookOpen size={18} />, items: researchToolsItems }] },
 ]
 
 const Sidebar = () => {
-    const { isOpen, setIsOpen } = useSidebar()
+    const { isOpen, setIsOpen, width, setWidth } = useSidebar()
+    const [isDragging, setIsDragging] = useState(false)
     const router = useRouter()
     const pathname = usePathname()
     const { theme, setTheme } = useTheme()
@@ -75,12 +74,39 @@ const Sidebar = () => {
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
         "AI Assistant": true,
         "Workspace": true,
-        "Research Tools": false,
     })
 
     useEffect(() => {
         setMounted(true)
     }, [])
+
+    // Keep every page's content margin (lg:ml-[var(--sidebar-offset)]) in sync with the sidebar's actual width
+    useEffect(() => {
+        const value = isOpen ? `${width}px` : `${SIDEBAR_COLLAPSED_WIDTH}px`
+        document.documentElement.style.setProperty("--sidebar-offset", value)
+    }, [isOpen, width])
+
+    useEffect(() => {
+        if (!isDragging) return
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const next = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, e.clientX))
+            setWidth(next)
+            if (!isOpen) setIsOpen(true)
+        }
+        const handleMouseUp = () => setIsDragging(false)
+
+        document.body.style.cursor = "col-resize"
+        document.body.style.userSelect = "none"
+        window.addEventListener("mousemove", handleMouseMove)
+        window.addEventListener("mouseup", handleMouseUp)
+        return () => {
+            document.body.style.cursor = ""
+            document.body.style.userSelect = ""
+            window.removeEventListener("mousemove", handleMouseMove)
+            window.removeEventListener("mouseup", handleMouseUp)
+        }
+    }, [isDragging, isOpen, setIsOpen, setWidth])
 
     // Check if current user is admin (DB role only)
     useEffect(() => {
@@ -215,11 +241,11 @@ const Sidebar = () => {
             <div className={cn("flex items-center px-2 pt-1 pb-4", isMobile || isOpen ? "justify-between" : "justify-center")}>
                 <div className="flex items-center min-w-0 flex-shrink-0">
                     <Image
-                        className="h-9 w-9 min-h-9 min-w-9 flex-shrink-0 object-contain"
-                        src="/main-logo.png"
+                        className="h-12 w-12 min-h-12 min-w-12 flex-shrink-0 object-contain"
+                        src="/logo.png"
                         alt="Logo"
-                        width={32}
-                        height={32}
+                        width={48}
+                        height={48}
                         priority
                         loading="eager"
                     />
@@ -313,12 +339,30 @@ const Sidebar = () => {
     return (
         <>
             {/* Desktop Sidebar */}
-            <div className={cn(
-                "fixed top-0 left-0 h-screen transition-all duration-300 ease-in-out pt-5 z-50 border-r-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 group hidden lg:block px-2",
-                isOpen ? "lg:w-48" : "lg:w-12"
-            )}>
+            <div
+                className={cn(
+                    "fixed top-0 left-0 h-screen ease-in-out pt-5 z-50 border-r-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 group hidden lg:block px-2",
+                    !isDragging && "transition-all duration-300"
+                )}
+                style={{ width: isOpen ? width : SIDEBAR_COLLAPSED_WIDTH }}
+            >
                 <div className="absolute top-10 -right-2.5 p-1 border shadow-md border-gray-300 bg-white dark:bg-gray-900 dark:border-gray-700 rounded-md z-60 hidden group-hover:block cursor-pointer" onClick={() => toggleSidebar()}>
                     <ChevronRight size={11} className={cn("transition-transform", isOpen ? "rotate-180" : "rotate-0")} />
+                </div>
+                {/* Drag handle: click-drag this edge to resize, LeetCode-panel style */}
+                <div
+                    onMouseDown={(e) => {
+                        e.preventDefault()
+                        setIsDragging(true)
+                    }}
+                    onDoubleClick={() => setWidth(SIDEBAR_DEFAULT_WIDTH)}
+                    className="absolute top-0 -right-0.5 h-full w-1.5 cursor-col-resize z-50 group/handle"
+                    title="Drag to resize"
+                >
+                    <div className={cn(
+                        "h-full w-px mx-auto transition-colors",
+                        isDragging ? "bg-sidebar-primary w-0.5" : "bg-transparent group-hover/handle:bg-sidebar-primary/50"
+                    )} />
                 </div>
                 <SidebarContent />
             </div>

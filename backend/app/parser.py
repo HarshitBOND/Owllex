@@ -1,3 +1,4 @@
+
 """
 LexVert - Delhi High Court Cause List Parser Engine
 ====================================================
@@ -11,10 +12,6 @@ IMPORTANT: This module contains the exact parsing logic that has been
 tested and validated against 11,854 cases across 11 real DHC PDFs.
 Do NOT modify regex patterns or parsing logic without re-running the
 full test suite to verify accuracy is preserved.
-
-Current accuracy baseline:
-  - Core Perfect: 99.3% (11774/11854)
-  - Full Perfect: 80.8% (9575/11854)
 """
 
 import logging

@@ -48,6 +48,9 @@
 }
 
 :root {
+  /* Kept in sync with the sidebar's actual width in components/layout/sidebar.tsx; this is just the pre-hydration fallback (sidebar defaults open) */
+  --sidebar-offset: 192px;
+
   /* Updated color palette for lexvert legal platform */
   --background: #ffffff;
   --foreground: #475569;
@@ -310,6 +313,61 @@
 
 .dark .ProseMirror a {
   color: #22d3ee;
+}
+
+.draft-doc-editor h1 {
+  text-align: center;
+  font-size: 1.4em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 1.75em;
+}
+
+.draft-doc-editor h3 {
+  font-size: 1.05em;
+  font-weight: 700;
+  margin-top: 1.75em;
+  margin-bottom: 0.6em;
+}
+
+.draft-doc-editor p {
+  margin-bottom: 0.9em;
+}
+
+.draft-doc-editor ul,
+.draft-doc-editor ol {
+  margin: 0.5em 0 0.9em 1.4em;
+}
+
+.draft-doc-editor ul {
+  list-style: disc;
+}
+
+.draft-doc-editor ol {
+  list-style: decimal;
+}
+
+.draft-doc-editor li {
+  margin-bottom: 0.35em;
+}
+
+.chat-clause h3 {
+  font-size: 1em;
+  font-weight: 700;
+  margin-bottom: 0.5em;
+}
+
+.chat-clause p {
+  margin-bottom: 0.6em;
+}
+
+.chat-clause ul {
+  margin: 0.35em 0 0.6em 1.2em;
+  list-style: disc;
+}
+
+.chat-clause li {
+  margin-bottom: 0.3em;
 }
 
 /* Hide the native clock icon in time inputs */

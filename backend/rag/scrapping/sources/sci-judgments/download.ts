@@ -10,10 +10,12 @@
 
 import { chromium } from "playwright";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { backupToR2, count, has, put } from "../../hashdb.js";
+import { uploadRawDocument } from "../../storage.js";
 
 const SEARCH_URL = "https://scr.sci.gov.in/scrsearch/";
 const N = Number(process.argv[2]) || 2; // how many new PDFs to download
@@ -33,16 +35,7 @@ async function waitForEnter(message: string): Promise<void> {
 async function main(): Promise<void> {
   mkdirSync(PDF_DIR, { recursive: true });
 
-  const seenHashes = new Set<string>();
-  const seenCnrs = new Set<string>();
-  if (existsSync(MANIFEST_PATH)) {
-    for (const line of readFileSync(MANIFEST_PATH, "utf-8").split("\n")) {
-      if (!line.trim()) continue;
-      const row = JSON.parse(line);
-      seenHashes.add(row.hash);
-      if (row.cnr) seenCnrs.add(row.cnr);
-    }
-  }
+  console.log(`Hash index holds ${count()} entries.`);
 
   const browser = await chromium.launch({ headless: false });
   try {
@@ -67,7 +60,7 @@ async function main(): Promise<void> {
         if ((await cnrInput.count()) === 0) continue; // header/"no records" rows carry no cnr input
 
         const cnr = await cnrInput.getAttribute("value");
-        if (!cnr || seenCnrs.has(cnr)) continue;
+        if (!cnr || has(`sci:cnr:${cnr}`)) continue;
 
         const title =
           (await row.locator("button[aria-label]").first().getAttribute("aria-label").catch(() => null))?.trim() ??
@@ -122,18 +115,19 @@ async function main(): Promise<void> {
         }
         if (!buffer) continue;
 
-        // hash before writing to disk: the same judgment can be listed under a second
-        // cnr, and writing first would overwrite -- then delete -- a file we already have
         const hash = createHash("sha256").update(buffer).digest("hex");
-        seenCnrs.add(cnr);
-        if (seenHashes.has(hash)) {
+        await put(`sci:cnr:${cnr}`, 1);
+        if (has(`sci:hash:${hash}`)) {
           console.log(`Duplicate, skipping: ${cnr}`);
           continue;
         }
 
         const filename = `${cnr}.pdf`;
-        writeFileSync(join(PDF_DIR, filename), buffer);
-        seenHashes.add(hash);
+        const filePath = join(PDF_DIR, filename);
+        writeFileSync(filePath, buffer);
+        await put(`sci:hash:${hash}`, cnr);
+        await backupToR2();
+        await uploadRawDocument(SOURCE, hash, ".pdf", filePath);
         downloaded++;
 
         appendFileSync(MANIFEST_PATH, JSON.stringify({ cnr, title, listingText, hash, filename }) + "\n");
@@ -170,7 +164,8 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log(`Done. Downloaded ${downloaded} new PDF(s).`);
+    await backupToR2(true);
+    console.log(`Done. Downloaded ${downloaded} new PDF(s). Index now holds ${count()} entries.`);
     await waitForEnter("Press Enter to close the browser... ");
   } finally {
     await browser.close();

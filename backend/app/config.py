@@ -32,6 +32,10 @@ class Settings:
     CORS_ORIGINS: list = None
     TRUSTED_HOSTS: list = None
 
+    # OpenAI: embeddings + metadata extraction for the RAG pipeline.
+    # Not validated at boot: the API runs fine without RAG configured.
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+
     # Internal auth
     INTERNAL_TOKEN: str = os.getenv("LEXVERT_INTERNAL_TOKEN", "")
 
@@ -60,8 +64,8 @@ class Settings:
         else:
             raise RuntimeError("LEXVERT_CORS_ORIGINS must be explicitly configured in production")
 
-        if not self.DEBUG and "*" in parsed_origins:
-            raise RuntimeError("Wildcard CORS origin is not allowed in production")
+        if "*" in parsed_origins:
+            raise RuntimeError("Wildcard CORS origin is not allowed")
 
         if not self.DEBUG:
             for origin in parsed_origins:
@@ -81,9 +85,9 @@ class Settings:
         if trusted_hosts_raw:
             parsed_trusted_hosts = [h.strip() for h in trusted_hosts_raw.split(",") if h.strip()]
         elif self.DEBUG:
-            parsed_trusted_hosts = ["localhost", "127.0.0.1", "*"]
+            parsed_trusted_hosts = ["localhost", "127.0.0.1"]
         else:
-            parsed_trusted_hosts = ["*.onrender.com"]
+            raise RuntimeError("LEXVERT_TRUSTED_HOSTS must be explicitly configured in production")
 
         object.__setattr__(self, "TRUSTED_HOSTS", parsed_trusted_hosts)
 

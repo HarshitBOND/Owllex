@@ -24,6 +24,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from . import __version__
 from .config import settings
 from .models import HealthResponse
+from .rag_routes import rag_router
 from .routes import router
 from .scraper_routes import scraper_router
 from .security import require_internal_token
@@ -108,6 +109,12 @@ app.include_router(
     scraper_router,
     prefix="/api/v1/scraper",
     tags=["Scraper"],
+    dependencies=[Depends(require_internal_token)],
+)
+app.include_router(
+    rag_router,
+    prefix="/api/v1/rag",
+    tags=["RAG"],
     dependencies=[Depends(require_internal_token)],
 )
 app.include_router(userdetails_router)

@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, WandSparkles, Scale, FileText, Settings, HelpCircle, Moon, Sun, BarChart3, CalendarDays, ClipboardList, Workflow } from "lucide-react"
+import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, Settings, HelpCircle, Moon, Sun, BarChart3, CalendarDays, Workflow } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
@@ -29,10 +29,6 @@ const MobileBottomNav = () => {
         { name: "Overview", icon: BarChart3, href: "/dashboard/overview" },
         { name: "AI Workflow", icon: Workflow, href: "/ai-workflow" },
         { name: "Calendar", icon: CalendarDays, href: "/calendar" },
-        { name: "Suggestions", icon: WandSparkles, href: "/suggestions" },
-        { name: "Acts", icon: Scale, href: "/acts" },
-        { name: "Affidavit", icon: FileText, href: "/generate-affidavit" },
-        { name: "Legal Forms", icon: ClipboardList, href: "/legal-forms" },
         { name: "Settings", icon: Settings, href: "/settings" },
         { name: "Help & Support", icon: HelpCircle, href: "/contact-us" },
     ]

@@ -1,15 +1,9 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+import { putPublicObject } from "@/app/api/lib/storage/r2";
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,23 +51,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Only image uploads are allowed" }, { status: 400 });
     }
 
-    // Convert buffer to base64
-    const base64String = buffer.toString("base64");
-    const dataURI = `data:image/*;base64,${base64String}`;
-
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(dataURI, {
-      folder: "rich-text-editor", // Optional: organize images
-      resource_type: "image",
-      filename_override: validation.sanitizedFileName,
-      use_filename: false,
-      unique_filename: true,
-    });
+    const key = `${userContext.clerkUid}/${randomUUID()}-${validation.sanitizedFileName}`;
+    const url = await putPublicObject(key, buffer, file.type || "image/*");
 
     return NextResponse.json({
       success: true,
-      url: result.secure_url,
-      public_id: result.public_id,
+      url,
     });
 
   } catch (error: any) {

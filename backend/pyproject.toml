@@ -29,6 +29,8 @@ dependencies = [
 rag = [
     "boto3>=1.35",
     "docling>=2.0",
+    # O(1) content-hash dedup index — see rag/hash_db.py.
+    "lmdb>=1.4",
     # Docling's layout model runs on this instead of torch — see rag/extract.py.
     "onnxruntime>=1.20",
     "langchain-text-splitters>=0.3",

@@ -8,7 +8,7 @@ const Calendar = dynamic(() => import("@/features/calendar").then(mod => ({ defa
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import {
-  FileSearch, FileText, Calendar as CalendarIcon,
+  FileSearch, Calendar as CalendarIcon,
   Users, Briefcase, CheckSquare, Clock, ArrowRight,
   TrendingUp, LoaderCircle, BarChart3, Plus, Activity, AlertTriangle,
   ChevronDown
@@ -222,13 +222,6 @@ const Dashboard = () => {
       color: "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
     },
     {
-      name: "New Affidavit",
-      description: "Generate affidavit with AI assistance",
-      icon: <FileText className="text-white" size={20} />,
-      href: "/generate-affidavit",
-      color: "bg-teal-600 hover:bg-teal-700 dark:bg-teal-600 dark:hover:bg-teal-500"
-    },
-    {
       name: "View Invoices",
       description: "Billing and payment tracking",
       icon: <BarChart3 className="text-white" size={20} />,
@@ -258,7 +251,7 @@ const Dashboard = () => {
   return (
     <div className="flex">
       <Sidebar />
-      <div className={cn("bg-[#F3F5F9] dark:bg-background flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+      <div className={cn("bg-[#F3F5F9] dark:bg-background flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0", "lg:ml-[var(--sidebar-offset)]")}>
         <div className="w-full">
           {/* Header Section */}
           <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-border w-full">

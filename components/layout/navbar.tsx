@@ -209,7 +209,7 @@ const Navbar = ({withBack, location}: {withBack?: boolean, location: string}) =>
                     )}
                     {location}
                 </h1>
-                <img src="/main-logo.png" className="w-9 h-9 lg:hidden" alt="LexVert" />
+                <img src="/logo.png" className="w-9 h-9 lg:hidden" alt="LexVert" />
                 <div className="flex items-center md:gap-x-3 gap-x-2">
                     {/* Notification Bell */}
                     <div className="relative" ref={notifRef}>

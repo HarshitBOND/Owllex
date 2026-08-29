@@ -25,9 +25,12 @@ Set and verify all required keys:
 - [ ] `NEXT_PUBLIC_BACKEND_API`
 - [ ] `NEXT_PUBLIC_ADMIN_PANEL_SECRET_URL`
 - [ ] `CRON_SECRET`
-- [x] `CLOUDINARY_CLOUD_NAME`
-- [x] `CLOUDINARY_API_KEY`
-- [x] `CLOUDINARY_API_SECRET`
+- [ ] `R2_ACCOUNT_ID`
+- [ ] `R2_ACCESS_KEY_ID`
+- [ ] `R2_SECRET_ACCESS_KEY`
+- [ ] `R2_PRIVATE_BUCKET`
+- [ ] `R2_PUBLIC_BUCKET`
+- [ ] `R2_PUBLIC_BASE_URL`
 - [x] `SENDGRID_API_KEY`
 - [x] `NOTIFICATION_FROM_EMAIL`
 - [x] `NOTIFICATION_FROM_NAME`
@@ -44,9 +47,12 @@ Set and verify all required keys:
 
 From local audit, these keys were missing in `.env.local` and must be set:
 
-- [ ] `CLOUDINARY_CLOUD_NAME`
-- [ ] `CLOUDINARY_API_KEY`
-- [ ] `CLOUDINARY_API_SECRET`
+- [ ] `R2_ACCOUNT_ID`
+- [ ] `R2_ACCESS_KEY_ID`
+- [ ] `R2_SECRET_ACCESS_KEY`
+- [ ] `R2_PRIVATE_BUCKET`
+- [ ] `R2_PUBLIC_BUCKET`
+- [ ] `R2_PUBLIC_BASE_URL`
 - [ ] `RAZORPAY_KEY_ID`
 - [ ] `RAZORPAY_KEY_SECRET`
 - [ ] `RAZORPAY_WEBHOOK_SECRET`

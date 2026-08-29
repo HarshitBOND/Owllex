@@ -1,15 +1,11 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+import { putPrivateObject } from "@/app/api/lib/storage/r2";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
+import Attachment from "@/app/api/lib/models/attachment";
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,26 +53,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error || "Unsupported file" }, { status: 400 });
     }
 
-    // Convert buffer to base64
-    const base64String = buffer.toString("base64");
-    const dataURI = `data:application/octet-stream;base64,${base64String}`;
+    const r2Key = `${userContext.clerkUid}/${randomUUID()}-${validation.sanitizedFileName}`;
+    await putPrivateObject(r2Key, buffer, file.type || "application/octet-stream");
 
-    // Upload to Cloudinary with resource type detection
-    const result = await cloudinary.uploader.upload(dataURI, {
-      folder: "file-uploads", 
-      resource_type: validation.resourceType || "raw",
-      filename_override: validation.sanitizedFileName,
-      use_filename: false,
-      unique_filename: true,
+    await connectMongoWithRetry();
+    const attachment = await Attachment.create({
+      clerkUid: userContext.clerkUid,
+      filename: validation.sanitizedFileName,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      r2Key,
     });
 
     return NextResponse.json({
       success: true,
-      url: result.secure_url,
-      public_id: result.public_id,
-      resource_type: result.resource_type,
-      format: result.format,
-      bytes: result.bytes,
+      id: attachment._id.toString(),
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
     });
 
   } catch (error: any) {

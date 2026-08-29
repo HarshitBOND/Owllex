@@ -47,7 +47,7 @@ const clerkLocalization = {
 
 export const metadata: Metadata = {
   icons: {
-    icon: "/favicon.ico",
+    icon: "/favicon.ico?v=2",
   },
   title: "Levert - Your Complete Legal Ecosystem",
   description:

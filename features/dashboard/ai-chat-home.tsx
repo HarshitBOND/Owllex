@@ -29,25 +29,7 @@ const quickPrompts = [
   },
 ]
 
-const dummyReplies = [
-  "This is a demo response — I'm not connected to a real legal AI model yet. Once wired up to a backend, I'll be able to answer questions like this using your case data.",
-  "Thanks for the message! I'm currently running in demo mode, so this is placeholder text. Hook me up to an AI backend to get real, case-aware answers.",
-  "Got it. For now I can only send back a sample reply since no model is connected — but the interface, file attachments, and chat flow are fully wired and ready to go.",
-]
-
-function getDummyResponse(message: string, count: number) {
-  const lower = message.toLowerCase()
-  if (lower.includes("affidavit")) {
-    return "Demo response: I'd normally walk you through drafting an affidavit here — collecting the deponent's details, the facts to be sworn, and formatting it for court. Connect a real model to generate the actual document."
-  }
-  if (lower.includes("case") || lower.includes("hearing")) {
-    return "Demo response: In a live setup, I'd pull your case status and upcoming hearing dates from your workspace. Try the \"My Cases\" section in the sidebar to see your real case data."
-  }
-  if (lower.includes("lawyer")) {
-    return "Demo response: I'd normally match you with verified lawyers based on practice area and location. This is placeholder text until the AI backend is connected."
-  }
-  return dummyReplies[count % dummyReplies.length]
-}
+const COMING_SOON_REPLY = "The AI legal assistant isn't connected yet — this feature is coming soon."
 
 interface AiChatHomeProps {
   messages: ChatMessage[]
@@ -58,7 +40,6 @@ interface AiChatHomeProps {
 export function AiChatHome({ messages, addUserMessage, addAssistantMessage }: AiChatHomeProps) {
   const { user } = useUser()
   const [isResponding, setIsResponding] = useState(false)
-  const replyCountRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -83,13 +64,10 @@ export function AiChatHome({ messages, addUserMessage, addAssistantMessage }: Ai
     const conversationId = addUserMessage(data.message, fileNames)
     setIsResponding(true)
 
-    const replyText = getDummyResponse(data.message, replyCountRef.current)
-    replyCountRef.current += 1
-
     setTimeout(() => {
-      addAssistantMessage(conversationId, replyText)
+      addAssistantMessage(conversationId, COMING_SOON_REPLY)
       setIsResponding(false)
-    }, 700 + Math.random() * 600)
+    }, 400)
   }
 
   const hasMessages = messages.length > 0
@@ -130,7 +108,7 @@ export function AiChatHome({ messages, addUserMessage, addAssistantMessage }: Ai
           </div>
 
           <p className="text-xs text-text-500 mt-6 text-center">
-            Preview mode — responses are simulated while we finish connecting the live agentic AI model.
+            Coming soon — the AI assistant isn't connected to a live model yet.
           </p>
         </div>
       )}
@@ -177,7 +155,7 @@ export function AiChatHome({ messages, addUserMessage, addAssistantMessage }: Ai
           <div className="px-4 pb-2 pt-1">
             <ClaudeChatInput onSendMessage={submit} placeholder="Ask your legal assistant anything..." />
             <p className="text-xs text-text-500 mt-3 text-center">
-              Preview mode — responses are simulated while we finish connecting the live agentic AI model.
+              Coming soon — the AI assistant isn't connected to a live model yet.
             </p>
           </div>
         </>

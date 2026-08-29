@@ -37,7 +37,7 @@ export function ComingSoonPage({ title, description, icon: Icon = Sparkles }: Co
   return (
     <div className="flex">
       <Sidebar />
-      <div className={cn("bg-[#F3F5F9] dark:bg-background min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+      <div className={cn("bg-[#F3F5F9] dark:bg-background min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", "lg:ml-[var(--sidebar-offset)]")}>
         <div className="max-w-[1400px] w-full mx-auto px-3 sm:px-4 md:px-6 py-3 md:py-4">
           <Navbar location={title} />
           <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28">

@@ -57,7 +57,7 @@ export interface AdminLogRecord {
   createdAt: string
 }
 
-export type Tab = "dashboard" | "users" | "transactions" | "documents" | "logs" | "causelist"
+export type Tab = "dashboard" | "users" | "transactions" | "documents" | "logs" | "causelist" | "rag"
 
 export interface TabDefinition {
   id: Tab
@@ -95,4 +95,40 @@ export interface CauselistSummary {
   cases_parsed?: number
   errors?: number
   execution_time_seconds?: number
+}
+
+export type RagIngestStatus = "pending" | "uploading" | "success" | "failed"
+
+export interface RagIngestItem {
+  id: string
+  file: File
+  status: RagIngestStatus
+  error?: string
+  documentId?: string
+  title?: string
+  documentType?: string
+  chunkCount?: number
+  // Backend recognised the content hash and skipped re-embedding it.
+  skipped?: boolean
+}
+
+export interface RagStatus {
+  ready: boolean
+  openai_key_configured: boolean
+  chroma_configured: boolean
+  dependencies_installed: boolean
+  chunk_count: number
+  document_count: number
+  indexed_hashes: number
+  chroma_database: string | null
+  error: string | null
+}
+
+export interface RagSearchResult {
+  text: string
+  score: number
+  document_id?: string
+  title?: string
+  document_type?: string
+  date?: string
 }

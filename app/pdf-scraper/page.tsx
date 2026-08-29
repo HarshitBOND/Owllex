@@ -7,7 +7,7 @@ import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 import {
   FileDown, FileCheck2, FileX, Database, Clock, RefreshCw,
-  Search, ChevronLeft, ChevronRight, Download, AlertCircle,
+  Search, ChevronLeft, ChevronRight,
   CheckCircle2, XCircle, Loader2, Filter, Zap, TrendingUp,
   Activity, ShieldAlert,
 } from "lucide-react"
@@ -140,8 +140,6 @@ export default function PDFScraperPage() {
   const [caseSearch, setCaseSearch] = useState("")
 
   const [loading, setLoading] = useState(true)
-  const [seeding, setSeeding] = useState(false)
-  const [seedResult, setSeedResult] = useState<string | null>(null)
 
   // ── Admin check ──────────────────────────────────────────────────────────
 
@@ -196,29 +194,6 @@ export default function PDFScraperPage() {
     fetchStatus()
     fetchCases()
   }, [fetchStatus, fetchCases, isAdmin])
-
-  // ── Seed dummy data ──────────────────────────────────────────────────────
-
-  const handleSeed = async () => {
-    setSeeding(true)
-    setSeedResult(null)
-    try {
-      const res = await fetch("/api/scraper/seed", { method: "POST" })
-      const data = await res.json()
-      if (data.success) {
-        setSeedResult(`Seeded ${data.summary.pdfs} PDFs, ${data.summary.cases} cases, ${data.summary.logs} logs`)
-        // Refresh data
-        await fetchStatus()
-        await fetchCases()
-      } else {
-        setSeedResult(`Error: ${data.error}`)
-      }
-    } catch (err) {
-      setSeedResult(`Error: ${err}`)
-    } finally {
-      setSeeding(false)
-    }
-  }
 
   // ── Search handler ───────────────────────────────────────────────────────
 
@@ -411,7 +386,7 @@ export default function PDFScraperPage() {
               {cases.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                    No extracted cases found. Seed dummy data or run the scraper.
+                    No extracted cases found. Run the scraper to extract cases.
                   </td>
                 </tr>
               ) : (
@@ -591,7 +566,7 @@ export default function PDFScraperPage() {
     return (
       <div className="flex">
         <Sidebar />
-        <div className={cn("bg-[#F3F5F9] flex flex-col items-center justify-center min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+        <div className={cn("bg-[#F3F5F9] flex flex-col items-center justify-center min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", "lg:ml-[var(--sidebar-offset)]")}>
           <div className="flex flex-col items-center gap-4 max-w-md text-center px-4">
             <div className="p-4 rounded-full bg-red-50 border border-red-200">
               <ShieldAlert size={40} className="text-red-500" />
@@ -644,7 +619,7 @@ export default function PDFScraperPage() {
       <div
         className={cn(
           "bg-[#F3F5F9] flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0",
-          isOpen ? "lg:ml-48" : "lg:ml-12"
+          "lg:ml-[var(--sidebar-offset)]"
         )}
       >
         <div className="w-full">
@@ -672,38 +647,8 @@ export default function PDFScraperPage() {
                     <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
                     Refresh
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSeed}
-                    disabled={seeding}
-                    className="gap-1.5 bg-sidebar-primary hover:bg-sidebar-primary/90"
-                  >
-                    {seeding ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Download size={14} />
-                    )}
-                    {seeding ? "Seeding..." : "Seed 3-Day Demo"}
-                  </Button>
                 </div>
               </div>
-              {seedResult && (
-                <div
-                  className={cn(
-                    "mt-2 px-3 py-2 rounded-lg text-sm flex items-center gap-2",
-                    seedResult.startsWith("Error")
-                      ? "bg-red-50 text-red-700 border border-red-200"
-                      : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  )}
-                >
-                  {seedResult.startsWith("Error") ? (
-                    <AlertCircle size={14} />
-                  ) : (
-                    <CheckCircle2 size={14} />
-                  )}
-                  {seedResult}
-                </div>
-              )}
             </div>
           </div>
 

@@ -63,9 +63,45 @@ Ingest a source with:
 cd backend && python -m rag.ingest --source india_code
 ```
 
-Rows are appended as documents land, and each source reloads its manifest on
-startup to skip what it already has. Killing a crawl loses at most the row in
+Rows are appended as documents land. Killing a crawl loses at most the row in
 flight; re-running resumes.
+
+## Dedup: the LMDB hash index
+
+Sources no longer read `manifest.jsonl` into a Set at startup — that parsed the
+whole file before the first download and held every hash in RAM, which does not
+survive the 50,000-document target. Dedup now goes through `hashdb.ts`, an LMDB
+index at `data/hash_index.lmdb`: startup is constant, memory is constant, and a
+lookup is a single B-tree probe.
+
+The shape in a source is just:
+
+```ts
+if (!has(`sci:cnr:${cnr}`)) {
+  // ...download...
+  await put(`sci:hash:${hash}`, cnr);
+  await backupToR2();
+}
+```
+
+Keys are namespaced by source (`sci:cnr:`, `sci:hash:`, `india_code:<docKey>`).
+The manifest is still written — it remains the handoff to Python — it is just no
+longer the thing consulted to decide what to skip.
+
+This index means "downloaded" and is deliberately **not** the same database as
+`rag/hash_db.py`, which means "ingested"; sharing them would make the ingest
+pipeline skip every document the scraper had just fetched.
+
+`backupToR2()` uploads a compacted snapshot to R2 after new entries land,
+throttled to one upload per `HASH_DB_BACKUP_INTERVAL_SECONDS` (default 300) so a
+bulk run does not re-upload the whole index per document, plus a forced upload at
+the end of every run. Without R2 credentials in `backend/.env` it silently no-ops.
+
+One-time backfill from manifests written before this existed:
+
+```bash
+cd backend/rag/scrapping && npx tsx migrate-manifests.ts
+```
 
 ## Sources
 

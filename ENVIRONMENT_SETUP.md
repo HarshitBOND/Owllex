@@ -19,9 +19,12 @@ Use this document as the source of truth for runtime environment variables and p
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Yes | Clerk frontend auth key used by Next.js middleware/auth components |
 | `CLERK_SECRET_KEY` | Yes | Clerk server-side secret used by middleware/auth routes |
 | `CLERK_WEBHOOK_SECRET` | Yes | Verifies Clerk webhook signature at `/api/webhook/clerk` |
-| `CLOUDINARY_CLOUD_NAME` | Yes (uploads) | Cloudinary upload config |
-| `CLOUDINARY_API_KEY` | Yes (uploads) | Cloudinary upload config |
-| `CLOUDINARY_API_SECRET` | Yes (uploads) | Cloudinary upload config |
+| `R2_ACCOUNT_ID` | Yes (uploads) | Cloudflare R2 account ID |
+| `R2_ACCESS_KEY_ID` | Yes (uploads) | Cloudflare R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | Yes (uploads) | Cloudflare R2 API token secret |
+| `R2_PRIVATE_BUCKET` | Yes (uploads) | Private bucket for task/case attachments (presigned URLs) |
+| `R2_PUBLIC_BUCKET` | Yes (uploads) | Public bucket for inline rich-text images |
+| `R2_PUBLIC_BASE_URL` | Yes (uploads) | Public origin bound to `R2_PUBLIC_BUCKET` |
 | `RAZORPAY_KEY_ID` | Yes (billing) | Razorpay key ID for payment-link APIs |
 | `RAZORPAY_KEY_SECRET` | Yes (billing) | Razorpay key secret for server-side billing routes |
 | `RAZORPAY_WEBHOOK_SECRET` | Yes (billing) | Razorpay webhook signing secret for `/api/webhook/razorpay` |

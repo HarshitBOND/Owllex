@@ -1,6 +1,6 @@
 import {
   Activity, BarChart3, Briefcase, Calendar as CalendarIcon, CheckSquare,
-  Clock, FileSearch, FileText, Users,
+  Clock, FileSearch, Users,
 } from "lucide-react"
 import type { DashboardData, QuickActionDefinition, StatCardDefinition } from "./types"
 
@@ -78,13 +78,6 @@ export const quickActions: QuickActionDefinition[] = [
     icon: Users,
     href: "/my-clients/add",
     color: "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500",
-  },
-  {
-    name: "New Affidavit",
-    description: "Generate affidavit with AI assistance",
-    icon: FileText,
-    href: "/generate-affidavit",
-    color: "bg-teal-600 hover:bg-teal-700 dark:bg-teal-600 dark:hover:bg-teal-500",
   },
   {
     name: "View Invoices",

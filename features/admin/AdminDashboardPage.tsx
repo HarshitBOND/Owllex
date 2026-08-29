@@ -16,6 +16,7 @@ import { useTransactionsData } from "./hooks/useTransactionsData"
 import { useDocumentsData } from "./hooks/useDocumentsData"
 import { useLogsData } from "./hooks/useLogsData"
 import { useCauselistImport } from "./hooks/useCauselistImport"
+import { useRagIngestData } from "./hooks/useRagIngestData"
 import { AdminTabNav } from "./components/AdminTabNav"
 import { DashboardTab } from "./components/DashboardTab"
 import { UsersTab } from "./components/UsersTab"
@@ -23,6 +24,7 @@ import { TransactionsTab } from "./components/TransactionsTab"
 import { DocumentsTab } from "./components/DocumentsTab"
 import { LogsTab } from "./components/LogsTab"
 import { CauseListTab } from "./components/CauseListTab"
+import { RagIngestTab } from "./components/RagIngestTab"
 
 export default function AdminDashboardPage() {
   const { isOpen } = useSidebar()
@@ -37,6 +39,7 @@ export default function AdminDashboardPage() {
   const documentsData = useDocumentsData()
   const logsData = useLogsData()
   const causelist = useCauselistImport()
+  const ragIngest = useRagIngestData()
 
   const refreshActiveTab = () => {
     if (activeTab === "dashboard") dashboard.fetchDashboard()
@@ -45,6 +48,7 @@ export default function AdminDashboardPage() {
     else if (activeTab === "documents") documentsData.fetchDocuments()
     else if (activeTab === "logs") logsData.fetchLogs()
     else if (activeTab === "causelist") causelist.fetchCauselistStatus()
+    else if (activeTab === "rag") ragIngest.fetchRagStatus()
   }
 
   useEffect(() => {
@@ -100,7 +104,7 @@ export default function AdminDashboardPage() {
       <div
         className={cn(
           "bg-[#F3F5F9] dark:bg-gray-950 flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0",
-          isOpen ? "lg:ml-48" : "lg:ml-12"
+          "lg:ml-[var(--sidebar-offset)]"
         )}
       >
         <div className="w-full">
@@ -210,6 +214,26 @@ export default function AdminDashboardPage() {
                   causelist.fetchCauselistStatus()
                 }}
                 onStartImport={causelist.handleStartCauselistImport}
+              />
+            )}
+            {activeTab === "rag" && (
+              <RagIngestTab
+                queue={ragIngest.queue}
+                addFiles={ragIngest.addFiles}
+                removeItem={ragIngest.removeItem}
+                clearFinished={ragIngest.clearFinished}
+                uploadItem={ragIngest.uploadItem}
+                uploadAll={ragIngest.uploadAll}
+                status={ragIngest.status}
+                statusError={ragIngest.statusError}
+                statusLoading={ragIngest.statusLoading}
+                fetchRagStatus={ragIngest.fetchRagStatus}
+                searchQuery={ragIngest.searchQuery}
+                setSearchQuery={ragIngest.setSearchQuery}
+                searchResults={ragIngest.searchResults}
+                searchError={ragIngest.searchError}
+                searching={ragIngest.searching}
+                runSearch={ragIngest.runSearch}
               />
             )}
           </div>

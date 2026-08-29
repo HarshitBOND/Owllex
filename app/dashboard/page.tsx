@@ -43,7 +43,7 @@ const DashboardHome = () => {
   return (
     <div className="flex">
       <Sidebar />
-      <div className={cn("bg-bg-0 flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0", isOpen ? "lg:ml-48" : "lg:ml-12")}>
+      <div className={cn("bg-bg-0 flex flex-col items-start min-h-screen h-fit w-full transition-all duration-300 pb-20 lg:pb-0", "lg:ml-[var(--sidebar-offset)]")}>
         <div className="w-full">
           <div className="max-w-[1400px] w-full mx-auto px-3 sm:px-4 md:px-6 pt-3 md:pt-4">
             <Navbar location="Agentic AI Assistant" />

@@ -7,7 +7,7 @@ type UploadedFile = {
   file: File
   status: 'uploading' | 'success' | 'error'
   progress: number
-  url?: string
+  id?: string
   error?: string
 }
 
@@ -54,7 +54,7 @@ export function FileDropzone({ onChange, uploadEndpoint = '/api/upload/file' }: 
         }
       })
 
-      const uploadPromise = new Promise<{ url: string }>((resolve, reject) => {
+      const uploadPromise = new Promise<{ id: string }>((resolve, reject) => {
         xhr.addEventListener('load', () => {
           if (xhr.status === 200) {
             resolve(JSON.parse(xhr.responseText))
@@ -69,10 +69,10 @@ export function FileDropzone({ onChange, uploadEndpoint = '/api/upload/file' }: 
 
       const result = await uploadPromise
 
-      onChange?.(result.url, "add")
+      onChange?.(result.id, "add")
 
-      setFiles(prev => prev.map((f, i) => 
-        i === index ? { ...f, status: 'success' as const, url: result.url } : f
+      setFiles(prev => prev.map((f, i) =>
+        i === index ? { ...f, status: 'success' as const, id: result.id } : f
       ))
     } catch (error) {
       setFiles(prev => prev.map((f, i) => 
@@ -99,9 +99,9 @@ export function FileDropzone({ onChange, uploadEndpoint = '/api/upload/file' }: 
     }
   }
 
-  const removeFile = (index: number, url: string) => {
+  const removeFile = (index: number, id: string) => {
     setFiles(prev => prev.filter((_, i) => i !== index))
-    onChange?.(url, "remove")
+    onChange?.(id, "remove")
   }
 
   const getStatusIcon = (file: UploadedFile) => {
@@ -161,7 +161,7 @@ export function FileDropzone({ onChange, uploadEndpoint = '/api/upload/file' }: 
               </div>
               <button
                 disabled={fileData.status === 'uploading'}
-                onClick={() => removeFile(index, fileData.url || "")}
+                onClick={() => removeFile(index, fileData.id || "")}
                 className="text-muted-foreground hover:text-destructive transition cursor-pointer"
               >
                 <X className="w-4 h-4" />

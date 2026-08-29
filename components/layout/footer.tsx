@@ -5,7 +5,6 @@ const linkGroups = [
   {
     title: "Services",
     links: [
-      { label: "Document Generation", href: "/generate-affidavit" },
       { label: "Legal Consultation", href: "/contact-us" },
       { label: "Case Tracking", href: "/case-tracking" },
       { label: "Get Started", href: "/sign-up" },
