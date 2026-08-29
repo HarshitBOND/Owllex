@@ -9,6 +9,7 @@ const mockState = vi.hoisted(() => ({
   redirect: vi.fn(),
   useUser: vi.fn(),
   useSidebar: vi.fn(),
+  useAiChat: vi.fn(),
 }))
 
 vi.mock("next/dynamic", () => ({
@@ -26,6 +27,10 @@ vi.mock("@clerk/nextjs", () => ({
 
 vi.mock("@/contexts/SidebarContext", () => ({
   useSidebar: mockState.useSidebar,
+}))
+
+vi.mock("@/contexts/AiChatContext", () => ({
+  useAiChat: mockState.useAiChat,
 }))
 
 vi.mock("@/components/layout/sidebar", () => ({
@@ -82,6 +87,7 @@ vi.mock("@/components/layout/footer", () => ({
 
 import HomePage from "@/app/page"
 import DashboardPage from "@/app/dashboard/page"
+import DashboardOverviewPage from "@/app/dashboard/overview/page"
 import MyClientsPage from "@/app/my-clients/page"
 import TasksPage from "@/app/tasks/page"
 import SettingsPage from "@/app/settings/page"
@@ -100,12 +106,28 @@ describe("major page smoke tests", () => {
     mockState.redirect.mockReset()
     mockState.useUser.mockReset()
     mockState.useSidebar.mockReset()
+    mockState.useAiChat.mockReset()
 
     mockState.useSidebar.mockReturnValue({ isOpen: true })
     mockState.useUser.mockReturnValue({
       isLoaded: true,
       isSignedIn: true,
       user: { firstName: "Harsh" },
+    })
+    mockState.useAiChat.mockReturnValue({
+      conversations: [],
+      activeId: null,
+      activeConversation: null,
+      messages: [],
+      isHistoryOpen: false,
+      startNewConversation: vi.fn(),
+      selectConversation: vi.fn(),
+      deleteConversation: vi.fn(),
+      renameConversation: vi.fn(),
+      addUserMessage: vi.fn(),
+      addAssistantMessage: vi.fn(),
+      openHistory: vi.fn(),
+      closeHistory: vi.fn(),
     })
     mockState.redirect.mockImplementation(() => null)
   })
@@ -120,6 +142,13 @@ describe("major page smoke tests", () => {
 
   it("renders dashboard page shell", () => {
     const markup = renderToString(React.createElement(DashboardPage))
+
+    expect(markup).toContain("Draft an affidavit")
+    expect(markup).toContain("Ask your legal assistant anything...")
+  })
+
+  it("renders dashboard overview page shell", () => {
+    const markup = renderToString(React.createElement(DashboardOverviewPage))
 
     expect(markup).toContain("Quick Actions")
     expect(markup).toContain("Pending Tasks")

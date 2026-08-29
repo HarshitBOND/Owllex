@@ -7,21 +7,18 @@ Production-ready backend service that parses Delhi High Court cause list PDFs in
 ```bash
 cd lexvert_backend
 
-# Create virtual environment
-python -m venv .venv
-.venv\Scripts\activate       # Windows
-# source .venv/bin/activate  # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (creates .venv automatically, pinned to Python 3.11)
+uv sync
 
 # Copy env config
 copy .env.example .env       # Windows
 # cp .env.example .env       # Linux/Mac
 
 # Run server
-python run.py
+uv run python run.py
 ```
+
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/). No manual venv setup needed — `uv sync` creates `.venv` and installs the exact locked versions from `uv.lock`.
 
 Server starts at **http://localhost:8000**
 
@@ -158,7 +155,8 @@ lexvert_backend/
 ├── tests/
 │   ├── __init__.py
 │   └── test_parser.py   # Accuracy tests
-├── requirements.txt
+├── pyproject.toml
+├── uv.lock
 ├── .env.example
 ├── .gitignore
 ├── Dockerfile

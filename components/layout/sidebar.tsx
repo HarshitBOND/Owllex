@@ -1,25 +1,82 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { ChevronRight, FileSearch, LayoutDashboard, ExternalLink, UsersRound, ReceiptText, WandSparkles, Scale, ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck, LifeBuoy, Settings } from "lucide-react"
+import {
+    ChevronRight, ChevronDown, FileSearch, ExternalLink, UsersRound, ReceiptText,
+    WandSparkles, Scale, ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck,
+    LifeBuoy, Settings, Sparkles, CirclePlus, History, Search, Gavel, FileEdit,
+    FileCheck2, MessageCircleQuestion, Quote, Settings2, Briefcase, LayoutDashboard,
+    CalendarDays, BookOpen, ClipboardList, Workflow,
+} from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
 import { useSidebar } from "@/contexts/SidebarContext"
+import { useAiChat } from "@/contexts/AiChatContext"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import React from "react"
 import MobileBottomNav from "./mobile-bottom-nav"
+import { AiChatHistoryFlyout } from "./ai-chat-history-flyout"
+
+type NavLink = { name: string; icon: React.ReactElement; href: string }
+type NavAction = { name: string; icon: React.ReactElement; action: "new-chat" | "chat-history" }
+type NavLeaf = NavLink | NavAction
+type NavGroup = { name: string; icon: React.ReactElement; items: NavLeaf[] }
+
+const isNavAction = (item: NavLeaf): item is NavAction => "action" in item
+
+const aiGroupItems: NavLeaf[] = [
+    { name: "New Chat", icon: <CirclePlus size={16} />, action: "new-chat" },
+    { name: "Chat History", icon: <History size={16} />, action: "chat-history" },
+    { name: "Legal Research", icon: <Search size={16} />, href: "/legal-research" },
+    { name: "Case Law Finder", icon: <Gavel size={16} />, href: "/case-law-finder" },
+    { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },
+    { name: "Contract Review", icon: <FileCheck2 size={16} />, href: "/contract-review" },
+    { name: "Legal Summarizer", icon: <FileText size={16} />, href: "/legal-summarizer" },
+    { name: "Ask Precedent", icon: <MessageCircleQuestion size={16} />, href: "/ask-precedent" },
+    { name: "Citations Checker", icon: <Quote size={16} />, href: "/citations-checker" },
+    { name: "AI Workflow", icon: <Workflow size={16} />, href: "/ai-workflow" },
+    { name: "AI Settings", icon: <Settings2 size={16} />, href: "/ai-settings" },
+]
+
+const workspaceGroupItems: NavLeaf[] = [
+    { name: "Dashboard", icon: <LayoutDashboard size={16} />, href: "/dashboard/overview" },
+    { name: "My Cases", icon: <FileSearch size={16} />, href: "/case-tracking" },
+    { name: "My Clients", icon: <UsersRound size={16} />, href: "/my-clients" },
+    { name: "Invoices", icon: <ReceiptText size={16} />, href: "/invoices" },
+    { name: "Calendar", icon: <CalendarDays size={16} />, href: "/calendar" },
+    { name: "Tasks", icon: <ListTodo size={16} />, href: "/tasks" },
+]
+
+const researchToolsItems: NavLeaf[] = [
+    { name: "Suggestions", icon: <WandSparkles size={16} />, href: "/suggestions" },
+    { name: "Acts & Bare Acts", icon: <Scale size={16} />, href: "/acts" },
+    { name: "Affidavit Templates", icon: <FileText size={16} />, href: "/generate-affidavit" },
+    { name: "Legal Forms", icon: <ClipboardList size={16} />, href: "/legal-forms" },
+]
+
+const sections: { label: string; groups: NavGroup[] }[] = [
+    { label: "AI", groups: [{ name: "AI Assistant", icon: <Sparkles size={18} />, items: aiGroupItems }] },
+    { label: "Main", groups: [{ name: "Workspace", icon: <Briefcase size={18} />, items: workspaceGroupItems }] },
+    { label: "Tools", groups: [{ name: "Research Tools", icon: <BookOpen size={18} />, items: researchToolsItems }] },
+]
 
 const Sidebar = () => {
     const { isOpen, setIsOpen } = useSidebar()
     const router = useRouter()
     const pathname = usePathname()
     const { theme, setTheme } = useTheme()
+    const aiChat = useAiChat()
     const [mounted, setMounted] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
     const [isSupport, setIsSupport] = useState(false)
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+        "AI Assistant": true,
+        "Workspace": true,
+        "Research Tools": false,
+    })
 
     useEffect(() => {
         setMounted(true)
@@ -57,38 +114,97 @@ const Sidebar = () => {
         setIsOpen(!isOpen)
     }
 
-    const mainNavItems = [
-        { name: "Dashboard", icon: <LayoutDashboard size={20} />, href: "/dashboard" },
-        { name: "My Cases", icon: <FileSearch size={20} />, href: "/case-tracking" },
-        { name: "My Clients", icon: <UsersRound size={19} />, href: "/my-clients" },
-        { name: "Invoices", icon: <ReceiptText size={20} />, href: "/invoices" },
-        { name: "Tasks", icon: <ListTodo size={20} />, href: "/tasks" },
-        { name: "Settings", icon: <Settings size={20} />, href: "/settings" },
-    ]
-
-    const toolNavItems = [
-        { name: "Suggestions", icon: <WandSparkles size={20} />, href: "/suggestions" },
-        { name: "Acts", icon: <Scale size={20} />, href: "/acts" },
-        { name: "Affidavit", icon: <FileText size={20} />, href: "/generate-affidavit" },
-    ]
+    const toggleGroup = (name: string) => {
+        setExpandedGroups((prev) => ({ ...prev, [name]: !prev[name] }))
+    }
 
     const handleNavigation = (href: string) => {
         router.push(href)
     }
 
-    const NavItem = ({ item, isMobile = false }: { item: { name: string; icon: React.ReactElement; href: string }; isMobile?: boolean }) => (
-        <div className="cursor-pointer" key={item.name} onClick={() => handleNavigation(item.href)}>
+    const isLeafActive = (href: string) => pathname === href || pathname.startsWith(href + "/")
+    const isGroupActive = (group: NavGroup) => group.items.some((item) => !isNavAction(item) && isLeafActive(item.href))
+
+    const handleLeafClick = (item: NavLeaf) => {
+        if (isNavAction(item)) {
+            if (item.action === "new-chat") {
+                aiChat.startNewConversation()
+                router.push("/dashboard")
+            } else {
+                aiChat.openHistory()
+            }
+            return
+        }
+        handleNavigation(item.href)
+    }
+
+    const GroupSection = ({ group, isMobile = false }: { group: NavGroup; isMobile?: boolean }) => {
+        const expanded = expandedGroups[group.name]
+        const active = isGroupActive(group)
+
+        return (
+            <div className="flex flex-col">
+                <div
+                    onClick={() => {
+                        if (!isOpen && !isMobile) {
+                            setIsOpen(true)
+                            setExpandedGroups((prev) => ({ ...prev, [group.name]: true }))
+                            return
+                        }
+                        toggleGroup(group.name)
+                    }}
+                    className={cn(
+                        "flex items-center h-9 rounded-lg transition-all duration-200 cursor-pointer",
+                        isOpen || isMobile ? "gap-x-2 px-2" : "justify-center px-0",
+                        active ? "text-sidebar-primary" : "text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-gray-400"
+                    )}
+                >
+                    <span className="flex-shrink-0">{React.cloneElement(group.icon, { size: 16 } as any)}</span>
+                    {(isOpen || isMobile) && (
+                        <>
+                            <p className="font-medium whitespace-nowrap text-sm flex-1 text-left">{group.name}</p>
+                            <ChevronDown size={14} className={cn("flex-shrink-0 transition-transform duration-200", expanded ? "rotate-180" : "")} />
+                        </>
+                    )}
+                </div>
+
+                {(isOpen || isMobile) && expanded && (
+                    <div className="flex flex-col gap-y-0.5 mt-1 ml-3.5 pl-2.5 border-l border-gray-200 dark:border-gray-800">
+                        {group.items.map((item) => {
+                            const active = !isNavAction(item) && isLeafActive(item.href)
+                            return (
+                                <div
+                                    key={item.name}
+                                    onClick={() => handleLeafClick(item)}
+                                    className={cn(
+                                        "flex items-center gap-x-2 h-8 px-2 rounded-lg cursor-pointer transition-colors",
+                                        active
+                                            ? "bg-sidebar-primary/10 text-sidebar-primary"
+                                            : "text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-gray-400"
+                                    )}
+                                >
+                                    <span className="flex-shrink-0">{React.cloneElement(item.icon, { size: 14 } as any)}</span>
+                                    <p className="text-xs font-medium whitespace-nowrap truncate">{item.name}</p>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    const FlatItem = ({ name, icon, href, isMobile = false }: { name: string; icon: React.ReactElement; href: string; isMobile?: boolean }) => (
+        <div className="cursor-pointer" onClick={() => handleNavigation(href)}>
             <div className={cn(
                 "flex items-center h-9 rounded-lg transition-all duration-200",
                 isOpen || isMobile ? "gap-x-2 px-2" : "justify-center px-0",
-                pathname.includes(item.href)
-                    ? isOpen || isMobile
-                        ? "bg-sidebar-primary/10 text-sidebar-primary border-r-2 border-sidebar-primary"
-                        : "bg-sidebar-primary/10 text-sidebar-primary"
+                isLeafActive(href)
+                    ? "bg-sidebar-primary/10 text-sidebar-primary"
                     : "text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-gray-400"
             )}>
-                <span className="flex-shrink-0">{item.icon && React.cloneElement(item.icon, { size: 16 } as any)}</span>
-                {isOpen && <p className="font-medium whitespace-nowrap text-sm">{item.name}</p>}
+                <span className="flex-shrink-0">{React.cloneElement(icon, { size: 16 } as any)}</span>
+                {(isOpen || isMobile) && <p className="font-medium whitespace-nowrap text-sm">{name}</p>}
             </div>
         </div>
     )
@@ -131,38 +247,38 @@ const Sidebar = () => {
                 )}
             </div>
 
-            {/* Main Navigation */}
-            <div className="flex flex-col gap-y-1 px-1">
-                {(isOpen || isMobile) && (
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Main</p>
-                )}
-                {mainNavItems.map((item) => <NavItem key={item.name} item={item} isMobile={isMobile} />)}
-            </div>
+            {/* Scrollable nav sections */}
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-1">
+                {sections.map((section, idx) => (
+                    <div key={section.label} className={cn("flex flex-col gap-y-1", idx > 0 && "mt-4")}>
+                        {(isOpen || isMobile) && (
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">{section.label}</p>
+                        )}
+                        {!isOpen && !isMobile && idx > 0 && <hr className="mb-2 border-gray-200 dark:border-gray-700" />}
+                        {section.groups.map((group) => (
+                            <GroupSection key={group.name} group={group} isMobile={isMobile} />
+                        ))}
+                    </div>
+                ))}
 
-            {/* Tools */}
-            <div className="flex flex-col gap-y-1 px-1 mt-4">
-                {(isOpen || isMobile) && (
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Tools</p>
+                {/* Admin/Support Panels */}
+                {(isAdmin || isSupport) && (
+                    <div className="flex flex-col gap-y-1 mt-4">
+                        {(isOpen || isMobile) && (
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Panels</p>
+                        )}
+                        {!isOpen && !isMobile && <hr className="mb-2 border-gray-200 dark:border-gray-700" />}
+                        {isAdmin && <FlatItem isMobile={isMobile} name="Admin Panel" icon={<ShieldCheck size={20} />} href="/admin/dashboard" />}
+                        {isSupport && <FlatItem isMobile={isMobile} name="Support Panel" icon={<LifeBuoy size={20} />} href="/support/dashboard" />}
+                    </div>
                 )}
-                {!isOpen && !isMobile && <hr className="mb-2 border-gray-200 dark:border-gray-700" />}
-                {toolNavItems.map((item) => <NavItem key={item.name} item={item} isMobile={isMobile} />)}
             </div>
-
-            {/* Admin/Support Panels */}
-            {(isAdmin || isSupport) && (
-                <div className="flex flex-col gap-y-1 px-1 mt-4">
-                    {(isOpen || isMobile) && (
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2 mb-1">Panels</p>
-                    )}
-                    {!isOpen && !isMobile && <hr className="mb-2 border-gray-200 dark:border-gray-700" />}
-                    {isAdmin && <NavItem isMobile={isMobile} item={{ name: "Admin Panel", icon: <ShieldCheck size={20} />, href: "/admin/dashboard" }} />}
-                    {isSupport && <NavItem isMobile={isMobile} item={{ name: "Support Panel", icon: <LifeBuoy size={20} />, href: "/support/dashboard" }} />}
-                </div>
-            )}
 
             {/* Bottom Section */}
-            <div className="mt-auto flex flex-col gap-y-1 px-1 pb-4">
-                <hr className="mb-3 border-gray-200 dark:border-gray-700" />
+            <div className="flex flex-col gap-y-1 px-1 pb-4 pt-2">
+                <hr className="mb-2 border-gray-200 dark:border-gray-700" />
+
+                <FlatItem isMobile={isMobile} name="Settings" icon={<Settings size={20} />} href="/settings" />
 
                 <button
                     onClick={toggleTheme}
@@ -227,6 +343,9 @@ const Sidebar = () => {
 
             {/* Mobile Bottom Navigation */}
             <MobileBottomNav />
+
+            {/* Floating, scrollable chat-history panel */}
+            <AiChatHistoryFlyout />
         </>
     )
 }

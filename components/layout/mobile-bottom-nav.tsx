@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, WandSparkles, Scale, FileText, Settings, HelpCircle, Moon, Sun } from "lucide-react"
+import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, WandSparkles, Scale, FileText, Settings, HelpCircle, Moon, Sun, BarChart3, CalendarDays, ClipboardList, Workflow } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
@@ -18,7 +18,7 @@ const MobileBottomNav = () => {
     }, [])
 
     const mainNavItems = [
-        { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+        { name: "AI", icon: Bot, href: "/dashboard" },
         { name: "Cases", icon: FileSearch, href: "/case-tracking" },
         { name: "Clients", icon: UsersRound, href: "/my-clients" },
         { name: "Invoices", icon: ReceiptText, href: "/invoices" },
@@ -26,9 +26,13 @@ const MobileBottomNav = () => {
     ]
 
     const moreNavItems = [
+        { name: "Overview", icon: BarChart3, href: "/dashboard/overview" },
+        { name: "AI Workflow", icon: Workflow, href: "/ai-workflow" },
+        { name: "Calendar", icon: CalendarDays, href: "/calendar" },
         { name: "Suggestions", icon: WandSparkles, href: "/suggestions" },
         { name: "Acts", icon: Scale, href: "/acts" },
         { name: "Affidavit", icon: FileText, href: "/generate-affidavit" },
+        { name: "Legal Forms", icon: ClipboardList, href: "/legal-forms" },
         { name: "Settings", icon: Settings, href: "/settings" },
         { name: "Help & Support", icon: HelpCircle, href: "/contact-us" },
     ]

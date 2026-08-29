@@ -1,0 +1,41 @@
+[project]
+name = "lexvert-backend"
+version = "1.0.0"
+description = "LexVert — Delhi High Court Cause List Parser API"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi==0.135.*",
+    "starlette==1.*",
+    "uvicorn[standard]==0.34.*",
+    "pdfplumber==0.11.*",
+    "pydantic==2.*",
+    "python-multipart==0.0.*",
+    "pymongo==4.10.*",
+    "requests>=2.31",
+    "apscheduler>=3.10",
+    "beautifulsoup4>=4.12",
+    "python-dotenv>=1.0",
+    "pyjwt[crypto]>=2.9",
+    "gunicorn==23.*",
+    "playwright>=1.62.0",
+    "langchain-experimental>=0.4.2",
+    "langchain-openai>=1.6.0",
+]
+
+# Ingestion/RAG only — deliberately NOT in the base dependency set. Docling
+# pulls in torch and OCR models (multi-GB); the API image must not carry them.
+#   uv sync --extra rag
+[project.optional-dependencies]
+rag = [
+    "boto3>=1.35",
+    "docling>=2.0",
+    # Docling's layout model runs on this instead of torch — see rag/extract.py.
+    "onnxruntime>=1.20",
+    "langchain-text-splitters>=0.3",
+    # Token-length function for the splitter (chunk_size/overlap are measured in tokens, not chars).
+    "tiktoken>=0.8",
+    "langchain-chroma>=1.1.0",
+]
+
+[tool.uv]
+package = false

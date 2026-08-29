@@ -19,6 +19,29 @@
     font-family: 'Outfit', sans-serif;
   }
 
+  .animate-fade-in {
+    animation: fadeIn 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-300) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: var(--bg-300);
+    border-radius: 9999px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
   .waitlist-pattern {
     background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23ffffff' fillOpacity='0.1'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   }
@@ -59,6 +82,19 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #cbd5e1;
   --sidebar-ring: rgba(22, 78, 99, 0.3);
+
+  /* Neutral scale for the AI chat interface (reuses existing --accent as the brand accent) */
+  --bg-0: #ffffff;
+  --bg-000: #ffffff;
+  --bg-100: #ffffff;
+  --bg-200: #f3f5f9;
+  --bg-300: #e2e8f0;
+  --text-100: #0f172a;
+  --text-200: #334155;
+  --text-300: #64748b;
+  --text-400: #94a3b8;
+  --text-500: #cbd5e1;
+  --accent-hover: #65a30d;
 }
 
 .dark {
@@ -95,6 +131,19 @@
   --sidebar-accent-foreground: #e8ecf0;
   --sidebar-border: #1e3a5f;
   --sidebar-ring: #22d3ee;
+
+  /* Neutral scale for the AI chat interface (reuses existing --accent as the brand accent) */
+  --bg-0: #0a0f14;
+  --bg-000: #0a0f14;
+  --bg-100: #111820;
+  --bg-200: #1e293b;
+  --bg-300: #1e3a5f;
+  --text-100: #e8ecf0;
+  --text-200: #cbd5e1;
+  --text-300: #94a3b8;
+  --text-400: #64748b;
+  --text-500: #475569;
+  --accent-hover: #2dd4bf;
 }
 
 @theme inline {
@@ -134,6 +183,18 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-bg-0: var(--bg-0);
+  --color-bg-000: var(--bg-000);
+  --color-bg-100: var(--bg-100);
+  --color-bg-200: var(--bg-200);
+  --color-bg-300: var(--bg-300);
+  --color-text-100: var(--text-100);
+  --color-text-200: var(--text-200);
+  --color-text-300: var(--text-300);
+  --color-text-400: var(--text-400);
+  --color-text-500: var(--text-500);
+  --color-accent-hover: var(--accent-hover);
 
   /* Added custom fonts for lexvert */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -289,6 +350,19 @@
   /* Safe area for bottom nav on phones with notches */
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
   }
 }
 

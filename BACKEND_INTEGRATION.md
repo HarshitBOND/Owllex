@@ -17,20 +17,15 @@ lexvert/
 ```bash
 cd backend
 
-# Create virtual environment
-python -m venv .venv
-.venv\Scripts\activate       # Windows
-# source .venv/bin/activate  # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (creates .venv automatically, pinned to Python 3.11)
+uv sync
 
 # Copy env config
 copy .env.example .env       # Windows
 # cp .env.example .env       # Linux/Mac
 
 # Run server
-python run.py
+uv run python run.py
 ```
 
 Backend runs at: **http://localhost:8000**

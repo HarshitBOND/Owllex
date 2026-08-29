@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
 import { SidebarProvider } from "@/contexts/SidebarContext"
+import { AiChatProvider } from "@/contexts/AiChatContext"
 import { ThemeProvider } from "@/components/theme-provider"
 
 const outfit = Outfit({
@@ -73,7 +74,9 @@ export default async function RootLayout({
             localization={clerkLocalization}
           >
             <SidebarProvider>
-              {children}
+              <AiChatProvider>
+                {children}
+              </AiChatProvider>
             </SidebarProvider>
             <Analytics />
           </ClerkProvider>
