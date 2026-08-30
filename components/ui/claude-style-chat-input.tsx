@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Plus, ChevronDown, ArrowUp, X, FileText, Loader2, Check, Archive } from "lucide-react";
+import { Plus, ChevronDown, ArrowUp, X, FileText, Loader2, Check, Archive, Search, FileCheck2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 /* --- ICONS --- */
 export const Icons = {
@@ -219,6 +220,71 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ models, selectedModel, on
     );
 };
 
+const toolLinks = [
+    { name: "Legal Research", href: "/legal-research", icon: Search },
+    { name: "Contract Review", href: "/contract-review", icon: FileCheck2 },
+    { name: "Legal Summarizer", href: "/legal-summarizer", icon: FileText },
+];
+
+const ToolsMenu: React.FC = () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className={`group relative transition-all duration-200 h-8 w-8 flex items-center justify-center rounded-lg active:scale-95
+                    ${isOpen
+                        ? 'text-accent bg-accent/10'
+                        : 'text-text-400 hover:text-text-200 hover:bg-bg-200'}
+                `}
+                type="button"
+                aria-expanded={isOpen}
+                aria-label="Tools"
+            >
+                <Icons.Thinking className="w-5 h-5" />
+
+                {!isOpen && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-text-100 text-bg-0 text-[11px] font-medium rounded-[6px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-sm tracking-wide">
+                        Tools
+                    </div>
+                )}
+            </button>
+
+            {isOpen && (
+                <div className="absolute bottom-full left-0 mb-2 w-[220px] bg-bg-0 border border-bg-300 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col p-1.5 animate-fade-in origin-bottom-left">
+                    {toolLinks.map(tool => (
+                        <button
+                            key={tool.name}
+                            onClick={() => {
+                                setIsOpen(false);
+                                router.push(tool.href);
+                            }}
+                            className="w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2 group transition-colors hover:bg-bg-200"
+                            type="button"
+                        >
+                            <tool.icon className="w-4 h-4 text-text-300 shrink-0" />
+                            <span className="text-[13px] font-semibold text-text-100">{tool.name}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 export interface ClaudeChatInputSubmission {
     message: string;
     files: AttachedFile[];
@@ -239,7 +305,7 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
     const [pastedContent, setPastedContent] = useState<PastedContent[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [selectedModel, setSelectedModel] = useState("sonnet-4.5");
-    const [isThinkingEnabled, setIsThinkingEnabled] = useState(false);
+    const [isThinkingEnabled] = useState(false);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -411,23 +477,7 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
                             </button>
 
                             <div className="flex shrink min-w-8 !shrink-0">
-                                <button
-                                    onClick={() => setIsThinkingEnabled(!isThinkingEnabled)}
-                                    className={`group relative transition-all duration-200 h-8 w-8 flex items-center justify-center rounded-lg active:scale-95
-                                        ${isThinkingEnabled
-                                            ? 'text-accent bg-accent/10'
-                                            : 'text-text-400 hover:text-text-200 hover:bg-bg-200'}
-                                    `}
-                                    aria-pressed={isThinkingEnabled}
-                                    aria-label="Extended thinking"
-                                >
-                                    <Icons.Thinking className="w-5 h-5" />
-
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-text-100 text-bg-0 text-[11px] font-medium rounded-[6px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 flex items-center gap-1 shadow-sm tracking-wide">
-                                        <span>Extended thinking</span>
-                                        <span className="text-text-400 opacity-80" style={{ fontSize: '10px' }}>⇧+Ctrl+E</span>
-                                    </div>
-                                </button>
+                                <ToolsMenu />
                             </div>
                         </div>
 

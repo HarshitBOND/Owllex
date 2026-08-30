@@ -6,28 +6,7 @@ import { FileText, FileSearch, UsersRound, Scale, Sparkles } from "lucide-react"
 import { ClaudeChatInput, type ClaudeChatInputSubmission } from "@/components/ui/claude-style-chat-input"
 import type { ChatMessage } from "./ai-chat-types"
 
-const quickPrompts = [
-  {
-    label: "Draft an affidavit",
-    icon: FileText,
-    prompt: "Help me draft an affidavit for a property dispute case.",
-  },
-  {
-    label: "Track a case",
-    icon: FileSearch,
-    prompt: "What's the current status of my case, and when is the next hearing?",
-  },
-  {
-    label: "Find a lawyer",
-    icon: UsersRound,
-    prompt: "I need a lawyer who specializes in family law near me.",
-  },
-  {
-    label: "Legal question",
-    icon: Scale,
-    prompt: "Can you explain what a cease and desist notice does?",
-  },
-]
+
 
 const COMING_SOON_REPLY = "The AI legal assistant isn't connected yet — this feature is coming soon."
 
@@ -80,10 +59,7 @@ export function AiChatHome({ messages, addUserMessage, addAssistantMessage }: Ai
             <div className="w-16 h-16 mx-auto mb-5 flex items-center justify-center rounded-2xl bg-accent/10">
               <Sparkles className="w-8 h-8 text-accent" />
             </div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground mb-3">
-              <Sparkles className="h-3 w-3 text-accent" />
-              Agentic AI, purpose-built for legal work
-            </div>
+            
             <h1 className="font-serif text-3xl sm:text-4xl font-light text-text-100 mb-2 tracking-tight">
               {greeting}, {user?.firstName || "Counselor"}
             </h1>
@@ -95,16 +71,7 @@ export function AiChatHome({ messages, addUserMessage, addAssistantMessage }: Ai
           <ClaudeChatInput onSendMessage={submit} placeholder="Ask your legal assistant anything..." />
 
           <div className="flex flex-wrap justify-center gap-2 mt-5 max-w-2xl mx-auto px-4">
-            {quickPrompts.map((item) => (
-              <button
-                key={item.label}
-                onClick={() => submit({ message: item.prompt, files: [], pastedContent: [], model: "sonnet-4.5", isThinkingEnabled: false })}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-300 bg-transparent border border-bg-300 rounded-full hover:bg-bg-200 hover:text-text-200 transition-colors duration-150"
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </button>
-            ))}
+            
           </div>
 
           <p className="text-xs text-text-500 mt-6 text-center">

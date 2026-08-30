@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
 import {
     ChevronRight, ChevronDown, FileSearch, ExternalLink, UsersRound, ReceiptText,
     ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck,
-    LifeBuoy, Settings, Sparkles, CirclePlus, History, Search, Gavel, FileEdit,
-    FileCheck2, MessageCircleQuestion, Quote, Settings2, Briefcase, LayoutDashboard,
+    LifeBuoy, Settings, Sparkles, CirclePlus, History, FileEdit,
+    Settings2, Briefcase, LayoutDashboard,
     CalendarDays, Workflow,
 } from "lucide-react"
 import Link from "next/link"
@@ -36,13 +36,7 @@ const isNavAction = (item: NavLeaf): item is NavAction => "action" in item
 const aiGroupItems: NavLeaf[] = [
     { name: "New Chat", icon: <CirclePlus size={16} />, action: "new-chat" },
     { name: "Chat History", icon: <History size={16} />, action: "chat-history" },
-    { name: "Legal Research", icon: <Search size={16} />, href: "/legal-research" },
-    { name: "Case Law Finder", icon: <Gavel size={16} />, href: "/case-law-finder" },
     { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },
-    { name: "Contract Review", icon: <FileCheck2 size={16} />, href: "/contract-review" },
-    { name: "Legal Summarizer", icon: <FileText size={16} />, href: "/legal-summarizer" },
-    { name: "Ask Precedent", icon: <MessageCircleQuestion size={16} />, href: "/ask-precedent" },
-    { name: "Citations Checker", icon: <Quote size={16} />, href: "/citations-checker" },
     { name: "AI Workflow", icon: <Workflow size={16} />, href: "/ai-workflow" },
     { name: "AI Settings", icon: <Settings2 size={16} />, href: "/ai-settings" },
 ]
