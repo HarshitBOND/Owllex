@@ -15,7 +15,7 @@ export type DraftPatch = {
 const DEBOUNCE_MS = 1200
 const HEARTBEAT_MS = 15000
 
-export function useDraftAutosave(draftId: string, initialVersion: number) {
+export function useDraftAutosave(draftId: string, initialVersion: number, endpointBase = "/api/draft-documents") {
   const [status, setStatus] = useState<SaveStatus>("idle")
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
 
@@ -40,7 +40,7 @@ export function useDraftAutosave(draftId: string, initialVersion: number) {
 
     let saved = false
     try {
-      const res = await fetch(`/api/draft-documents/${draftId}`, {
+      const res = await fetch(`${endpointBase}/${draftId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...patch, version: versionRef.current }),
@@ -73,7 +73,7 @@ export function useDraftAutosave(draftId: string, initialVersion: number) {
 
     if (pendingRef.current) send()
     else setStatus("saved")
-  }, [draftId])
+  }, [draftId, endpointBase])
 
   const queue = useCallback(
     (patch: DraftPatch) => {
@@ -104,7 +104,7 @@ export function useDraftAutosave(draftId: string, initialVersion: number) {
     const onHide = () => {
       const patch = pendingRef.current
       if (!patch || conflictRef.current) return
-      fetch(`/api/draft-documents/${draftId}`, {
+      fetch(`${endpointBase}/${draftId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...patch, version: versionRef.current }),
@@ -117,7 +117,7 @@ export function useDraftAutosave(draftId: string, initialVersion: number) {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       onHide()
     }
-  }, [draftId])
+  }, [draftId, endpointBase])
 
   return { status, lastSavedAt, conflict: status === "conflict", queue, flush, retry: send }
 }

@@ -1,27 +1,24 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
-import { Download, FileText, HelpCircle, Share2 } from "lucide-react"
+import { Download, HelpCircle, Share2 } from "lucide-react"
 import Sidebar from "@/components/layout/sidebar"
 import Navbar from "@/components/layout/navbar"
 import { cn } from "@/lib/utils"
 import ContractReviewWorkspace from "@/features/contract-review/components/ContractReviewWorkspace"
-import { mockIssues } from "@/features/contract-review/data"
+import type { ContractFileMeta, ContractIssue } from "@/features/contract-review/data"
 
 export default function Page() {
   const router = useRouter()
   const { isLoaded, isSignedIn } = useUser()
-  const searchParams = useSearchParams()
-  const fileName = searchParams.get("file")
 
   const [downloadLabel, setDownloadLabel] = useState("Download report")
   const [shareLabel, setShareLabel] = useState("Share report")
-  const [workspaceStatus, setWorkspaceStatus] = useState<"idle" | "analyzing" | "ready">(
-    fileName ? "analyzing" : "idle",
-  )
-  const [sampleRequestToken, setSampleRequestToken] = useState(0)
+  const [workspaceStatus, setWorkspaceStatus] = useState<"idle" | "analyzing" | "ready">("idle")
+  const [issues, setIssues] = useState<ContractIssue[]>([])
+  const [fileMeta, setFileMeta] = useState<ContractFileMeta | null>(null)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const howItWorksRef = useRef<HTMLDivElement>(null)
 
@@ -52,11 +49,9 @@ export default function Page() {
   const handleDownloadReport = () => {
     const lines = [
       "Contract Review Report",
-      fileName ? `File: ${fileName}` : "",
+      fileMeta ? `File: ${fileMeta.name}` : "",
       "",
-      ...mockIssues.map(
-        (issue) => `[${issue.severity.toUpperCase()}] ${issue.title} — ${issue.description} (Page ${issue.page}, Clause ${issue.clause})`,
-      ),
+      ...issues.map((issue) => `[${issue.severity.toUpperCase()}] ${issue.title} — ${issue.description}`),
     ].filter(Boolean)
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" })
     const url = URL.createObjectURL(blob)
@@ -131,9 +126,9 @@ export default function Page() {
                         </p>
                         <ol className="space-y-2.5">
                           {[
-                            "Upload a PDF or DOCX contract.",
-                            "Our AI scans every clause for risk.",
-                            "Review flagged issues in plain language.",
+                            "Upload a PDF, DOCX, TXT, or scanned image.",
+                            "We extract the text (with OCR for scans) and our AI scans every clause for risk.",
+                            "Review flagged issues, edit the document, or ask AI to fix a clause.",
                             "Download or share the finished report.",
                           ].map((step, i) => (
                             <li
@@ -150,14 +145,6 @@ export default function Page() {
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSampleRequestToken((n) => n + 1)}
-                    className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    View sample report
-                  </button>
                 </div>
               )
             }
@@ -165,9 +152,11 @@ export default function Page() {
         </div>
         <div className="px-3 sm:px-4 md:px-6 pb-6">
           <ContractReviewWorkspace
-            initialFileName={fileName}
             onStatusChange={setWorkspaceStatus}
-            sampleRequestToken={sampleRequestToken}
+            onIssuesChange={(nextIssues, nextFileMeta) => {
+              setIssues(nextIssues)
+              setFileMeta(nextFileMeta)
+            }}
           />
         </div>
       </div>

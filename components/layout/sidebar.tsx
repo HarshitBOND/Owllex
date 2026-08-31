@@ -234,17 +234,29 @@ const Sidebar = () => {
     const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
         <div className="relative h-full w-full flex flex-col">
             {/* Logo */}
-            <div className={cn("flex items-center px-2 pt-1 pb-4", isMobile || isOpen ? "justify-between" : "justify-center")}>
+            <div className={cn("flex items-center pt-1 pb-4", isMobile || isOpen ? "justify-between px-2" : "justify-center px-0")}>
                 <div className="flex items-center min-w-0 flex-shrink-0">
-                    <Image
-                        className="h-12 w-12 min-h-12 min-w-12 flex-shrink-0 object-contain"
-                        src="/ravenslaw.png"
-                        alt="Logo"
-                        width={48}
-                        height={48}
-                        priority
-                        loading="eager"
-                    />
+                    {isMobile || isOpen ? (
+                        <Image
+                            className="h-14 w-14 min-h-14 min-w-14 flex-shrink-0 object-contain"
+                            src="/ravenslaw.png"
+                            alt="Logo"
+                            width={56}
+                            height={56}
+                            priority
+                            loading="eager"
+                        />
+                    ) : (
+                        <Image
+                            className="h-8 w-8 min-h-8 min-w-8 flex-shrink-0 object-contain"
+                            src="/logo.png"
+                            alt="Logo"
+                            width={32}
+                            height={32}
+                            priority
+                            loading="eager"
+                        />
+                    )}
                 </div>
                 {isMobile && (
                     <button onClick={() => setIsOpen(false)} className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">

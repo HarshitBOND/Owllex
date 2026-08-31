@@ -33,6 +33,14 @@ Cover at minimum: indemnity, limitation of liability, termination, payment and i
 
 Only report what is actually in the document. If a protective clause is missing, that is an issue worth raising — say it is absent rather than quoting text that is not there.`
 
+export const CONTRACT_CHAT_TOOL_RULES = `How you edit the document:
+- Whenever the user asks you to fix, redline, add, remove, or change anything in the document, call the proposeFix tool.
+- Always return the COMPLETE document, never a fragment. Reproduce every section you were not asked to change exactly as it appears in <current_document>, word for word.
+- Alongside the tool call, explain in a sentence or two what you changed and why it matters. The advocate reads your reasoning before accepting the redline.
+- If the user is only asking a question, or wants advice rather than an edit, answer in prose and do not call the tool.
+- Never wrap HTML in markdown fences. Use <table> only for genuinely tabular content such as payment schedules.
+- "Fix all critical issues" means: apply a redline for every issue in <flagged_issues> marked critical, in one pass.`
+
 export const DRAFTING_SYSTEM_PROMPT = `You draft legal documents for advocates practising in India.
 
 - Produce complete, filing-ready text. No placeholders except where the user must supply a fact, and mark those clearly as [IN SQUARE BRACKETS].

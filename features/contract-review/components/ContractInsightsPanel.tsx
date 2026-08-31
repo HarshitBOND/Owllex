@@ -1,41 +1,74 @@
 "use client"
 
 import { useState } from "react"
-import { Check, ChevronRight, Info, Sparkles } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { issueTabs, mockIssues, severityStyles, summaryStats } from "../data"
+import { AlertCircle, Check, CheckCircle2, ChevronRight, Info, Sparkles } from "lucide-react"
+import { severityStyles, type ContractIssue, type ContractSummary, type IssueSeverity } from "../data"
 
 interface ContractInsightsPanelProps {
   isAnalyzing: boolean
+  error?: string | null
+  issues: ContractIssue[]
+  summary: ContractSummary | null
   selectedIssueId: string | null
   onSelectIssue: (id: string) => void
-  fixedIssueIds: Set<string>
+  resolvedIssueIds: Set<string>
+  onToggleResolved: (id: string) => void
+  onOpenChat: () => void
 }
 
-const stats = [
-  { label: "Issues", value: summaryStats.issues, style: severityStyles.critical },
-  { label: "Warnings", value: summaryStats.warnings, style: severityStyles.warning },
-  { label: "Suggestions", value: summaryStats.suggestions, style: severityStyles.suggestion },
-  { label: "Info", value: summaryStats.info, style: severityStyles.info },
+const tabs: Array<{ key: "all" | IssueSeverity; label: string }> = [
+  { key: "all", label: "All issues" },
+  { key: "critical", label: "Critical" },
+  { key: "warning", label: "Warnings" },
+  { key: "suggestion", label: "Suggestions" },
 ]
 
 export default function ContractInsightsPanel({
   isAnalyzing,
+  error,
+  issues,
+  summary,
   selectedIssueId,
   onSelectIssue,
-  fixedIssueIds,
+  resolvedIssueIds,
+  onToggleResolved,
+  onOpenChat,
 }: ContractInsightsPanelProps) {
-  const [tab, setTab] = useState<(typeof issueTabs)[number]["key"]>("all")
-  const router = useRouter()
+  const [tab, setTab] = useState<(typeof tabs)[number]["key"]>("all")
 
-  const filteredIssues = mockIssues.filter((issue) => tab === "all" || issue.severity === tab)
+  const filteredIssues = issues.filter((issue) => tab === "all" || issue.severity === tab)
+  const counts = {
+    all: issues.length,
+    critical: issues.filter((i) => i.severity === "critical").length,
+    warning: issues.filter((i) => i.severity === "warning").length,
+    suggestion: issues.filter((i) => i.severity === "suggestion").length,
+    info: issues.filter((i) => i.severity === "info").length,
+  }
+  const stats = [
+    { label: "Issues", value: counts.critical, style: severityStyles.critical },
+    { label: "Warnings", value: counts.warning, style: severityStyles.warning },
+    { label: "Suggestions", value: counts.suggestion, style: severityStyles.suggestion },
+    { label: "Info", value: counts.info, style: severityStyles.info },
+  ]
 
   return (
     <div className="w-full xl:w-[400px] shrink-0 h-[75vh] xl:h-[calc(100vh-190px)] flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
       <div className="px-4 py-4 border-b border-gray-200 dark:border-border shrink-0">
         <div className="flex items-center gap-1.5 mb-3">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-foreground">Review summary</h2>
-          <Info className="w-3.5 h-3.5 text-muted-foreground" />
+          {summary && (
+            <span
+              className={`inline-flex items-center rounded-full border text-[10px] font-medium px-1.5 py-0.5 ml-auto ${
+                summary.riskLevel === "High"
+                  ? "border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400"
+                  : summary.riskLevel === "Medium"
+                    ? "border-orange-200 dark:border-orange-500/30 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                    : "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              {summary.riskLevel} risk
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-4 gap-2">
           {stats.map((stat) => (
@@ -48,10 +81,15 @@ export default function ContractInsightsPanel({
             </div>
           ))}
         </div>
+        {summary?.summary && (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-gray-600 dark:text-muted-foreground">
+            {summary.summary}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-border overflow-x-auto custom-scrollbar shrink-0">
-        {issueTabs.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
@@ -62,7 +100,7 @@ export default function ContractInsightsPanel({
                 : "text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary"
             }`}
           >
-            {t.label} ({t.count})
+            {t.label} ({counts[t.key]})
           </button>
         ))}
       </div>
@@ -73,6 +111,12 @@ export default function ContractInsightsPanel({
             <div className="w-6 h-6 border-2 border-t-transparent border-accent rounded-full animate-spin" />
             Analyzing contract…
           </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-center px-6">
+            <AlertCircle className="w-6 h-6 text-red-500" />
+            <p className="text-sm font-medium text-gray-900 dark:text-foreground">Review failed</p>
+            <p className="text-xs text-muted-foreground">{error}</p>
+          </div>
         ) : filteredIssues.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-1 py-12 text-sm text-muted-foreground text-center px-6">
             No issues in this category.
@@ -81,51 +125,62 @@ export default function ContractInsightsPanel({
           filteredIssues.map((issue) => {
             const style = severityStyles[issue.severity]
             const isSelected = selectedIssueId === issue.id
-            const isFixed = fixedIssueIds.has(issue.id)
+            const isResolved = resolvedIssueIds.has(issue.id)
             return (
-              <button
+              <div
                 key={issue.id}
-                type="button"
-                onClick={() => onSelectIssue(issue.id)}
                 className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors ${
-                  isFixed ? "opacity-60" : isSelected ? "bg-accent/5" : "hover:bg-gray-50 dark:hover:bg-secondary/40"
+                  isResolved ? "opacity-60" : isSelected ? "bg-accent/5" : "hover:bg-gray-50 dark:hover:bg-secondary/40"
                 }`}
               >
-                <span
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5 ${
-                    isFixed ? "bg-emerald-500" : style.dot
+                <button type="button" onClick={() => onSelectIssue(issue.id)} className="flex items-start gap-3 flex-1 min-w-0 text-left">
+                  <span
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-white shrink-0 mt-0.5 ${
+                      isResolved ? "bg-emerald-500" : style.dot
+                    }`}
+                  >
+                    {isResolved && <Check className="w-3 h-3" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span
+                        className={
+                          isResolved
+                            ? "inline-flex items-center rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium px-1.5 py-0.5"
+                            : `inline-flex items-center rounded-full border ${style.badgeBorder} ${style.badgeBg} ${style.badgeText} text-[10px] font-medium px-1.5 py-0.5`
+                        }
+                      >
+                        {isResolved ? "Resolved" : style.label}
+                      </span>
+                      <span
+                        className={`text-[13px] font-semibold ${
+                          isResolved ? "line-through text-gray-400 dark:text-muted-foreground" : "text-gray-900 dark:text-foreground"
+                        }`}
+                      >
+                        {issue.title}
+                      </span>
+                    </span>
+                    <span className="block text-[12.5px] text-muted-foreground leading-snug mb-1.5">
+                      {issue.description}
+                    </span>
+                    {issue.redline && (
+                      <span className="block text-[11.5px] text-gray-500 dark:text-muted-foreground/80 leading-snug italic">
+                        Suggested: {issue.redline}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleResolved(issue.id)}
+                  title={isResolved ? "Mark unresolved" : "Mark resolved"}
+                  className={`shrink-0 mt-0.5 transition-colors ${
+                    isResolved ? "text-emerald-500" : "text-gray-300 dark:text-muted-foreground hover:text-emerald-500"
                   }`}
                 >
-                  {isFixed ? <Check className="w-3 h-3" /> : issue.badge}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span
-                      className={
-                        isFixed
-                          ? "inline-flex items-center rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium px-1.5 py-0.5"
-                          : `inline-flex items-center rounded-full border ${style.badgeBorder} ${style.badgeBg} ${style.badgeText} text-[10px] font-medium px-1.5 py-0.5`
-                      }
-                    >
-                      {isFixed ? "Resolved" : style.label}
-                    </span>
-                    <span
-                      className={`text-[13px] font-semibold ${
-                        isFixed ? "line-through text-gray-400 dark:text-muted-foreground" : "text-gray-900 dark:text-foreground"
-                      }`}
-                    >
-                      {issue.title}
-                    </span>
-                  </span>
-                  <span className="block text-[12.5px] text-muted-foreground leading-snug mb-1.5">
-                    {issue.description}
-                  </span>
-                  <span className="text-[11px] text-gray-400">
-                    Page {issue.page} • Clause {issue.clause}
-                  </span>
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0 mt-1" />
-              </button>
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+              </div>
             )
           })
         )}
@@ -133,7 +188,7 @@ export default function ContractInsightsPanel({
 
       <button
         type="button"
-        onClick={() => router.push("/dashboard")}
+        onClick={onOpenChat}
         className="flex items-center gap-3 px-4 py-3.5 border-t border-gray-200 dark:border-border shrink-0 text-left hover:bg-gray-50 dark:hover:bg-secondary/40 transition-colors"
       >
         <span className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
@@ -149,6 +204,12 @@ export default function ContractInsightsPanel({
         </span>
         <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
       </button>
+      {!error && !isAnalyzing && (
+        <p className="flex items-center gap-1 px-4 pb-3 text-[11px] text-muted-foreground">
+          <Info className="w-3 h-3 shrink-0" />
+          Click an issue to jump to it in the document, or the arrow to mark it resolved.
+        </p>
+      )}
     </div>
   )
 }

@@ -2,12 +2,23 @@ export type IssueSeverity = "critical" | "warning" | "suggestion" | "info"
 
 export type ContractIssue = {
   id: string
-  badge: number
   severity: IssueSeverity
   title: string
   description: string
-  page: number
-  clause: number
+  quote: string
+  redline: string
+}
+
+export type ContractSummary = {
+  riskLevel: "Low" | "Medium" | "High"
+  summary: string
+  recommendations: string[]
+}
+
+export type ContractFileMeta = {
+  name: string
+  size: number
+  uploadedLabel: string
 }
 
 export const severityStyles: Record<
@@ -60,113 +71,42 @@ export const severityStyles: Record<
   },
 }
 
-export const mockIssues: ContractIssue[] = [
-  {
-    id: "i1",
-    badge: 1,
-    severity: "critical",
-    title: "Missing definition",
-    description: "Exhibit A is referenced but not attached.",
-    page: 1,
-    clause: 1,
-  },
-  {
-    id: "i2",
-    badge: 2,
-    severity: "critical",
-    title: "Unfavorable payment terms",
-    description: "60 days payment term is too long and may impact cash flow.",
-    page: 1,
-    clause: 2,
-  },
-  {
-    id: "i3",
-    badge: 3,
-    severity: "warning",
-    title: "Termination clause too broad",
-    description: 'Allows termination "upon written notice" without specifying notice period or reason.',
-    page: 1,
-    clause: 3,
-  },
-  {
-    id: "i4",
-    badge: 4,
-    severity: "critical",
-    title: "Limitation of liability too broad",
-    description: "This clause may not be enforceable in your jurisdiction.",
-    page: 1,
-    clause: 4,
-  },
-  {
-    id: "i5",
-    badge: 5,
-    severity: "suggestion",
-    title: "Governing law",
-    description: "Consider aligning governing law with the location of performance or dispute resolution.",
-    page: 1,
-    clause: 5,
-  },
+export const fontFamilies = [
+  { label: "Averia Serif Libre", value: "var(--font-averia-serif-libre), Georgia, serif" },
+  { label: "Georgia", value: "Georgia" },
+  { label: "Times New Roman", value: "Times New Roman" },
+  { label: "Arial", value: "Arial" },
+  { label: "Inter", value: "var(--font-inter), Inter, sans-serif" },
 ]
 
-export const summaryStats = {
-  issues: 12,
-  warnings: 7,
-  suggestions: 3,
-  info: 2,
-}
+export const fontSizes = [10, 11, 12, 14, 16, 18]
 
-export const issueTabs = [
-  { key: "all", label: "All issues", count: 12 },
-  { key: "critical", label: "Critical", count: 3 },
-  { key: "warning", label: "Warnings", count: 7 },
-  { key: "suggestion", label: "Suggestions", count: 3 },
-] as const
+export const DEFAULT_TYPOGRAPHY = { fontFamily: fontFamilies[0].value, fontSizePt: 12 }
 
-export type FixSuggestion = {
-  fixedText: string
-  note: string
-}
+// Uploaded through the exact same /api/contract-review pipeline as a real file
+// (as a .md attachment) so "try a sample" exercises real extraction + real AI review,
+// not a second mocked code path.
+export const SAMPLE_CONTRACT_MARKDOWN = `# SERVICE AGREEMENT
 
-export const fixSuggestions: Record<string, FixSuggestion> = {
-  i2: {
-    fixedText: "Payment shall be made within 30 days of invoice.",
-    note: "Shortened the payment term from 60 to 30 days to protect cash flow.",
-  },
-  i3: {
-    fixedText: "Either party may terminate this Agreement upon 30 days' written notice.",
-    note: "Added a defined 30-day notice period to the termination clause.",
-  },
-  i4: {
-    fixedText:
-      "Neither party shall be liable for any indirect, incidental, or consequential damages arising out of or related to this Agreement, except in cases of gross negligence or willful misconduct.",
-    note: "Added a carve-out for gross negligence and willful misconduct so the clause holds up under review.",
-  },
-  i5: {
-    fixedText: "This Agreement shall be governed by the laws of the state in which the Services are performed.",
-    note: "Aligned governing law with the location where the services are performed.",
-  },
-}
+This Service Agreement ("Agreement") is made and entered into by and between Acme Consulting ("Consultant") and the Client.
 
-export type ContractFileMeta = {
-  name: string
-  pages: number
-  uploadedLabel: string
-}
+### 1. Services
 
-export const defaultFileMeta: ContractFileMeta = {
-  name: "Service_Agreement_Acme_Consulting.pdf",
-  pages: 12,
-  uploadedLabel: "Uploaded 2 mins ago",
-}
+The Consultant agrees to provide the services described in Exhibit A.
 
-export const aiInsightsSummary = {
-  riskLevel: "Medium" as const,
-  summary:
-    "This service agreement contains a few clauses that favor the counterparty and one missing exhibit. Payment terms and liability language are the biggest areas to negotiate before signing.",
-  recommendations: [
-    "Request Exhibit A before execution — the scope of services is not otherwise defined.",
-    "Negotiate payment terms down from 60 to 30 days to protect cash flow.",
-    "Add a defined notice period (e.g. 30 days) to the termination clause.",
-    "Review the limitation of liability clause against your governing law's enforceability rules.",
-  ],
-}
+### 2. Payment Terms
+
+The Client shall pay the Consultant a total fee of $50,000. Payment shall be made within 60 days of invoice.
+
+### 3. Term and Termination
+
+This Agreement shall commence on the Effective Date and continue for 12 months. Either party may terminate this Agreement upon written notice.
+
+### 4. Limitation of Liability
+
+Neither party shall be liable for any indirect, incidental, or consequential damages arising out of or related to this Agreement.
+
+### 5. Governing Law
+
+This Agreement shall be governed by the laws of the State of California.
+`

@@ -12,9 +12,11 @@ import {
   ShieldAlert,
   UploadCloud,
 } from "lucide-react"
+import { SAMPLE_CONTRACT_MARKDOWN } from "../data"
 
 interface ContractUploadStateProps {
   onUpload: (file: File) => void
+  error?: string | null
 }
 
 const whatYouGet = [
@@ -48,12 +50,14 @@ const whatYouGet = [
   },
 ]
 
-export default function ContractUploadState({ onUpload }: ContractUploadStateProps) {
+export default function ContractUploadState({ onUpload, error }: ContractUploadStateProps) {
   const [isDragging, setIsDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleSample = () => {
-    onUpload(new File([], "Sample_Service_Agreement.pdf"))
+    onUpload(
+      new File([SAMPLE_CONTRACT_MARKDOWN], "Sample_Service_Agreement.md", { type: "text/markdown" }),
+    )
   }
 
   return (
@@ -91,6 +95,11 @@ export default function ContractUploadState({ onUpload }: ContractUploadStatePro
             <p className="text-sm text-muted-foreground max-w-sm mb-6">
               Our AI will analyze your contract and highlight risks, missing clauses, and improvement suggestions.
             </p>
+            {error && (
+              <p className="mb-4 max-w-sm text-[12.5px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
@@ -107,13 +116,13 @@ export default function ContractUploadState({ onUpload }: ContractUploadStatePro
             </div>
 
             <p className="text-xs text-gray-400">
-              Supports PDF, DOCX <span className="mx-1">•</span> Max size 50MB
+              Supports PDF, DOCX, TXT, scanned images <span className="mx-1">•</span> Max size 25MB
             </p>
 
             <input
               ref={inputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,.docx,.txt,.md,.jpg,.jpeg,.png"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]

@@ -242,6 +242,54 @@ async def ingest_rag_document(
 
 
 @rag_router.post(
+    "/documents/extract",
+    summary="Extract text from a document",
+    description=(
+        "Runs Docling (with OCR fallback for scans/images) on a single uploaded document and "
+        "returns the extracted markdown text. Does not chunk, embed, or store anything, so it "
+        "works even without OPENAI_API_KEY or Chroma configured."
+    ),
+)
+async def extract_document_text(file: UploadFile = File(...)):
+    if not file.filename or Path(file.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, MD, JPG, or PNG files are accepted")
+
+    max_bytes = settings.MAX_PDF_SIZE_MB * 1024 * 1024
+    content = await file.read()
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"File exceeds {settings.MAX_PDF_SIZE_MB}MB")
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename).name)
+    temp_path = os.path.join(settings.UPLOAD_DIR, f"{uuid.uuid4().hex}_{safe_name}")
+
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(content)
+
+        try:
+            from rag.app.ingest.loader import load_text
+        except ImportError:
+            raise HTTPException(
+                status_code=503,
+                detail="RAG dependencies are not installed on this instance (run: uv sync --extra rag)",
+            )
+
+        text = await run_in_threadpool(load_text, temp_path)
+        if not text or not text.strip():
+            raise HTTPException(status_code=422, detail="Nothing extractable in this document")
+
+        return {"success": True, "text": text}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Document extraction failed for %s", file.filename)
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@rag_router.post(
     "/corpus/ingest",
     summary="Ingest a document into one user's corpus",
     description=(
