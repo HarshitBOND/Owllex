@@ -350,6 +350,48 @@
   margin-bottom: 0.35em;
 }
 
+.draft-doc-editor h2 {
+  font-size: 1.15em;
+  font-weight: 700;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+}
+
+.draft-doc-editor blockquote {
+  margin: 0.8em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--border);
+  font-style: italic;
+}
+
+.draft-doc-editor table,
+.chat-clause table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin: 0.9em 0;
+}
+
+.draft-doc-editor th,
+.draft-doc-editor td,
+.chat-clause th,
+.chat-clause td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.6em;
+  vertical-align: top;
+  text-align: left;
+}
+
+.draft-doc-editor th,
+.chat-clause th {
+  font-weight: 700;
+  background: color-mix(in oklab, var(--border) 25%, transparent);
+}
+
+.draft-doc-editor .tableWrapper {
+  overflow-x: auto;
+}
+
 .chat-clause h3 {
   font-size: 1em;
   font-weight: 700;

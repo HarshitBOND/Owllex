@@ -14,6 +14,7 @@ const ConversationSchema = new mongoose.Schema(
   {
     clerkUid: { type: String, required: true, index: true },
     chatId: { type: String, required: true },
+    corpusId: { type: String, default: null },
     title: { type: String, required: true },
     model: { type: String },
     messages: { type: [MessageSchema], default: [] },
@@ -23,6 +24,7 @@ const ConversationSchema = new mongoose.Schema(
 
 ConversationSchema.index({ clerkUid: 1, chatId: 1 }, { unique: true });
 ConversationSchema.index({ clerkUid: 1, updatedAt: -1 });
+ConversationSchema.index({ clerkUid: 1, corpusId: 1, updatedAt: -1 });
 
 const Conversation =
   mongoose.models["Conversation"] ||

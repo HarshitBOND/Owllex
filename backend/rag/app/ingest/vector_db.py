@@ -8,6 +8,7 @@ from langchain_openai import OpenAIEmbeddings
 load_dotenv()
 
 COLLECTION = "lexvert"
+USER_COLLECTION = "lexvert_user"
 EMBED_MODEL = "text-embedding-3-small"
 
 
@@ -19,19 +20,28 @@ def _cloud_client():
     )
 
 
-def get_vector_db():
+def get_vector_db(collection=COLLECTION):
     return Chroma(
         client=_cloud_client(),
-        collection_name=COLLECTION,
+        collection_name=collection,
         embedding_function=OpenAIEmbeddings(model=EMBED_MODEL),
     )
 
 
-def store_chunks(document_id, chunks, metadata):
-    vector_db = get_vector_db()
+def store_chunks(document_id, chunks, metadata, collection=COLLECTION):
+    vector_db = get_vector_db(collection)
     ids = [f"{document_id}_{i}" for i in range(len(chunks))]
     metadatas = [{**metadata, "document_id": document_id} for _ in chunks]
     vector_db.add_texts(chunks, metadatas=metadatas, ids=ids)
+
+
+def delete_by(where, collection=USER_COLLECTION):
+    """Delete every chunk matching a metadata filter. No-op if the collection does not exist yet."""
+    client = _cloud_client()
+    try:
+        client.get_collection(collection).delete(where=where)
+    except Exception:
+        pass
 
 
 def collection_stats():

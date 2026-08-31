@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Plus, ChevronDown, ArrowUp, X, FileText, Loader2, Check, Archive, Search, FileCheck2 } from "lucide-react";
+import { Plus, ChevronDown, ArrowUp, Square, X, FileText, Loader2, Check, Archive, Search, FileCheck2, Library, ChevronRight, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MODELS, DEFAULT_MODEL } from "@/lib/ai/models";
 
@@ -11,6 +11,7 @@ export const Icons = {
     Thinking: (props: React.SVGProps<SVGSVGElement>) => <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}><path d="M10.3857 2.50977C14.3486 2.71054 17.5 5.98724 17.5 10C17.5 14.1421 14.1421 17.5 10 17.5C5.85786 17.5 2.5 14.1421 2.5 10C2.5 9.72386 2.72386 9.5 3 9.5C3.27614 9.5 3.5 9.72386 3.5 10C3.5 13.5899 6.41015 16.5 10 16.5C13.5899 16.5 16.5 13.5899 16.5 10C16.5 6.5225 13.7691 3.68312 10.335 3.50879L10 3.5L9.89941 3.49023C9.67145 3.44371 9.5 3.24171 9.5 3C9.5 2.72386 9.72386 2.5 10 2.5L10.3857 2.50977ZM10 5.5C10.2761 5.5 10.5 5.72386 10.5 6V9.69043L13.2236 11.0527C13.4706 11.1762 13.5708 11.4766 13.4473 11.7236C13.3392 11.9397 13.0957 12.0435 12.8711 11.9834L12.7764 11.9473L9.77637 10.4473C9.60698 10.3626 9.5 10.1894 9.5 10V6C9.5 5.72386 9.72386 5.5 10 5.5ZM3.66211 6.94141C4.0273 6.94159 4.32303 7.23735 4.32324 7.60254C4.32324 7.96791 4.02743 8.26446 3.66211 8.26465C3.29663 8.26465 3 7.96802 3 7.60254C3.00021 7.23723 3.29676 6.94141 3.66211 6.94141ZM4.95605 4.29395C5.32146 4.29404 5.61719 4.59063 5.61719 4.95605C5.6171 5.3214 5.3214 5.61709 4.95605 5.61719C4.59063 5.61719 4.29403 5.32146 4.29395 4.95605C4.29395 4.59057 4.59057 4.29395 4.95605 4.29395ZM7.60254 3C7.96802 3 8.26465 3.29663 8.26465 3.66211C8.26446 4.02743 7.96791 4.32324 7.60254 4.32324C7.23736 4.32302 6.94159 4.0273 6.94141 3.66211C6.94141 3.29676 7.23724 3.00022 7.60254 3Z"></path></svg>,
     SelectArrow: ChevronDown,
     ArrowUp: ArrowUp,
+    Stop: Square,
     X: X,
     FileText: FileText,
     Loader2: Loader2,
@@ -241,13 +242,24 @@ const toolLinks: Array<{ name: string; icon: typeof Search; href?: string; mode?
     { name: "Legal Summarizer", href: "/legal-summarizer", icon: FileText },
 ];
 
+export interface CorpusOption {
+    id: string;
+    name: string;
+    documentCount: number;
+    caseCount: number;
+}
+
 interface ToolsMenuProps {
     activeModeId: string | null;
     onSelectMode: (mode: ToolMode) => void;
+    corpora: CorpusOption[];
+    activeCorpusId: string | null;
+    onSelectCorpus: (id: string | null) => void;
 }
 
-const ToolsMenu: React.FC<ToolsMenuProps> = ({ activeModeId, onSelectMode }) => {
+const ToolsMenu: React.FC<ToolsMenuProps> = ({ activeModeId, onSelectMode, corpora, activeCorpusId, onSelectCorpus }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [showCorpora, setShowCorpora] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
@@ -255,6 +267,7 @@ const ToolsMenu: React.FC<ToolsMenuProps> = ({ activeModeId, onSelectMode }) => 
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
+                setShowCorpora(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -283,8 +296,75 @@ const ToolsMenu: React.FC<ToolsMenuProps> = ({ activeModeId, onSelectMode }) => 
                 )}
             </button>
 
-            {isOpen && (
+            {isOpen && showCorpora && (
+                <div className="absolute bottom-full left-0 mb-2 w-[260px] bg-bg-0 border border-bg-300 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col p-1.5 animate-fade-in origin-bottom-left">
+                    <button
+                        onClick={() => setShowCorpora(false)}
+                        className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2 transition-colors hover:bg-bg-200"
+                        type="button"
+                    >
+                        <ArrowLeft className="w-4 h-4 text-text-300 shrink-0" />
+                        <span className="text-[13px] font-semibold text-text-100 flex-1">Corpus</span>
+                    </button>
+
+                    <div className="h-px bg-bg-300 my-1 mx-2" />
+
+                    <div className="max-h-[260px] overflow-y-auto custom-scrollbar flex flex-col">
+                        {corpora.length === 0 && (
+                            <p className="px-3 py-3 text-[12px] text-text-400 leading-relaxed">
+                                No corpus yet. Create one to give the assistant your case files, clients and documents for a matter.
+                            </p>
+                        )}
+                        {corpora.map(corpus => (
+                            <button
+                                key={corpus.id}
+                                onClick={() => {
+                                    onSelectCorpus(corpus.id === activeCorpusId ? null : corpus.id);
+                                    setIsOpen(false);
+                                    setShowCorpora(false);
+                                }}
+                                className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2 transition-colors hover:bg-bg-200 ${corpus.id === activeCorpusId ? 'bg-bg-200' : ''}`}
+                                type="button"
+                            >
+                                <Library className="w-4 h-4 text-text-300 shrink-0" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-[13px] font-semibold text-text-100 truncate">{corpus.name}</span>
+                                    <span className="block text-[11px] text-text-400">
+                                        {corpus.caseCount} case{corpus.caseCount === 1 ? "" : "s"} &middot; {corpus.documentCount} doc{corpus.documentCount === 1 ? "" : "s"}
+                                    </span>
+                                </span>
+                                {corpus.id === activeCorpusId && <Icons.Check className="w-4 h-4 text-accent shrink-0" />}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="h-px bg-bg-300 my-1 mx-2" />
+
+                    <button
+                        onClick={() => { setIsOpen(false); setShowCorpora(false); router.push("/corpus"); }}
+                        className="w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2 transition-colors hover:bg-bg-200"
+                        type="button"
+                    >
+                        <Plus className="w-4 h-4 text-text-300 shrink-0" />
+                        <span className="text-[13px] font-semibold text-text-100 flex-1">Manage corpus</span>
+                    </button>
+                </div>
+            )}
+
+            {isOpen && !showCorpora && (
                 <div className="absolute bottom-full left-0 mb-2 w-[220px] bg-bg-0 border border-bg-300 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col p-1.5 animate-fade-in origin-bottom-left">
+                    <button
+                        onClick={() => setShowCorpora(true)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2 transition-colors hover:bg-bg-200 ${activeCorpusId ? 'bg-bg-200' : ''}`}
+                        type="button"
+                    >
+                        <Library className="w-4 h-4 text-text-300 shrink-0" />
+                        <span className="text-[13px] font-semibold text-text-100 flex-1">Corpus</span>
+                        <ChevronRight className="w-4 h-4 text-text-400 shrink-0" />
+                    </button>
+
+                    <div className="h-px bg-bg-300 my-1 mx-2" />
+
                     {toolLinks.map(tool => {
                         const isActive = !!tool.mode && activeModeId === tool.mode.id;
                         return (
@@ -326,9 +406,14 @@ interface ClaudeChatInputProps {
     onSendMessage: (data: ClaudeChatInputSubmission) => void;
     placeholder?: string;
     disabled?: boolean;
+    isGenerating?: boolean;
+    onStop?: () => void;
+    corpora?: CorpusOption[];
+    activeCorpusId?: string | null;
+    onSelectCorpus?: (id: string | null) => void;
 }
 
-export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage, placeholder = "How can I help you today?", disabled = false }) => {
+export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage, placeholder = "How can I help you today?", disabled = false, isGenerating = false, onStop, corpora = [], activeCorpusId = null, onSelectCorpus }) => {
     const [message, setMessage] = useState("");
     const [files, setFiles] = useState<AttachedFile[]>([]);
     const [pastedContent, setPastedContent] = useState<PastedContent[]>([]);
@@ -336,6 +421,7 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
     const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
     const [isThinkingEnabled] = useState(false);
     const [activeMode, setActiveMode] = useState<ToolMode | null>(null);
+    const activeCorpus = corpora.find(c => c.id === activeCorpusId) ?? null;
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -437,20 +523,36 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
 
                 <div className="flex flex-col px-3 pt-3 pb-2 gap-2">
 
-                    {activeMode && (
-                        <div className="flex items-center gap-1.5 px-1">
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 text-accent text-xs font-medium pl-2.5 pr-1.5 py-1">
-                                <activeMode.icon className="w-3.5 h-3.5" />
-                                {activeMode.label}
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveMode(null)}
-                                    className="w-4 h-4 rounded-full hover:bg-accent/20 flex items-center justify-center transition-colors"
-                                    aria-label={`Remove ${activeMode.label} mode`}
-                                >
-                                    <Icons.X className="w-3 h-3" />
-                                </button>
-                            </span>
+                    {(activeMode || activeCorpus) && (
+                        <div className="flex flex-wrap items-center gap-1.5 px-1">
+                            {activeCorpus && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 text-accent text-xs font-medium pl-2.5 pr-1.5 py-1 max-w-full">
+                                    <Library className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate">{activeCorpus.name}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => onSelectCorpus?.(null)}
+                                        className="w-4 h-4 rounded-full hover:bg-accent/20 flex items-center justify-center transition-colors shrink-0"
+                                        aria-label={`Leave ${activeCorpus.name}`}
+                                    >
+                                        <Icons.X className="w-3 h-3" />
+                                    </button>
+                                </span>
+                            )}
+                            {activeMode && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 text-accent text-xs font-medium pl-2.5 pr-1.5 py-1">
+                                    <activeMode.icon className="w-3.5 h-3.5" />
+                                    {activeMode.label}
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveMode(null)}
+                                        className="w-4 h-4 rounded-full hover:bg-accent/20 flex items-center justify-center transition-colors"
+                                        aria-label={`Remove ${activeMode.label} mode`}
+                                    >
+                                        <Icons.X className="w-3 h-3" />
+                                    </button>
+                                </span>
+                            )}
                         </div>
                     )}
 
@@ -502,7 +604,13 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
                             </button>
 
                             <div className="flex shrink min-w-8 !shrink-0">
-                                <ToolsMenu activeModeId={activeMode?.id ?? null} onSelectMode={setActiveMode} />
+                                <ToolsMenu
+                                    activeModeId={activeMode?.id ?? null}
+                                    onSelectMode={setActiveMode}
+                                    corpora={corpora}
+                                    activeCorpusId={activeCorpusId}
+                                    onSelectCorpus={(id) => onSelectCorpus?.(id)}
+                                />
                             </div>
                         </div>
 
@@ -517,18 +625,20 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
 
                             <div>
                                 <button
-                                    onClick={handleSend}
-                                    disabled={!hasContent || disabled}
+                                    onClick={isGenerating ? onStop : handleSend}
+                                    disabled={isGenerating ? false : (!hasContent || disabled)}
                                     className={`
                                         inline-flex items-center justify-center relative shrink-0 transition-colors h-8 w-8 rounded-md active:scale-95 !rounded-xl !h-8 !w-8
-                                        ${hasContent && !disabled
-                                            ? 'bg-accent text-bg-0 hover:bg-accent-hover shadow-md'
-                                            : 'bg-accent/30 text-bg-0/60 cursor-default'}
+                                        ${isGenerating
+                                            ? 'bg-text-100 text-bg-0 hover:opacity-80 shadow-md'
+                                            : hasContent && !disabled
+                                                ? 'bg-accent text-bg-0 hover:bg-accent-hover shadow-md'
+                                                : 'bg-accent/10 text-accent/50 cursor-default'}
                                     `}
                                     type="button"
-                                    aria-label="Send message"
+                                    aria-label={isGenerating ? "Stop generating" : "Send message"}
                                 >
-                                    <Icons.ArrowUp className="w-4 h-4" />
+                                    {isGenerating ? <Icons.Stop className="w-3 h-3 fill-current" /> : <Icons.ArrowUp className="w-4 h-4" />}
                                 </button>
                             </div>
                         </div>

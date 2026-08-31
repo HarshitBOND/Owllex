@@ -1,5 +1,5 @@
 import {
-  Activity, CheckCircle2, CreditCard, FileSearch, FileText,
+  Activity, CheckCircle2, CreditCard, FileSearch, FileStack, FileText,
   LayoutDashboard, Loader2, RefreshCw, Shield, UploadCloud, Users, XCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -10,6 +10,7 @@ export const tabs: TabDefinition[] = [
   { id: "users", label: "Users", icon: Users },
   { id: "transactions", label: "Transactions", icon: CreditCard },
   { id: "documents", label: "Documents", icon: FileText },
+  { id: "templates", label: "Document Templates", icon: FileStack },
   { id: "logs", label: "Logs", icon: Activity },
   { id: "causelist", label: "Cause List Parser", icon: FileSearch },
   { id: "rag", label: "Knowledge Base", icon: UploadCloud },

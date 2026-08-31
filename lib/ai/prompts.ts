@@ -40,3 +40,66 @@ export const DRAFTING_SYSTEM_PROMPT = `You draft legal documents for advocates p
 - Use Indian drafting conventions and statutory language where a form is prescribed.
 - Where a clause carries a real choice (jurisdiction, arbitration seat, notice period), pick a sensible default and flag it so the advocate can change it.
 - Output clean semantic HTML suitable for a rich text editor: h1-h3, p, ol, ul, li, strong, em, table. No inline styles, no CSS classes, no markdown fences.`
+
+export const DRAFT_TOOL_RULES = `How you edit the document:
+- Whenever the user asks you to write, add, remove, redraft, or change anything in the document, call the proposeDocument tool.
+- Always return the COMPLETE document, never a fragment. Reproduce every section you were not asked to change exactly as it appears in <current_document>, word for word.
+- Alongside the tool call, explain in a sentence or two what you changed and why it matters. The advocate reads your reasoning before accepting the redline.
+- If the user is only asking a question, or wants advice rather than an edit, answer in prose and do not call the tool.
+- Never wrap HTML in markdown fences. Use <table> only for genuinely tabular content such as schedules or payment terms.
+- If the document is empty, draft the whole instrument from scratch based on what the user asked for.`
+
+export function corpusContextBlock(corpus: {
+  name: string
+  description?: string
+  instructions?: string
+  cases?: any[]
+  clients?: any[]
+  documentCount?: number
+}) {
+  const lines = [
+    `--- ACTIVE CORPUS: ${corpus.name} ---`,
+    "The advocate is working inside this matter. Everything below is their own file data. Treat it as established fact about the matter, and prefer it over anything you infer.",
+  ]
+
+  if (corpus.description?.trim()) {
+    lines.push("", "How they described this matter:", corpus.description.trim())
+  }
+
+  if (corpus.instructions?.trim()) {
+    lines.push("", "Standing instructions for this matter:", corpus.instructions.trim())
+  }
+
+  if (corpus.cases?.length) {
+    lines.push("", "Cases in this corpus:")
+    for (const c of corpus.cases) {
+      const bits = [
+        c.caseNo && `Case No ${c.caseNo}`,
+        c.caseTitle,
+        c.courtName && `before ${c.courtName}`,
+        c.caseStage && `stage: ${c.caseStage}`,
+        c.courtDate && `next date: ${c.courtDate}`,
+        c.cnrNo && `CNR ${c.cnrNo}`,
+      ].filter(Boolean)
+      lines.push(`- ${bits.join(" | ")}`)
+    }
+  }
+
+  if (corpus.clients?.length) {
+    lines.push("", "Clients in this corpus:")
+    for (const c of corpus.clients) {
+      const bits = [c.name, c.company, c.contact, c.email].filter(Boolean)
+      lines.push(`- ${bits.join(" | ")}`)
+    }
+  }
+
+  if (corpus.documentCount) {
+    lines.push(
+      "",
+      `${corpus.documentCount} document(s) are indexed in this corpus. Call searchCorpusDocuments to read them before answering anything that turns on their contents, and cite the document title when you rely on one.`
+    )
+  }
+
+  lines.push("--- END CORPUS ---")
+  return lines.join("\n")
+}

@@ -1,31 +1,34 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useEditor, EditorContent, type Editor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
-import Underline from "@tiptap/extension-underline"
 import TextAlign from "@tiptap/extension-text-align"
-import Link from "@tiptap/extension-link"
 import CharacterCount from "@tiptap/extension-character-count"
+import { TableKit } from "@tiptap/extension-table"
 import {
-  Check,
-  Undo2,
-  Redo2,
-  Download,
-  Share2,
+  AlertTriangle,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Bold,
+  Check,
+  ChevronDown,
+  Download,
   Italic,
-  Underline as UnderlineIcon,
+  Link as LinkIcon,
+  Link2,
   List,
   ListOrdered,
-  Link as LinkIcon,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  RotateCcw,
-  ChevronDown,
+  Loader2,
   Minus,
   Plus,
+  Redo2,
+  RotateCcw,
+  Sparkles,
+  Table as TableIcon,
+  Underline as UnderlineIcon,
+  Undo2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -33,10 +36,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { SaveStatus } from "../hooks/useDraftAutosave"
 
 interface DocumentEditorPanelProps {
+  draftId: string
   initialContent: string
+  title: string
+  onTitleChange: (title: string) => void
+  typography: { fontFamily: string; fontSizePt: number }
+  onTypographyChange: (typography: { fontFamily: string; fontSizePt: number }) => void
+  saveStatus: SaveStatus
+  onRetrySave: () => void
+  onContentChange: (html: string, words: number) => void
   onEditorReady: (editor: Editor) => void
+  beforeExport: () => Promise<void>
+  assistantOpen: boolean
+  onOpenAssistant: () => void
 }
 
 const paragraphStyles = [
@@ -47,8 +62,7 @@ const paragraphStyles = [
 ]
 
 const fontFamilies = ["Georgia", "Times New Roman", "Arial", "Inter"]
-const fontSizes = ["10", "11", "12", "14", "16", "18"]
-const aligns: Array<"left" | "center" | "right"> = ["left", "center", "right"]
+const fontSizes = [10, 11, 12, 14, 16, 18]
 
 function ToolbarDivider() {
   return <div className="w-px h-5 bg-gray-200 dark:bg-border mx-1 shrink-0" />
@@ -74,7 +88,9 @@ function ToolbarButton({
       disabled={disabled}
       title={title}
       className={`w-7 h-7 shrink-0 rounded-md flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-        active ? "bg-accent/10 text-accent" : "text-gray-600 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary"
+        active
+          ? "bg-accent/10 text-accent"
+          : "text-gray-600 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary"
       }`}
     >
       {children}
@@ -82,37 +98,40 @@ function ToolbarButton({
   )
 }
 
-export default function DocumentEditorPanel({ initialContent, onEditorReady }: DocumentEditorPanelProps) {
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved")
+export default function DocumentEditorPanel({
+  draftId,
+  initialContent,
+  title,
+  onTitleChange,
+  typography,
+  onTypographyChange,
+  saveStatus,
+  onRetrySave,
+  onContentChange,
+  onEditorReady,
+  beforeExport,
+  assistantOpen,
+  onOpenAssistant,
+}: DocumentEditorPanelProps) {
   const [wordCount, setWordCount] = useState(0)
   const [zoom, setZoom] = useState(100)
-  const [fontFamily, setFontFamily] = useState("Georgia")
-  const [fontSize, setFontSize] = useState("12")
-  const [alignIndex, setAlignIndex] = useState(0)
-  const [downloadLabel, setDownloadLabel] = useState("Download")
-  const [shareLabel, setShareLabel] = useState("Share")
-  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [shareLabel, setShareLabel] = useState("Copy link")
+  const [exporting, setExporting] = useState<"pdf" | "docx" | null>(null)
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      Underline,
+      StarterKit.configure({ link: { openOnClick: false } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Link.configure({ openOnClick: false }),
+      TableKit.configure({ table: { resizable: false } }),
       CharacterCount,
     ],
     content: initialContent,
     immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        class: "draft-doc-editor focus:outline-none",
-      },
-    },
+    editorProps: { attributes: { class: "draft-doc-editor focus:outline-none" } },
     onUpdate: ({ editor }) => {
-      setWordCount(editor.storage.characterCount.words())
-      setSaveStatus("saving")
-      if (saveTimeout.current) clearTimeout(saveTimeout.current)
-      saveTimeout.current = setTimeout(() => setSaveStatus("saved"), 800)
+      const words = editor.storage.characterCount.words()
+      setWordCount(words)
+      onContentChange(editor.getHTML(), words)
     },
   })
 
@@ -133,19 +152,19 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
 
   const currentParagraphStyle =
     paragraphStyles.find((p) =>
-      p.value === "paragraph" ? editor.isActive("paragraph") : editor.isActive("heading", { level: Number(p.value[1]) }),
+      p.value === "paragraph"
+        ? editor.isActive("paragraph")
+        : editor.isActive("heading", { level: Number(p.value[1]) })
     ) ?? paragraphStyles[0]
 
   const setParagraphStyle = (value: string) => {
-    if (value === "paragraph") {
-      editor.chain().focus().setParagraph().run()
-    } else {
+    if (value === "paragraph") editor.chain().focus().setParagraph().run()
+    else
       editor
         .chain()
         .focus()
         .toggleHeading({ level: Number(value[1]) as 1 | 2 | 3 })
         .run()
-    }
   }
 
   const setLink = () => {
@@ -157,55 +176,80 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
     if (url) editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
   }
 
-  const cycleAlign = () => {
-    const next = (alignIndex + 1) % aligns.length
-    setAlignIndex(next)
-    editor.chain().focus().setTextAlign(aligns[next]).run()
+  const exportAs = async (format: "pdf" | "docx") => {
+    setExporting(format)
+    try {
+      await beforeExport()
+      window.location.href = `/api/draft-documents/${draftId}/export?format=${format}`
+    } finally {
+      setTimeout(() => setExporting(null), 1200)
+    }
   }
 
-  const AlignIcon = alignIndex === 0 ? AlignLeft : alignIndex === 1 ? AlignCenter : AlignRight
-
-  const handleDownload = () => {
-    const text = editor.getText({ blockSeparator: "\n\n" })
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "rental-agreement.txt"
-    a.click()
-    URL.revokeObjectURL(url)
-    setDownloadLabel("Downloaded")
-    setTimeout(() => setDownloadLabel("Download"), 1500)
-  }
-
-  const handleShare = async () => {
+  const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href)
-      setShareLabel("Link copied")
+      setShareLabel("Copied")
     } catch {
-      setShareLabel("Share")
+      setShareLabel("Copy failed")
     }
-    setTimeout(() => setShareLabel("Share"), 1500)
+    setTimeout(() => setShareLabel("Copy link"), 1500)
   }
+
+  const statusLine =
+    saveStatus === "saving" ? (
+      <span className="flex items-center gap-1 text-gray-500 dark:text-muted-foreground">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        Saving…
+      </span>
+    ) : saveStatus === "error" ? (
+      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+        <AlertTriangle className="w-3.5 h-3.5" />
+        Couldn&apos;t save
+        <button type="button" onClick={onRetrySave} className="underline font-medium">
+          Retry
+        </button>
+      </span>
+    ) : saveStatus === "conflict" ? (
+      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+        <AlertTriangle className="w-3.5 h-3.5" />
+        Not saving — opened elsewhere
+      </span>
+    ) : (
+      <span className="flex items-center gap-1 text-emerald-600 dark:text-accent">
+        <Check className="w-3.5 h-3.5" />
+        All changes saved
+      </span>
+    )
 
   return (
     <div className="flex-1 min-w-0 h-[70vh] lg:h-full flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
       <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200 dark:border-border shrink-0">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="font-serif text-lg sm:text-xl font-semibold text-gray-900 dark:text-foreground truncate">
-              Drafting: Rental Agreement
-            </h1>
-            <span className="inline-flex items-center shrink-0 rounded-full bg-accent/10 text-accent text-[11px] font-medium px-2 py-0.5">
-              Draft
-            </span>
-          </div>
-          <p className="mt-1 flex items-center gap-1 text-[12px] text-emerald-600 dark:text-accent">
-            <Check className="w-3.5 h-3.5" />
-            {saveStatus === "saving" ? "Saving…" : "All changes saved"}
-          </p>
+        <div className="min-w-0 flex-1">
+          <input
+            value={title}
+            onChange={(e) => onTitleChange(e.target.value)}
+            onBlur={(e) => {
+              if (!e.target.value.trim()) onTitleChange("Untitled document")
+            }}
+            maxLength={200}
+            aria-label="Document title"
+            className="w-full font-serif text-lg sm:text-xl font-semibold text-gray-900 dark:text-foreground bg-transparent border-none outline-none focus:ring-0 truncate p-0"
+          />
+          <p className="mt-1 text-[12px]">{statusLine}</p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {!assistantOpen && (
+            <button
+              type="button"
+              onClick={onOpenAssistant}
+              title="Open the AI assistant"
+              className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[13px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Ask AI
+            </button>
+          )}
           <button
             type="button"
             title="Undo"
@@ -224,27 +268,40 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
           >
             <Redo2 className="w-4 h-4" />
           </button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[13px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
+              >
+                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                Download
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportAs("pdf")}>PDF (.pdf)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportAs("docx")}>Word (.docx)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <button
             type="button"
-            onClick={handleDownload}
-            className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[13px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            {downloadLabel}
-          </button>
-          <button
-            type="button"
-            onClick={handleShare}
+            onClick={copyLink}
             className="h-8 px-3 rounded-lg bg-accent text-white flex items-center gap-1.5 text-[13px] font-medium hover:bg-accent-hover transition-colors"
           >
-            <Share2 className="w-3.5 h-3.5" />
+            <Link2 className="w-3.5 h-3.5" />
             {shareLabel}
           </button>
         </div>
       </div>
 
       <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 dark:border-border overflow-x-auto shrink-0">
-        <ToolbarButton title="Clear formatting" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}>
+        <ToolbarButton
+          title="Clear formatting"
+          onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+        >
           <RotateCcw className="w-4 h-4" />
         </ToolbarButton>
 
@@ -273,13 +330,13 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
               type="button"
               className="h-7 px-2 rounded-md flex items-center gap-1 text-[12.5px] text-gray-700 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors shrink-0"
             >
-              {fontFamily}
+              {typography.fontFamily}
               <ChevronDown className="w-3 h-3" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             {fontFamilies.map((font) => (
-              <DropdownMenuItem key={font} onClick={() => setFontFamily(font)}>
+              <DropdownMenuItem key={font} onClick={() => onTypographyChange({ ...typography, fontFamily: font })}>
                 {font}
               </DropdownMenuItem>
             ))}
@@ -292,13 +349,13 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
               type="button"
               className="h-7 px-2 rounded-md flex items-center gap-1 text-[12.5px] text-gray-700 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors shrink-0"
             >
-              {fontSize}
+              {typography.fontSizePt}
               <ChevronDown className="w-3 h-3" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             {fontSizes.map((size) => (
-              <DropdownMenuItem key={size} onClick={() => setFontSize(size)}>
+              <DropdownMenuItem key={size} onClick={() => onTypographyChange({ ...typography, fontSizePt: size })}>
                 {size}
               </DropdownMenuItem>
             ))}
@@ -310,7 +367,11 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
         <ToolbarButton title="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="w-4 h-4" />
         </ToolbarButton>
-        <ToolbarButton title="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <ToolbarButton
+          title="Italic"
+          active={editor.isActive("italic")}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+        >
           <Italic className="w-4 h-4" />
         </ToolbarButton>
         <ToolbarButton
@@ -343,8 +404,35 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
         <ToolbarButton title="Link" active={editor.isActive("link")} onClick={setLink}>
           <LinkIcon className="w-4 h-4" />
         </ToolbarButton>
-        <ToolbarButton title="Align" onClick={cycleAlign}>
-          <AlignIcon className="w-4 h-4" />
+        <ToolbarButton
+          title="Insert table"
+          onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        >
+          <TableIcon className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        <ToolbarButton
+          title="Align left"
+          active={editor.isActive({ textAlign: "left" })}
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+        >
+          <AlignLeft className="w-4 h-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Align centre"
+          active={editor.isActive({ textAlign: "center" })}
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+        >
+          <AlignCenter className="w-4 h-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Align right"
+          active={editor.isActive({ textAlign: "right" })}
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
+        >
+          <AlignRight className="w-4 h-4" />
         </ToolbarButton>
       </div>
 
@@ -353,7 +441,11 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
           className="mx-auto max-w-[760px] origin-top bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-border"
           style={{ zoom: `${zoom}%` }}
         >
-          <EditorContent editor={editor} style={{ fontFamily, fontSize: `${fontSize}px` }} className="px-12 py-14" />
+          <EditorContent
+            editor={editor}
+            style={{ fontFamily: typography.fontFamily, fontSize: `${typography.fontSizePt}pt` }}
+            className="px-12 py-14"
+          />
         </div>
       </div>
 
@@ -363,10 +455,7 @@ export default function DocumentEditorPanel({ initialContent, onEditorReady }: D
           <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-border" />
           <span>English (India)</span>
           <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-border" />
-          <span className="flex items-center gap-1 text-emerald-600 dark:text-accent">
-            <Check className="w-3 h-3" />
-            {saveStatus === "saving" ? "Saving…" : "Saved just now"}
-          </span>
+          {statusLine}
         </div>
         <div className="flex items-center gap-2">
           <button

@@ -1,13 +1,9 @@
 import { tool } from "ai"
 import { z } from "zod"
-import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
-import User from "@/app/api/lib/models/user"
-import Case from "@/app/api/lib/models/case"
-import Client from "@/app/api/lib/models/client"
+import { findCases, findClients } from "./corpus-match"
+import { searchCorpus } from "@/app/api/lib/corpusBackend"
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-
-export function legalTools(clerkUid: string) {
+export function legalTools(clerkUid: string, corpusId?: string | null) {
   return {
     searchCases: tool({
       description:
@@ -17,26 +13,8 @@ export function legalTools(clerkUid: string) {
         limit: z.number().min(1).max(25).optional().describe("How many cases to return, default 10"),
       }),
       execute: async ({ query, limit }) => {
-        await connectMongoWithRetry()
-        const user = await User.findOne({ clerkUid }).select("cases").lean<{ cases?: unknown[] }>()
-        if (!user?.cases?.length) return { count: 0, cases: [] }
-
-        const filter: Record<string, unknown> = { _id: { $in: user.cases } }
-        if (query?.trim()) {
-          const rx = new RegExp(escape(query.trim()), "i")
-          filter.$or = [
-            { caseNo: rx }, { caseTitle: rx }, { courtName: rx },
-            { advocate: rx }, { caseStage: rx }, { status: rx }, { cnrNo: rx },
-          ]
-        }
-
-        const rows = await Case.find(filter)
-          .select("caseNo caseTitle courtName courtRoom courtDate caseStage status advocate cnrNo remarks")
-          .sort({ updatedAt: -1 })
-          .limit(limit ?? 10)
-          .lean()
-
-        return { count: rows.length, cases: rows }
+        const cases = await findCases(clerkUid, query, limit ?? 10)
+        return { count: cases.length, cases }
       },
     }),
 
@@ -48,24 +26,38 @@ export function legalTools(clerkUid: string) {
         limit: z.number().min(1).max(25).optional().describe("How many clients to return, default 10"),
       }),
       execute: async ({ query, limit }) => {
-        await connectMongoWithRetry()
-        const user = await User.findOne({ clerkUid }).select("clients").lean<{ clients?: unknown[] }>()
-        if (!user?.clients?.length) return { count: 0, clients: [] }
-
-        const filter: Record<string, unknown> = { _id: { $in: user.clients } }
-        if (query?.trim()) {
-          const rx = new RegExp(escape(query.trim()), "i")
-          filter.$or = [{ name: rx }, { company: rx }, { email: rx }, { contact: rx }]
-        }
-
-        const rows = await Client.find(filter)
-          .select("name company email contact gstin address")
-          .sort({ createdAt: -1 })
-          .limit(limit ?? 10)
-          .lean()
-
-        return { count: rows.length, clients: rows }
+        const clients = await findClients(clerkUid, query, limit ?? 10)
+        return { count: clients.length, clients }
       },
     }),
+
+    ...(corpusId
+      ? {
+          searchCorpusDocuments: tool({
+            description:
+              "Search the documents the advocate has uploaded into the active corpus. Use this before answering anything that turns on what those documents actually say -- pleadings, contracts, orders, correspondence. Returns passages with the document title; cite the title when you rely on one.",
+            inputSchema: z.object({
+              query: z.string().describe("What to look for in the corpus documents"),
+              limit: z.number().min(1).max(10).optional().describe("How many passages to return, default 5"),
+            }),
+            execute: async ({ query, limit }: { query: string; limit?: number }) => {
+              try {
+                const data = await searchCorpus({ corpusId, clerkUid, query, k: limit ?? 5 })
+                return {
+                  count: data.results.length,
+                  passages: data.results.map((r) => ({
+                    title: r.title || "Untitled document",
+                    text: r.text,
+                    sourceUrl: r.source_url ?? null,
+                  })),
+                }
+              } catch (error) {
+                const message = error instanceof Error ? error.message : "Corpus search is unavailable"
+                return { count: 0, passages: [], error: message }
+              }
+            },
+          }),
+        }
+      : {}),
   }
 }

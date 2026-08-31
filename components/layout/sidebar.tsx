@@ -5,7 +5,7 @@ import {
     ChevronRight, ChevronDown, FileSearch, ExternalLink, UsersRound, ReceiptText,
     ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck,
     LifeBuoy, Settings, Sparkles, CirclePlus, History, FileEdit,
-    Settings2, Briefcase, LayoutDashboard,
+    Settings2, Briefcase, LayoutDashboard, Library,
     CalendarDays, Workflow, FileCheck2,
 } from "lucide-react"
 import Link from "next/link"
@@ -36,6 +36,7 @@ const isNavAction = (item: NavLeaf): item is NavAction => "action" in item
 const aiGroupItems: NavLeaf[] = [
     { name: "New Chat", icon: <CirclePlus size={16} />, action: "new-chat" },
     { name: "Chat History", icon: <History size={16} />, action: "chat-history" },
+    { name: "Corpus", icon: <Library size={16} />, href: "/corpus" },
     { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },
     { name: "Contract Review", icon: <FileCheck2 size={16} />, href: "/contract-review" },
     { name: "AI Workflow", icon: <Workflow size={16} />, href: "/ai-workflow" },
@@ -244,22 +245,6 @@ const Sidebar = () => {
                         priority
                         loading="eager"
                     />
-                    <div
-                        className={cn(
-                            "overflow-hidden transition-all duration-300 ease-in-out",
-                            isOpen || isMobile ? "max-w-[90px] opacity-100 ml-1" : "max-w-0 opacity-0 ml-0"
-                        )}
-                    >
-                        <Image
-                            className="h-8 w-20 min-w-20 flex-shrink-0 object-contain"
-                            src="/word-logo.png"
-                            alt="Logo"
-                            width={80}
-                            height={32}
-                            priority
-                            loading="eager"
-                        />
-                    </div>
                 </div>
                 {isMobile && (
                     <button onClick={() => setIsOpen(false)} className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">

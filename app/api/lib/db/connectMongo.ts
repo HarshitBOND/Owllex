@@ -105,6 +105,8 @@ const registerModels = async () => {
       import("../models/firm"),
       import("../models/team-membership"),
       import("../models/job-run"),
+      import("../models/document-template"),
+      import("../models/draft-document"),
     ]);
 
     console.log("All models registered successfully.");
@@ -138,6 +140,8 @@ const syncIndexesIfEnabled = async () => {
       "Firm",
       "TeamMembership",
       "JobRun",
+      "DocumentTemplate",
+      "DraftDocument",
     ];
 
     await Promise.all(

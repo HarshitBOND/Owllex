@@ -10,22 +10,28 @@ from .loader import load_text
 from .metadata import extract_metadata
 from .splitter import semantic_chunk
 from .storage import upload_source_document
-from .vector_db import store_chunks
+from .vector_db import COLLECTION, store_chunks
 
 
-def ingest_document(paths, document_id):
+def ingest_document(paths, document_id, collection=COLLECTION, extra_metadata=None, dedupe_scope=""):
     """Ingest one document, given either a single path or an ordered list of paths.
 
     A list of more than one path is treated as ordered pages of one physical
     document (e.g. a photo per page) -- their bytes are hashed together, their
     extracted text is concatenated in order, and they land as a single
     document_id/chunk set, exactly like a single-file PDF/DOCX upload.
+
+    dedupe_scope namespaces the content hash. The admin corpus passes nothing, so its
+    hashes stay global and unchanged. Per-user corpora pass their corpus_id, so the same
+    file uploaded by two advocates indexes into both instead of the second being skipped.
     """
     if isinstance(paths, (str, Path)):
         paths = [paths]
     paths = [Path(p) for p in paths]
 
-    content_hash = hashlib.sha256(b"".join(p.read_bytes() for p in paths)).hexdigest()
+    content_hash = hashlib.sha256(
+        dedupe_scope.encode() + b"".join(p.read_bytes() for p in paths)
+    ).hexdigest()
     if hash_db.exists(content_hash):
         return {
             "skipped": True,
@@ -50,8 +56,9 @@ def ingest_document(paths, document_id):
         **metadata.model_dump(),
         "storage_ref": storage["key"] or "",
         "source_url": storage["url"] or "",
+        **(extra_metadata or {}),
     }
-    store_chunks(document_id, chunks, metadata_dict)
+    store_chunks(document_id, chunks, metadata_dict, collection)
 
     hash_db.put(content_hash, document_id)
     hash_db.backup_to_r2()

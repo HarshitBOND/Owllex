@@ -14,6 +14,7 @@ import { useDashboardData } from "./hooks/useDashboardData"
 import { useUsersData } from "./hooks/useUsersData"
 import { useTransactionsData } from "./hooks/useTransactionsData"
 import { useDocumentsData } from "./hooks/useDocumentsData"
+import { useDocumentTemplatesData } from "./hooks/useDocumentTemplatesData"
 import { useLogsData } from "./hooks/useLogsData"
 import { useCauselistImport } from "./hooks/useCauselistImport"
 import { useRagIngestData } from "./hooks/useRagIngestData"
@@ -22,6 +23,7 @@ import { DashboardTab } from "./components/DashboardTab"
 import { UsersTab } from "./components/UsersTab"
 import { TransactionsTab } from "./components/TransactionsTab"
 import { DocumentsTab } from "./components/DocumentsTab"
+import { DocumentTemplatesTab } from "./components/DocumentTemplatesTab"
 import { LogsTab } from "./components/LogsTab"
 import { CauseListTab } from "./components/CauseListTab"
 import { RagIngestTab } from "./components/RagIngestTab"
@@ -37,6 +39,7 @@ export default function AdminDashboardPage() {
   const usersData = useUsersData()
   const transactionsData = useTransactionsData()
   const documentsData = useDocumentsData()
+  const templatesData = useDocumentTemplatesData()
   const logsData = useLogsData()
   const causelist = useCauselistImport()
   const ragIngest = useRagIngestData()
@@ -46,6 +49,7 @@ export default function AdminDashboardPage() {
     else if (activeTab === "users") usersData.fetchUsers()
     else if (activeTab === "transactions") transactionsData.fetchTransactions()
     else if (activeTab === "documents") documentsData.fetchDocuments()
+    else if (activeTab === "templates") templatesData.fetchTemplates()
     else if (activeTab === "logs") logsData.fetchLogs()
     else if (activeTab === "causelist") causelist.fetchCauselistStatus()
     else if (activeTab === "rag") ragIngest.fetchRagStatus()
@@ -62,6 +66,7 @@ export default function AdminDashboardPage() {
     usersData.fetchUsers,
     transactionsData.fetchTransactions,
     documentsData.fetchDocuments,
+    templatesData.fetchTemplates,
     logsData.fetchLogs,
     causelist.fetchCauselistStatus,
   ])
@@ -185,6 +190,7 @@ export default function AdminDashboardPage() {
                 onSearch={documentsData.fetchDocuments}
               />
             )}
+            {activeTab === "templates" && <DocumentTemplatesTab data={templatesData} />}
             {activeTab === "logs" && (
               <LogsTab
                 logs={logsData.logs}

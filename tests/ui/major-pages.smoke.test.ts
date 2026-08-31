@@ -98,6 +98,8 @@ import ContactUsPage from "@/app/contact-us/page"
 import TermsOfUsePage from "@/app/terms-of-use/page"
 import AdminDashboardPage from "@/app/admin/dashboard/page"
 import SupportDashboardPage from "@/app/support/dashboard/page"
+import CorpusPage from "@/app/corpus/page"
+import AiWorkflowPage from "@/app/ai-workflow/page"
 
 describe("major page smoke tests", () => {
   beforeEach(() => {
@@ -125,6 +127,11 @@ describe("major page smoke tests", () => {
       renameConversation: vi.fn(),
       openHistory: vi.fn(),
       closeHistory: vi.fn(),
+      corpora: [],
+      refreshCorpora: vi.fn(),
+      activeCorpus: null,
+      activeCorpusId: null,
+      setActiveCorpusId: vi.fn(),
     })
     mockState.redirect.mockImplementation(() => null)
     mockState.useAuth.mockReturnValue({ getToken: vi.fn().mockResolvedValue("test-token") })
@@ -201,5 +208,47 @@ describe("major page smoke tests", () => {
 
     expect(markup).toContain("navbar-mock")
     expect(markup).toContain("sidebar-mock")
+  })
+
+  it("renders corpus page shell with an empty state", () => {
+    const markup = renderToString(React.createElement(CorpusPage))
+
+    expect(markup).toContain("navbar-mock")
+    expect(markup).toContain("New corpus")
+    expect(markup).toContain("No corpus yet")
+  })
+
+  it("renders corpus page with the user's corpora listed", () => {
+    mockState.useAiChat.mockReturnValue({
+      ...mockState.useAiChat(),
+      corpora: [
+        {
+          id: "abc123",
+          name: "Sharma v DDA",
+          description: "Second appeal on a property dispute",
+          accent: "teal",
+          archived: false,
+          caseCount: 2,
+          clientCount: 1,
+          documentCount: 5,
+          chatCount: 3,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ],
+    })
+
+    const markup = renderToString(React.createElement(CorpusPage))
+
+    expect(markup).toContain("Sharma v DDA")
+    expect(markup).toContain("Second appeal on a property dispute")
+    expect(markup).not.toContain("No corpus yet")
+  })
+
+  it("renders ai-workflow page shell with the corpus picker", () => {
+    const markup = renderToString(React.createElement(AiWorkflowPage))
+
+    expect(markup).toContain("AI Workflow")
+    expect(markup).toContain("Run against a corpus")
   })
 })

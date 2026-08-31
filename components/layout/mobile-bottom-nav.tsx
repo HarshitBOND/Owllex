@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, Settings, HelpCircle, Moon, Sun, BarChart3, CalendarDays, Workflow } from "lucide-react"
+import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, Settings, HelpCircle, Moon, Sun, BarChart3, CalendarDays, Workflow, Library } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
@@ -27,6 +27,7 @@ const MobileBottomNav = () => {
 
     const moreNavItems = [
         { name: "Overview", icon: BarChart3, href: "/dashboard/overview" },
+        { name: "Corpus", icon: Library, href: "/corpus" },
         { name: "AI Workflow", icon: Workflow, href: "/ai-workflow" },
         { name: "Calendar", icon: CalendarDays, href: "/calendar" },
         { name: "Settings", icon: Settings, href: "/settings" },

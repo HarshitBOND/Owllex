@@ -1,58 +1,141 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useChat } from "@ai-sdk/react"
+import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai"
 import {
-  Sparkles,
+  AlertCircle,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  Copy,
   History,
   Maximize2,
-  X,
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
+  Minimize2,
   RotateCw,
-  Plus,
-  ChevronDown,
-  ArrowUp,
-  CheckCheck,
+  Sparkles,
+  X,
 } from "lucide-react"
-import type { ChatMessage } from "../data"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
+import { DEFAULT_MODEL, MODELS, type ModelKey } from "@/lib/ai/models"
+import { sanitizeDraftHtml } from "@/lib/html/sanitize-draft"
+
+const quickActions = [
+  "Add a dispute resolution clause",
+  "Tighten the termination terms",
+  "Add an arbitration clause with seat and venue",
+]
 
 interface AiAssistantPanelProps {
-  messages: ChatMessage[]
-  isThinking: boolean
-  quickActions: string[]
-  onSend: (text: string) => void
+  draftId: string
+  initialMessages: UIMessage[]
+  seedPrompt: string
+  getDocumentHtml: () => string
+  onApply: (html: string) => void
+  onClose: () => void
 }
 
-export default function AiAssistantPanel({ messages, isThinking, quickActions, onSend }: AiAssistantPanelProps) {
+export default function AiAssistantPanel({
+  draftId,
+  initialMessages,
+  seedPrompt,
+  getDocumentHtml,
+  onApply,
+  onClose,
+}: AiAssistantPanelProps) {
+  const router = useRouter()
   const [value, setValue] = useState("")
-  const [reaction, setReaction] = useState<Record<string, "up" | "down">>({})
+  const [model, setModel] = useState<ModelKey>(DEFAULT_MODEL)
+  const [expanded, setExpanded] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [applied, setApplied] = useState<Record<string, "applied" | "discarded">>({})
+  const [otherDrafts, setOtherDrafts] = useState<{ id: string; title: string }[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const seeded = useRef(false)
+
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: "/api/ai/draft", body: { model } }),
+    [model]
+  )
+
+  const { messages, sendMessage, status, regenerate, addToolResult, error, clearError } = useChat({
+    id: draftId,
+    transport,
+    messages: initialMessages,
+  })
+
+  const busy = status === "submitted" || status === "streaming"
+
+  const send = useCallback(
+    (text: string) => {
+      const trimmed = text.trim()
+      if (!trimmed || busy) return
+      sendMessage({ text: trimmed }, { body: { documentHtml: getDocumentHtml() } })
+    },
+    [busy, getDocumentHtml, sendMessage]
+  )
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-  }, [messages, isThinking])
+  }, [messages, status])
 
-  const handleSubmit = () => {
+  // A draft created from "Describe your document" starts drafting on its own, once.
+  useEffect(() => {
+    if (seeded.current || !seedPrompt || messages.length > 0) return
+    seeded.current = true
+    send(seedPrompt)
+  }, [seedPrompt, messages.length, send])
+
+  const submit = () => {
     if (!value.trim()) return
-    onSend(value)
+    send(value)
     setValue("")
   }
 
-  const handleCopy = (msg: ChatMessage) => {
-    const plain = `${msg.text}\n\n${msg.clauseHtml ? msg.clauseHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : ""}`.trim()
-    navigator.clipboard.writeText(plain).then(() => {
-      setCopiedId(msg.id)
-      setTimeout(() => setCopiedId(null), 1200)
-    })
+  const copyMessage = (id: string, text: string, html?: string) => {
+    const write = html
+      ? navigator.clipboard.write?.([
+          new ClipboardItem({
+            "text/html": new Blob([sanitizeDraftHtml(html)], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]) ?? navigator.clipboard.writeText(text)
+      : navigator.clipboard.writeText(text)
+
+    Promise.resolve(write)
+      .then(() => {
+        setCopiedId(id)
+        setTimeout(() => setCopiedId(null), 1200)
+      })
+      .catch(() => {})
   }
 
-  const lastMessage = messages[messages.length - 1]
-  const showQuickActions = !isThinking && lastMessage?.role === "assistant"
+  const openHistory = async () => {
+    try {
+      const res = await fetch("/api/draft-documents?limit=20")
+      const data = await res.json()
+      if (data.success) setOtherDrafts(data.drafts.filter((d: { id: string }) => d.id !== draftId))
+    } catch {
+      setOtherDrafts([])
+    }
+  }
+
+  const lastIsAssistant = messages[messages.length - 1]?.role === "assistant"
 
   return (
-    <div className="w-full lg:w-[400px] xl:w-[430px] shrink-0 h-[70vh] lg:h-full flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
+    <div
+      className={cn(
+        "w-full shrink-0 h-[70vh] lg:h-full flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden transition-all duration-300",
+        expanded ? "lg:w-[720px]" : "lg:w-[400px] xl:w-[430px]"
+      )}
+    >
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200 dark:border-border shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
@@ -60,29 +143,48 @@ export default function AiAssistantPanel({ messages, isThinking, quickActions, o
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 dark:text-foreground leading-tight truncate">
-              Agentic AI Assistant
+              Drafting assistant
             </p>
-            <p className="text-[11px] text-muted-foreground leading-tight truncate">Your legal drafting copilot</p>
+            <p className="text-[11px] text-muted-foreground leading-tight truncate">
+              Edits this document with you
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <DropdownMenu onOpenChange={(open) => open && openHistory()}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title="Your other documents"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
+              >
+                <History className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+              {otherDrafts.length === 0 ? (
+                <DropdownMenuItem disabled>No other documents</DropdownMenuItem>
+              ) : (
+                otherDrafts.map((d) => (
+                  <DropdownMenuItem key={d.id} onClick={() => router.push(`/draft-documents/${d.id}`)}>
+                    <span className="truncate">{d.title}</span>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             type="button"
-            title="History"
+            title={expanded ? "Shrink panel" : "Expand panel"}
+            onClick={() => setExpanded((e) => !e)}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
           >
-            <History className="w-4 h-4" />
+            {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <button
             type="button"
-            title="Expand"
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            title="Close"
+            title="Close assistant"
+            onClick={onClose}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
           >
             <X className="w-4 h-4" />
@@ -91,72 +193,160 @@ export default function AiAssistantPanel({ messages, isThinking, quickActions, o
       </div>
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 py-4 space-y-4">
-        {messages.map((msg) =>
-          msg.role === "user" ? (
-            <div key={msg.id} className="flex flex-col items-end">
-              <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent/10 dark:bg-accent/15 px-3.5 py-2.5 text-[13px] leading-relaxed text-gray-800 dark:text-foreground">
-                {msg.text}
-              </div>
-              <span className="mt-1 mr-1 text-[10px] text-muted-foreground flex items-center gap-1">
-                {msg.time}
-                <CheckCheck className="w-3 h-3 text-accent" />
-              </span>
+        {messages.length === 0 && (
+          <div className="text-center py-10 px-4">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center mx-auto">
+              <Sparkles className="w-5 h-5 text-accent" />
             </div>
-          ) : (
-            <div key={msg.id} className="flex flex-col items-start">
-              <p className="text-[13px] leading-relaxed text-gray-800 dark:text-foreground mb-2">{msg.text}</p>
-              {msg.clauseHtml && (
-                <div
-                  className="chat-clause w-full rounded-xl border border-gray-200 dark:border-border bg-gray-50/70 dark:bg-background/40 p-3.5 text-[12.5px] leading-relaxed text-gray-700 dark:text-muted-foreground"
-                  dangerouslySetInnerHTML={{ __html: msg.clauseHtml }}
-                />
-              )}
-              <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground">
-                <button
-                  type="button"
-                  title="Copy"
-                  onClick={() => handleCopy(msg)}
-                  className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
-                >
-                  <Copy className={`w-3.5 h-3.5 ${copiedId === msg.id ? "text-accent" : ""}`} />
-                </button>
-                <button
-                  type="button"
-                  title="Good response"
-                  onClick={() => setReaction((prev) => ({ ...prev, [msg.id]: "up" }))}
-                  className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
-                >
-                  <ThumbsUp className={`w-3.5 h-3.5 ${reaction[msg.id] === "up" ? "text-accent fill-accent/20" : ""}`} />
-                </button>
-                <button
-                  type="button"
-                  title="Bad response"
-                  onClick={() => setReaction((prev) => ({ ...prev, [msg.id]: "down" }))}
-                  className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
-                >
-                  <ThumbsDown className={`w-3.5 h-3.5 ${reaction[msg.id] === "down" ? "text-destructive" : ""}`} />
-                </button>
-              </div>
-            </div>
-          ),
+            <p className="mt-3 text-sm font-semibold text-gray-900 dark:text-foreground">
+              Describe what you need
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ask for a whole document, or a change to the one on the left. Nothing is applied until you
+              approve it.
+            </p>
+          </div>
         )}
 
-        {isThinking && (
+        {messages.map((msg) => {
+          const text = msg.parts
+            .filter((p) => p.type === "text")
+            .map((p) => (p as { text: string }).text)
+            .join("")
+
+          if (msg.role === "user") {
+            return (
+              <div key={msg.id} className="flex flex-col items-end">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent/10 dark:bg-accent/15 px-3.5 py-2.5 text-[13px] leading-relaxed text-gray-800 dark:text-foreground whitespace-pre-wrap">
+                  {text}
+                </div>
+              </div>
+            )
+          }
+
+          const proposal = msg.parts.find(
+            (p) => isToolUIPart(p) && getToolName(p) === "proposeDocument"
+          ) as
+            | { toolCallId: string; state: string; input?: { html?: string; summary?: string } }
+            | undefined
+
+          return (
+            <div key={msg.id} className="flex flex-col items-start">
+              {text && (
+                <p className="text-[13px] leading-relaxed text-gray-800 dark:text-foreground mb-2 whitespace-pre-wrap">
+                  {text}
+                </p>
+              )}
+
+              {proposal?.input?.html && (
+                <div className="w-full rounded-xl border border-gray-200 dark:border-border bg-gray-50/70 dark:bg-background/40 overflow-hidden">
+                  <div className="px-3.5 py-2 border-b border-gray-200 dark:border-border flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-gray-700 dark:text-foreground">
+                      Proposed document
+                    </span>
+                    {proposal.input.summary && (
+                      <span className="text-[11px] text-muted-foreground truncate">
+                        {proposal.input.summary}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="chat-clause max-h-56 overflow-y-auto p-3.5 text-[12.5px] leading-relaxed text-gray-700 dark:text-muted-foreground"
+                    dangerouslySetInnerHTML={{ __html: sanitizeDraftHtml(proposal.input.html) }}
+                  />
+                  <div className="px-3.5 py-2 border-t border-gray-200 dark:border-border flex items-center gap-2">
+                    {applied[proposal.toolCallId] ? (
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        {applied[proposal.toolCallId] === "applied"
+                          ? "Applied to the document"
+                          : "Discarded"}
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onApply(sanitizeDraftHtml(proposal.input!.html!))
+                            setApplied((p) => ({ ...p, [proposal.toolCallId]: "applied" }))
+                            addToolResult({
+                              tool: "proposeDocument",
+                              toolCallId: proposal.toolCallId,
+                              output: { accepted: true },
+                            })
+                          }}
+                          className="h-7 px-3 rounded-lg bg-accent text-white text-[12px] font-medium hover:bg-accent-hover transition-colors"
+                        >
+                          Apply to document
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setApplied((p) => ({ ...p, [proposal.toolCallId]: "discarded" }))
+                            addToolResult({
+                              tool: "proposeDocument",
+                              toolCallId: proposal.toolCallId,
+                              output: { accepted: false },
+                            })
+                          }}
+                          className="h-7 px-3 rounded-lg border border-gray-200 dark:border-border text-[12px] font-medium text-gray-700 dark:text-foreground hover:bg-white dark:hover:bg-secondary transition-colors"
+                        >
+                          Discard
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(text || proposal) && (
+                <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground">
+                  <button
+                    type="button"
+                    title="Copy"
+                    onClick={() => copyMessage(msg.id, text, proposal?.input?.html)}
+                    className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
+                  >
+                    <Copy className={cn("w-3.5 h-3.5", copiedId === msg.id && "text-accent")} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {busy && (
           <div className="flex items-center gap-1 px-1 py-1">
             <span className="w-1.5 h-1.5 rounded-full bg-text-400 animate-bounce [animation-delay:-0.3s]" />
             <span className="w-1.5 h-1.5 rounded-full bg-text-400 animate-bounce [animation-delay:-0.15s]" />
             <span className="w-1.5 h-1.5 rounded-full bg-text-400 animate-bounce" />
           </div>
         )}
+
+        {error && (
+          <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2.5">
+            <p className="text-[12px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>{error.message || "The assistant is unavailable right now."}</span>
+            </p>
+            <button
+              type="button"
+              onClick={clearError}
+              className="mt-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-200 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
       </div>
 
-      {showQuickActions && (
+      {!busy && lastIsAssistant && (
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 shrink-0">
           {quickActions.map((action) => (
             <button
               key={action}
               type="button"
-              onClick={() => onSend(action)}
+              onClick={() => send(action)}
               className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-border text-[12px] text-gray-700 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
             >
               {action}
@@ -164,8 +354,8 @@ export default function AiAssistantPanel({ messages, isThinking, quickActions, o
           ))}
           <button
             type="button"
-            title="Regenerate"
-            onClick={() => onSend(lastMessage.text)}
+            title="Regenerate the last reply"
+            onClick={() => regenerate()}
             className="w-7 h-7 rounded-full border border-gray-200 dark:border-border flex items-center justify-center text-muted-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
           >
             <RotateCw className="w-3.5 h-3.5" />
@@ -181,44 +371,41 @@ export default function AiAssistantPanel({ messages, isThinking, quickActions, o
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                handleSubmit()
+                submit()
               }
             }}
-            placeholder="Ask your legal assistant anything..."
+            placeholder="Ask for a document, or a change to this one..."
             rows={1}
             className="w-full bg-transparent resize-none px-3.5 pt-3 pb-1.5 text-[13px] text-text-100 dark:text-foreground placeholder:text-text-400 outline-none"
           />
-          <div className="flex items-center justify-between px-2 pb-2">
-            <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                title="Attach"
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-text-400 hover:bg-bg-200 dark:hover:bg-secondary transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                title="History"
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-text-400 hover:bg-bg-200 dark:hover:bg-secondary transition-colors"
-              >
-                <History className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="flex items-center justify-end px-2 pb-2">
             <div className="flex items-center gap-1.5">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-7 px-2 rounded-lg text-[11px] font-medium text-text-300 hover:bg-bg-200 dark:hover:bg-secondary transition-colors flex items-center gap-1"
+                  >
+                    {MODELS[model].name} <ChevronDown className="w-3 h-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {(Object.keys(MODELS) as ModelKey[]).map((key) => (
+                    <DropdownMenuItem key={key} onClick={() => setModel(key)} className="flex-col items-start gap-0.5">
+                      <span className="text-[13px] font-medium">{MODELS[key].name}</span>
+                      <span className="text-[11px] text-muted-foreground">{MODELS[key].description}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <button
                 type="button"
-                className="h-7 px-2 rounded-lg text-[11px] font-medium text-text-300 hover:bg-bg-200 dark:hover:bg-secondary transition-colors flex items-center gap-1"
-              >
-                Sonnet 4.5 <ChevronDown className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!value.trim()}
-                className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
-                  value.trim() ? "bg-accent text-white hover:bg-accent-hover" : "bg-accent/30 text-white/70"
-                }`}
+                onClick={submit}
+                disabled={!value.trim() || busy}
+                className={cn(
+                  "w-7 h-7 rounded-xl flex items-center justify-center transition-colors",
+                  value.trim() && !busy ? "bg-accent text-white hover:bg-accent-hover" : "bg-accent/30 text-white/70"
+                )}
               >
                 <ArrowUp className="w-3.5 h-3.5" />
               </button>
@@ -226,7 +413,7 @@ export default function AiAssistantPanel({ messages, isThinking, quickActions, o
           </div>
         </div>
         <p className="mt-2 text-center text-[10.5px] text-muted-foreground">
-          Agentic AI can make mistakes. Please review important information.
+          AI can make mistakes. Review the draft before you rely on it.
         </p>
       </div>
     </div>

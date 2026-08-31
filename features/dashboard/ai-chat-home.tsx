@@ -8,7 +8,7 @@ import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, getToolName, isToolUIPart, type FileUIPart } from "ai"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { AlertTriangle, ArrowDown, Check, Copy, RefreshCw, Search, Square, Users } from "lucide-react"
+import { AlertTriangle, ArrowDown, Check, Copy, Library, RefreshCw, Search, Users } from "lucide-react"
 import { ClaudeChatInput, type ClaudeChatInputSubmission } from "@/components/ui/claude-style-chat-input"
 import { useAiChat } from "@/contexts/AiChatContext"
 import { DEFAULT_MODEL } from "@/lib/ai/models"
@@ -23,6 +23,7 @@ const SUGGESTIONS = [
 const TOOL_LABELS: Record<string, { running: string; done: string; icon: typeof Search }> = {
   searchCases: { running: "Searching your cases", done: "Searched your cases", icon: Search },
   searchClients: { running: "Looking up your clients", done: "Looked up your clients", icon: Users },
+  searchCorpusDocuments: { running: "Reading corpus documents", done: "Read corpus documents", icon: Library },
 }
 
 const readAsDataUrl = (file: File) =>
@@ -62,7 +63,7 @@ const markdownComponents = {
 export function AiChatHome() {
   const { user } = useUser()
   const router = useRouter()
-  const { activeId, conversations, refresh } = useAiChat()
+  const { activeId, conversations, refresh, corpora, activeCorpusId, setActiveCorpusId } = useAiChat()
   const reduceMotion = useReducedMotion()
 
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
@@ -71,8 +72,8 @@ export function AiChatHome() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/ai/chat", body: { model } }),
-    [model]
+    () => new DefaultChatTransport({ api: "/api/ai/chat", body: { model, corpusId: activeCorpusId } }),
+    [model, activeCorpusId]
   )
 
   const { messages, sendMessage, setMessages, status, stop, regenerate, error, clearError } = useChat({
@@ -175,14 +176,14 @@ export function AiChatHome() {
                     transition={{ duration: 0.25 }}
                     className="flex justify-end"
                   >
-                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent text-bg-0 px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent/10 text-text-100 px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
                       {textContent}
                       {m.parts.some((p) => p.type === "file") && (
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {m.parts
                             .filter((p) => p.type === "file")
                             .map((p: any, i) => (
-                              <span key={i} className="text-[11px] px-1.5 py-0.5 rounded-full bg-black/15">
+                              <span key={i} className="text-[11px] px-1.5 py-0.5 rounded-full bg-text-100/10">
                                 {p.filename || "attachment"}
                               </span>
                             ))}
@@ -336,19 +337,13 @@ export function AiChatHome() {
           <ClaudeChatInput
             onSendMessage={submit}
             placeholder="Ask your legal assistant anything..."
-            disabled={busy}
+            isGenerating={busy}
+            onStop={stop}
+            corpora={corpora}
+            activeCorpusId={activeCorpusId}
+            onSelectCorpus={setActiveCorpusId}
           />
         </motion.div>
-
-        {busy && (
-          <button
-            onClick={stop}
-            className="mx-auto mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-bg-300 text-[13px] text-text-300 hover:text-text-100 hover:bg-bg-200 transition-colors"
-          >
-            <Square className="w-3 h-3 fill-current" />
-            Stop
-          </button>
-        )}
 
         <AnimatePresence>
           {!hasMessages && (
@@ -370,6 +365,34 @@ export function AiChatHome() {
                   {s}
                 </button>
               ))}
+
+              {corpora.length > 0 && (
+                <div className="w-full flex flex-wrap justify-center items-center gap-2 mt-3">
+                  <span className="text-[11px] text-text-400 uppercase tracking-wider">Corpus</span>
+                  {corpora.slice(0, 4).map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setActiveCorpusId(c.id === activeCorpusId ? null : c.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs sm:text-[13px] transition-colors ${
+                        c.id === activeCorpusId
+                          ? "border-accent/40 bg-accent/10 text-accent"
+                          : "border-bg-300 text-text-300 hover:bg-bg-200 hover:text-text-100"
+                      }`}
+                    >
+                      <Library className="w-3.5 h-3.5" />
+                      {c.name}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => router.push("/corpus")}
+                    className="px-3 py-1.5 rounded-full border border-dashed border-bg-300 text-text-400 text-xs sm:text-[13px] hover:text-text-100 hover:bg-bg-200 transition-colors"
+                  >
+                    All corpus
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

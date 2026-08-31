@@ -9,9 +9,15 @@ import { defaultFileMeta, fixSuggestions, mockIssues, type ContractFileMeta } fr
 
 interface ContractReviewWorkspaceProps {
   initialFileName?: string | null
+  onStatusChange?: (status: "idle" | "analyzing" | "ready") => void
+  sampleRequestToken?: number
 }
 
-export default function ContractReviewWorkspace({ initialFileName }: ContractReviewWorkspaceProps) {
+export default function ContractReviewWorkspace({
+  initialFileName,
+  onStatusChange,
+  sampleRequestToken,
+}: ContractReviewWorkspaceProps) {
   const [fileMeta, setFileMeta] = useState<ContractFileMeta | null>(
     initialFileName ? { ...defaultFileMeta, name: initialFileName } : null,
   )
@@ -25,6 +31,19 @@ export default function ContractReviewWorkspace({ initialFileName }: ContractRev
     const timeout = setTimeout(() => setStatus("ready"), 1400)
     return () => clearTimeout(timeout)
   }, [status])
+
+  useEffect(() => {
+    onStatusChange?.(status)
+  }, [status, onStatusChange])
+
+  useEffect(() => {
+    if (!sampleRequestToken) return
+    setFileMeta({ name: "Sample_Service_Agreement.pdf", pages: defaultFileMeta.pages, uploadedLabel: "Uploaded just now" })
+    setSelectedIssueId(null)
+    setFixedIssueIds(new Set())
+    setActiveTab("document")
+    setStatus("analyzing")
+  }, [sampleRequestToken])
 
   const handleUpload = (file: File) => {
     setFileMeta({ name: file.name, pages: defaultFileMeta.pages, uploadedLabel: "Uploaded just now" })

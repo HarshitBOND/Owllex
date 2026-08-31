@@ -57,7 +57,29 @@ export interface AdminLogRecord {
   createdAt: string
 }
 
-export type Tab = "dashboard" | "users" | "transactions" | "documents" | "logs" | "causelist" | "rag"
+export interface DocumentTemplateRecord {
+  _id: string
+  title: string
+  slug: string
+  description: string
+  category: string
+  status: "draft" | "published"
+  usageCount: number
+  bodyHtml?: string
+  publishedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type Tab =
+  | "dashboard"
+  | "users"
+  | "transactions"
+  | "documents"
+  | "templates"
+  | "logs"
+  | "causelist"
+  | "rag"
 
 export interface TabDefinition {
   id: Tab
