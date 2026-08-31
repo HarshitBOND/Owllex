@@ -1,0 +1,154 @@
+"use client"
+
+import { useState } from "react"
+import { Check, ChevronRight, Info, Sparkles } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { issueTabs, mockIssues, severityStyles, summaryStats } from "../data"
+
+interface ContractInsightsPanelProps {
+  isAnalyzing: boolean
+  selectedIssueId: string | null
+  onSelectIssue: (id: string) => void
+  fixedIssueIds: Set<string>
+}
+
+const stats = [
+  { label: "Issues", value: summaryStats.issues, style: severityStyles.critical },
+  { label: "Warnings", value: summaryStats.warnings, style: severityStyles.warning },
+  { label: "Suggestions", value: summaryStats.suggestions, style: severityStyles.suggestion },
+  { label: "Info", value: summaryStats.info, style: severityStyles.info },
+]
+
+export default function ContractInsightsPanel({
+  isAnalyzing,
+  selectedIssueId,
+  onSelectIssue,
+  fixedIssueIds,
+}: ContractInsightsPanelProps) {
+  const [tab, setTab] = useState<(typeof issueTabs)[number]["key"]>("all")
+  const router = useRouter()
+
+  const filteredIssues = mockIssues.filter((issue) => tab === "all" || issue.severity === tab)
+
+  return (
+    <div className="w-full xl:w-[400px] shrink-0 h-[75vh] xl:h-[calc(100vh-190px)] flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
+      <div className="px-4 py-4 border-b border-gray-200 dark:border-border shrink-0">
+        <div className="flex items-center gap-1.5 mb-3">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-foreground">Review summary</h2>
+          <Info className="w-3.5 h-3.5 text-muted-foreground" />
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {stats.map((stat) => (
+            <div
+              key={stat.label}
+              className={`rounded-lg border ${stat.style.badgeBorder} ${stat.style.badgeBg} px-2 py-2 text-center`}
+            >
+              <p className={`text-base font-bold ${stat.style.badgeText}`}>{stat.value}</p>
+              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-border overflow-x-auto custom-scrollbar shrink-0">
+        {issueTabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+              tab === t.key
+                ? "bg-gray-900 dark:bg-accent text-white"
+                : "text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary"
+            }`}
+          >
+            {t.label} ({t.count})
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar divide-y divide-gray-100 dark:divide-border">
+        {isAnalyzing ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+            <div className="w-6 h-6 border-2 border-t-transparent border-accent rounded-full animate-spin" />
+            Analyzing contract…
+          </div>
+        ) : filteredIssues.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-1 py-12 text-sm text-muted-foreground text-center px-6">
+            No issues in this category.
+          </div>
+        ) : (
+          filteredIssues.map((issue) => {
+            const style = severityStyles[issue.severity]
+            const isSelected = selectedIssueId === issue.id
+            const isFixed = fixedIssueIds.has(issue.id)
+            return (
+              <button
+                key={issue.id}
+                type="button"
+                onClick={() => onSelectIssue(issue.id)}
+                className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors ${
+                  isFixed ? "opacity-60" : isSelected ? "bg-accent/5" : "hover:bg-gray-50 dark:hover:bg-secondary/40"
+                }`}
+              >
+                <span
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5 ${
+                    isFixed ? "bg-emerald-500" : style.dot
+                  }`}
+                >
+                  {isFixed ? <Check className="w-3 h-3" /> : issue.badge}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span
+                      className={
+                        isFixed
+                          ? "inline-flex items-center rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium px-1.5 py-0.5"
+                          : `inline-flex items-center rounded-full border ${style.badgeBorder} ${style.badgeBg} ${style.badgeText} text-[10px] font-medium px-1.5 py-0.5`
+                      }
+                    >
+                      {isFixed ? "Resolved" : style.label}
+                    </span>
+                    <span
+                      className={`text-[13px] font-semibold ${
+                        isFixed ? "line-through text-gray-400 dark:text-muted-foreground" : "text-gray-900 dark:text-foreground"
+                      }`}
+                    >
+                      {issue.title}
+                    </span>
+                  </span>
+                  <span className="block text-[12.5px] text-muted-foreground leading-snug mb-1.5">
+                    {issue.description}
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    Page {issue.page} • Clause {issue.clause}
+                  </span>
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0 mt-1" />
+              </button>
+            )
+          })
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => router.push("/dashboard")}
+        className="flex items-center gap-3 px-4 py-3.5 border-t border-gray-200 dark:border-border shrink-0 text-left hover:bg-gray-50 dark:hover:bg-secondary/40 transition-colors"
+      >
+        <span className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+          <Sparkles className="w-4 h-4 text-accent" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold text-gray-900 dark:text-foreground">
+            Ask AI about this contract
+          </span>
+          <span className="block text-[11.5px] text-muted-foreground">
+            Get detailed explanations or ask specific questions
+          </span>
+        </span>
+        <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+      </button>
+    </div>
+  )
+}

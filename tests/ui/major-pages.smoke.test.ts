@@ -8,6 +8,7 @@ const mockState = vi.hoisted(() => ({
   push: vi.fn(),
   redirect: vi.fn(),
   useUser: vi.fn(),
+  useAuth: vi.fn(),
   useSidebar: vi.fn(),
   useAiChat: vi.fn(),
 }))
@@ -23,6 +24,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@clerk/nextjs", () => ({
   useUser: mockState.useUser,
+  useAuth: mockState.useAuth,
 }))
 
 vi.mock("@/contexts/SidebarContext", () => ({
@@ -113,20 +115,19 @@ describe("major page smoke tests", () => {
     })
     mockState.useAiChat.mockReturnValue({
       conversations: [],
-      activeId: null,
-      activeConversation: null,
-      messages: [],
+      activeId: "test-chat-id",
+      loaded: true,
       isHistoryOpen: false,
+      refresh: vi.fn(),
       startNewConversation: vi.fn(),
       selectConversation: vi.fn(),
       deleteConversation: vi.fn(),
       renameConversation: vi.fn(),
-      addUserMessage: vi.fn(),
-      addAssistantMessage: vi.fn(),
       openHistory: vi.fn(),
       closeHistory: vi.fn(),
     })
     mockState.redirect.mockImplementation(() => null)
+    mockState.useAuth.mockReturnValue({ getToken: vi.fn().mockResolvedValue("test-token") })
   })
 
   it("renders landing page layout", () => {

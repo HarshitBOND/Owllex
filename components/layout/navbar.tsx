@@ -31,7 +31,7 @@ type NotificationsResponse = {
     error?: string
 }
 
-const Navbar = ({withBack, location}: {withBack?: boolean, location: string}) => {
+const Navbar = ({withBack, location, subtitle, badge, actions}: {withBack?: boolean, location: string, subtitle?: string, badge?: string, actions?: React.ReactNode}) => {
     const router = useRouter()
     const { isOpen, setIsOpen } = useSidebar()
     const [showNotifications, setShowNotifications] = useState(false)
@@ -201,16 +201,25 @@ const Navbar = ({withBack, location}: {withBack?: boolean, location: string}) =>
     return (
         <div className="flex flex-col w-full">
             <div className="flex items-center justify-between w-full lg:mb-6 mb-2">
-                <h1 className="font-serif lg:text-2xl text-xl font-semibold hidden lg:flex items-center gap-x-2">
-                    {withBack && (
-                        <Button variant="outline" size="icon" onClick={() => router.back()}>
-                            <ArrowLeft size={18}/>
-                        </Button>
-                    )}
-                    {location}
-                </h1>
+                <div className="hidden lg:flex flex-col gap-1">
+                    <h1 className="font-serif text-2xl font-semibold flex items-center gap-x-2">
+                        {withBack && (
+                            <Button variant="outline" size="icon" onClick={() => router.back()}>
+                                <ArrowLeft size={18}/>
+                            </Button>
+                        )}
+                        {location}
+                        {badge && (
+                            <span className="inline-flex items-center rounded-full bg-accent/10 text-accent text-[11px] font-medium px-2 py-0.5">
+                                {badge}
+                            </span>
+                        )}
+                    </h1>
+                    {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
+                </div>
                 <img src="/logo.png" className="w-9 h-9 lg:hidden" alt="LexVert" />
                 <div className="flex items-center md:gap-x-3 gap-x-2">
+                    {actions}
                     {/* Notification Bell */}
                     <div className="relative" ref={notifRef}>
                         <button

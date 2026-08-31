@@ -222,6 +222,9 @@ export default function AdminDashboardPage() {
                 addFiles={ragIngest.addFiles}
                 removeItem={ragIngest.removeItem}
                 clearFinished={ragIngest.clearFinished}
+                groupItems={ragIngest.groupItems}
+                reorderGroupPage={ragIngest.reorderGroupPage}
+                ungroupItem={ragIngest.ungroupItem}
                 uploadItem={ragIngest.uploadItem}
                 uploadAll={ragIngest.uploadAll}
                 status={ragIngest.status}

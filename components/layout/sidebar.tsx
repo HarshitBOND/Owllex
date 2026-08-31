@@ -6,7 +6,7 @@ import {
     ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck,
     LifeBuoy, Settings, Sparkles, CirclePlus, History, FileEdit,
     Settings2, Briefcase, LayoutDashboard,
-    CalendarDays, Workflow,
+    CalendarDays, Workflow, FileCheck2,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -37,6 +37,7 @@ const aiGroupItems: NavLeaf[] = [
     { name: "New Chat", icon: <CirclePlus size={16} />, action: "new-chat" },
     { name: "Chat History", icon: <History size={16} />, action: "chat-history" },
     { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },
+    { name: "Contract Review", icon: <FileCheck2 size={16} />, href: "/contract-review" },
     { name: "AI Workflow", icon: <Workflow size={16} />, href: "/ai-workflow" },
     { name: "AI Settings", icon: <Settings2 size={16} />, href: "/ai-settings" },
 ]
@@ -236,7 +237,7 @@ const Sidebar = () => {
                 <div className="flex items-center min-w-0 flex-shrink-0">
                     <Image
                         className="h-12 w-12 min-h-12 min-w-12 flex-shrink-0 object-contain"
-                        src="/logo.png"
+                        src="/ravenslaw.png"
                         alt="Logo"
                         width={48}
                         height={48}

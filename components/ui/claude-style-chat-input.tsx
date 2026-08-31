@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Plus, ChevronDown, ArrowUp, X, FileText, Loader2, Check, Archive, Search, FileCheck2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { MODELS, DEFAULT_MODEL } from "@/lib/ai/models";
 
 /* --- ICONS --- */
 export const Icons = {
@@ -220,13 +221,32 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ models, selectedModel, on
     );
 };
 
-const toolLinks = [
+export interface ToolMode {
+    id: string;
+    label: string;
+    placeholder: string;
+    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+}
+
+export const contractReviewMode: ToolMode = {
+    id: "contract-review",
+    label: "Contract Review",
+    placeholder: "Attach a contract (PDF, DOCX, or TXT) to review...",
+    icon: FileCheck2,
+};
+
+const toolLinks: Array<{ name: string; icon: typeof Search; href?: string; mode?: ToolMode }> = [
     { name: "Legal Research", href: "/legal-research", icon: Search },
-    { name: "Contract Review", href: "/contract-review", icon: FileCheck2 },
+    { name: "Contract Review", icon: FileCheck2, mode: contractReviewMode },
     { name: "Legal Summarizer", href: "/legal-summarizer", icon: FileText },
 ];
 
-const ToolsMenu: React.FC = () => {
+interface ToolsMenuProps {
+    activeModeId: string | null;
+    onSelectMode: (mode: ToolMode) => void;
+}
+
+const ToolsMenu: React.FC<ToolsMenuProps> = ({ activeModeId, onSelectMode }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
@@ -265,20 +285,28 @@ const ToolsMenu: React.FC = () => {
 
             {isOpen && (
                 <div className="absolute bottom-full left-0 mb-2 w-[220px] bg-bg-0 border border-bg-300 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col p-1.5 animate-fade-in origin-bottom-left">
-                    {toolLinks.map(tool => (
-                        <button
-                            key={tool.name}
-                            onClick={() => {
-                                setIsOpen(false);
-                                router.push(tool.href);
-                            }}
-                            className="w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2 group transition-colors hover:bg-bg-200"
-                            type="button"
-                        >
-                            <tool.icon className="w-4 h-4 text-text-300 shrink-0" />
-                            <span className="text-[13px] font-semibold text-text-100">{tool.name}</span>
-                        </button>
-                    ))}
+                    {toolLinks.map(tool => {
+                        const isActive = !!tool.mode && activeModeId === tool.mode.id;
+                        return (
+                            <button
+                                key={tool.name}
+                                onClick={() => {
+                                    setIsOpen(false);
+                                    if (tool.mode) {
+                                        onSelectMode(tool.mode);
+                                    } else if (tool.href) {
+                                        router.push(tool.href);
+                                    }
+                                }}
+                                className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2 group transition-colors hover:bg-bg-200 ${isActive ? 'bg-bg-200' : ''}`}
+                                type="button"
+                            >
+                                <tool.icon className="w-4 h-4 text-text-300 shrink-0" />
+                                <span className="text-[13px] font-semibold text-text-100 flex-1">{tool.name}</span>
+                                {isActive && <Icons.Check className="w-4 h-4 text-accent shrink-0" />}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -291,6 +319,7 @@ export interface ClaudeChatInputSubmission {
     pastedContent: PastedContent[];
     model: string;
     isThinkingEnabled: boolean;
+    mode?: ToolMode;
 }
 
 interface ClaudeChatInputProps {
@@ -304,17 +333,14 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
     const [files, setFiles] = useState<AttachedFile[]>([]);
     const [pastedContent, setPastedContent] = useState<PastedContent[]>([]);
     const [isDragging, setIsDragging] = useState(false);
-    const [selectedModel, setSelectedModel] = useState("sonnet-4.5");
+    const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
     const [isThinkingEnabled] = useState(false);
+    const [activeMode, setActiveMode] = useState<ToolMode | null>(null);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const models = [
-        { id: "opus-4.5", name: "Opus 4.5", description: "Most capable for complex work" },
-        { id: "sonnet-4.5", name: "Sonnet 4.5", description: "Best for everyday tasks" },
-        { id: "haiku-4.5", name: "Haiku 4.5", description: "Fastest for quick answers" }
-    ];
+    const models = Object.entries(MODELS).map(([id, m]) => ({ id, name: m.name, description: m.description }));
 
     useEffect(() => {
         if (textareaRef.current) {
@@ -331,27 +357,11 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
                 file,
                 type: isImage ? 'image/unknown' : (file.type || 'application/octet-stream'),
                 preview: isImage ? URL.createObjectURL(file) : null,
-                uploadStatus: 'pending'
+                uploadStatus: 'complete'
             };
         });
 
         setFiles(prev => [...prev, ...newFiles]);
-
-        setMessage(prev => {
-            if (prev) return prev;
-            if (newFiles.length === 1) {
-                const f = newFiles[0];
-                if (f.type.startsWith('image/')) return "Analyzed image...";
-                return "Analyzed document...";
-            }
-            return `Analyzed ${newFiles.length} files...`;
-        });
-
-        newFiles.forEach(f => {
-            setTimeout(() => {
-                setFiles(prev => prev.map(p => p.id === f.id ? { ...p, uploadStatus: 'complete' } : p));
-            }, 800 + Math.random() * 1000);
-        });
     }, []);
 
     const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
@@ -387,25 +397,23 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
                 timestamp: new Date()
             };
             setPastedContent(prev => [...prev, snippet]);
-
-            if (!message) {
-                setMessage("Analyzed pasted text...");
-            }
         }
     };
 
     const handleSend = () => {
         if (disabled) return;
         if (!message.trim() && files.length === 0 && pastedContent.length === 0) return;
-        onSendMessage({ message, files, pastedContent, model: selectedModel, isThinkingEnabled });
+        onSendMessage({ message, files, pastedContent, model: selectedModel, isThinkingEnabled, mode: activeMode ?? undefined });
         setMessage("");
         setFiles([]);
         setPastedContent([]);
+        setActiveMode(null);
         if (textareaRef.current) textareaRef.current.style.height = 'auto';
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        // isComposing guards IME input (Devanagari etc.) — Enter commits a candidate, it does not send
+        if (e.key === 'Enter' && !e.shiftKey && !(e.nativeEvent as any).isComposing) {
             e.preventDefault();
             handleSend();
         }
@@ -428,6 +436,23 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
             `}>
 
                 <div className="flex flex-col px-3 pt-3 pb-2 gap-2">
+
+                    {activeMode && (
+                        <div className="flex items-center gap-1.5 px-1">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 text-accent text-xs font-medium pl-2.5 pr-1.5 py-1">
+                                <activeMode.icon className="w-3.5 h-3.5" />
+                                {activeMode.label}
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveMode(null)}
+                                    className="w-4 h-4 rounded-full hover:bg-accent/20 flex items-center justify-center transition-colors"
+                                    aria-label={`Remove ${activeMode.label} mode`}
+                                >
+                                    <Icons.X className="w-3 h-3" />
+                                </button>
+                            </span>
+                        </div>
+                    )}
 
                     {(files.length > 0 || pastedContent.length > 0) && (
                         <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2 px-1">
@@ -456,10 +481,10 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
                                 onChange={(e) => setMessage(e.target.value)}
                                 onPaste={handlePaste}
                                 onKeyDown={handleKeyDown}
-                                placeholder={placeholder}
+                                placeholder={activeMode ? activeMode.placeholder : placeholder}
+                                aria-label={activeMode ? activeMode.placeholder : placeholder}
                                 className="w-full bg-transparent border-0 outline-none text-text-100 text-[16px] placeholder:text-text-400 resize-none overflow-hidden py-0 leading-relaxed block font-normal antialiased"
                                 rows={1}
-                                autoFocus
                                 style={{ minHeight: '1.5em' }}
                             />
                         </div>
@@ -477,7 +502,7 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
                             </button>
 
                             <div className="flex shrink min-w-8 !shrink-0">
-                                <ToolsMenu />
+                                <ToolsMenu activeModeId={activeMode?.id ?? null} onSelectMode={setActiveMode} />
                             </div>
                         </div>
 

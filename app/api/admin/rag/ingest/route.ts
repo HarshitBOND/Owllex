@@ -15,48 +15,62 @@ import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || "http://localhost:8000";
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = new Set(["pdf", "docx", "txt", "md"]);
+const ALLOWED_EXTENSIONS = new Set(["pdf", "docx", "txt", "md", "jpg", "jpeg", "png"]);
 
 export async function POST(request: NextRequest) {
   const admin = await requireAdmin(request);
   if (admin instanceof NextResponse) return admin;
 
   const formData = await request.formData();
-  const file = formData.get("file");
+  const groupFiles = formData.getAll("files").filter((f): f is File => f instanceof File);
+  const singleFile = formData.get("file");
+  const inputFiles = groupFiles.length > 0 ? groupFiles : singleFile instanceof File ? [singleFile] : [];
 
-  if (!file || !(file instanceof File)) {
+  if (inputFiles.length === 0) {
     return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 });
   }
 
-  const bytes = await file.arrayBuffer();
-  const buffer = new Uint8Array(bytes);
-  const validation = validateUploadBuffer(file.name, buffer, file.type);
-  const extension = validation.sanitizedFileName?.split(".").pop()?.toLowerCase() || "";
-
-  if (!validation.ok || validation.resourceType !== "raw" || !ALLOWED_EXTENSIONS.has(extension)) {
-    logSecurityEvent({
-      type: "upload_failed",
-      level: "warn",
-      message: "RAG ingest upload rejected by validation",
-      request,
-      userId: admin.userId,
-      details: { reason: validation.error, originalFileName: file.name, mimeType: file.type },
-    });
-    return NextResponse.json(
-      { success: false, error: "Only PDF, DOCX, TXT, or MD files are supported" },
-      { status: 400 }
-    );
-  }
-
-  if (buffer.byteLength > MAX_FILE_SIZE_BYTES) {
-    return NextResponse.json(
-      { success: false, error: "File exceeds 50MB upload limit" },
-      { status: 400 }
-    );
-  }
-
   const safeFormData = new FormData();
-  safeFormData.append("file", new File([buffer], validation.sanitizedFileName!, { type: file.type }));
+  let totalBytes = 0;
+  let primaryFileName = "";
+
+  for (const [idx, file] of inputFiles.entries()) {
+    const bytes = await file.arrayBuffer();
+    const buffer = new Uint8Array(bytes);
+    const validation = validateUploadBuffer(file.name, buffer, file.type);
+    const extension = validation.sanitizedFileName?.split(".").pop()?.toLowerCase() || "";
+    const resourceOk = validation.resourceType === "raw" || validation.resourceType === "image";
+
+    if (!validation.ok || !resourceOk || !ALLOWED_EXTENSIONS.has(extension)) {
+      logSecurityEvent({
+        type: "upload_failed",
+        level: "warn",
+        message: "RAG ingest upload rejected by validation",
+        request,
+        userId: admin.userId,
+        details: { reason: validation.error, originalFileName: file.name, mimeType: file.type },
+      });
+      return NextResponse.json(
+        { success: false, error: "Only PDF, DOCX, TXT, MD, JPG, or PNG files are supported" },
+        { status: 400 }
+      );
+    }
+
+    totalBytes += buffer.byteLength;
+    if (totalBytes > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json(
+        { success: false, error: "Combined document size exceeds the 50MB upload limit" },
+        { status: 400 }
+      );
+    }
+
+    const name =
+      inputFiles.length > 1
+        ? `${String(idx).padStart(3, "0")}__${validation.sanitizedFileName}`
+        : validation.sanitizedFileName!;
+    safeFormData.append("files", new File([buffer], name, { type: file.type }));
+    if (idx === 0) primaryFileName = validation.sanitizedFileName!;
+  }
 
   try {
     const response = await fetch(`${BACKEND_API}/api/v1/rag/ingest`, {
@@ -68,16 +82,24 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
 
     if (!response.ok) {
+      const detail = data.detail;
+      const isDuplicate = response.status === 409 && detail && typeof detail === "object";
       return NextResponse.json(
-        { success: false, error: data.detail || "Ingestion failed" },
+        {
+          success: false,
+          error: isDuplicate ? detail.message : typeof detail === "string" ? detail : "Ingestion failed",
+          duplicate: isDuplicate || undefined,
+          existingDocumentId: isDuplicate ? detail.existing_document_id : undefined,
+        },
         { status: response.status }
       );
     }
 
+    const pageSuffix = inputFiles.length > 1 ? ` from ${inputFiles.length} pages` : "";
     await logAdminAction(admin.dbUserId, "rag_document_ingested", request, {
       targetType: "document",
       targetId: data.document_id,
-      details: `Ingested "${validation.sanitizedFileName}" into RAG pipeline (${data.chunk_count} chunks)`,
+      details: `Ingested "${primaryFileName}"${pageSuffix} into RAG pipeline (${data.chunk_count} chunks)`,
     });
 
     return NextResponse.json(data);

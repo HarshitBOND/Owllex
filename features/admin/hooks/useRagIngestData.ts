@@ -76,13 +76,64 @@ export function useRagIngestData() {
     setQueue((prev) => prev.filter((item) => item.status === "pending" || item.status === "uploading"))
   }, [])
 
+  const groupItems = useCallback((orderedIds: string[]) => {
+    setQueue((prev) => {
+      const chosen = orderedIds
+        .map((id) => prev.find((q) => q.id === id))
+        .filter((q): q is RagIngestItem => q !== undefined && q.status === "pending")
+      if (chosen.length < 2) return prev
+
+      const pages = chosen.map((q) => q.file)
+      const grouped: RagIngestItem = {
+        id: `group-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file: pages[0],
+        pages,
+        status: "pending",
+      }
+      return [grouped, ...prev.filter((q) => !orderedIds.includes(q.id))]
+    })
+  }, [])
+
+  const reorderGroupPage = useCallback((itemId: string, fromIndex: number, toIndex: number) => {
+    setQueue((prev) =>
+      prev.map((q) => {
+        if (q.id !== itemId || !q.pages) return q
+        if (toIndex < 0 || toIndex >= q.pages.length) return q
+        const pages = [...q.pages]
+        const [moved] = pages.splice(fromIndex, 1)
+        pages.splice(toIndex, 0, moved)
+        return { ...q, pages, file: pages[0] }
+      })
+    )
+  }, [])
+
+  const ungroupItem = useCallback((itemId: string) => {
+    setQueue((prev) => {
+      const target = prev.find((q) => q.id === itemId)
+      if (!target?.pages) return prev
+      const restored: RagIngestItem[] = target.pages.map((file) => ({
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        status: "pending",
+      }))
+      return [...restored, ...prev.filter((q) => q.id !== itemId)]
+    })
+  }, [])
+
   const uploadItem = useCallback(
     async (item: RagIngestItem) => {
       setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "uploading", error: undefined } : q)))
 
       try {
         const formData = new FormData()
-        formData.append("file", item.file)
+        if (item.pages && item.pages.length > 1) {
+          item.pages.forEach((page, idx) => {
+            const safeName = `${String(idx).padStart(3, "0")}__${page.name}`
+            formData.append("files", new File([page], safeName, { type: page.type }))
+          })
+        } else {
+          formData.append("file", item.file)
+        }
 
         const res = await fetch("/api/admin/rag/ingest", { method: "POST", body: formData })
         const data = await res.json()
@@ -94,8 +145,7 @@ export function useRagIngestData() {
                 ? {
                     ...q,
                     status: "success",
-                    skipped: Boolean(data.skipped),
-                    documentId: data.skipped ? data.existing_document_id : data.document_id,
+                    documentId: data.document_id,
                     title: data.title,
                     documentType: data.document_type,
                     chunkCount: data.chunk_count,
@@ -104,7 +154,19 @@ export function useRagIngestData() {
             )
           )
         } else {
-          setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "failed", error: data.error || "Ingestion failed" } : q)))
+          setQueue((prev) =>
+            prev.map((q) =>
+              q.id === item.id
+                ? {
+                    ...q,
+                    status: "failed",
+                    error: data.error || "Ingestion failed",
+                    duplicate: Boolean(data.duplicate),
+                    documentId: data.existingDocumentId,
+                  }
+                : q
+            )
+          )
         }
       } catch {
         setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: "failed", error: "Network error" } : q)))
@@ -126,6 +188,9 @@ export function useRagIngestData() {
     addFiles,
     removeItem,
     clearFinished,
+    groupItems,
+    reorderGroupPage,
+    ungroupItem,
     uploadItem,
     uploadAll,
     status,

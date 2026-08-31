@@ -1,7 +1,7 @@
 "use client"
 
-import { useRef, useState } from "react"
-import { AlertTriangle, CheckCircle2, Database, FileText, Loader2, RefreshCw, Search, Trash2, UploadCloud, X, XCircle } from "lucide-react"
+import { Fragment, useRef, useState } from "react"
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Database, FileText, Layers, Loader2, RefreshCw, Search, Trash2, UploadCloud, X, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { RagIngestItem, RagSearchResult, RagStatus } from "../types"
 import { cn } from "@/lib/utils"
@@ -11,6 +11,9 @@ interface RagIngestTabProps {
   addFiles: (files: File[]) => void
   removeItem: (id: string) => void
   clearFinished: () => void
+  groupItems: (orderedIds: string[]) => void
+  reorderGroupPage: (itemId: string, fromIndex: number, toIndex: number) => void
+  ungroupItem: (itemId: string) => void
   uploadItem: (item: RagIngestItem) => Promise<void>
   uploadAll: () => void
   status: RagStatus | null
@@ -25,14 +28,20 @@ interface RagIngestTabProps {
   runSearch: () => void
 }
 
-const ACCEPTED_EXTENSIONS = ".pdf,.docx,.txt,.md"
+const ACCEPTED_EXTENSIONS = ".pdf,.docx,.txt,.md,.jpg,.jpeg,.png"
 
-function statusIcon(status: RagIngestItem["status"]) {
-  switch (status) {
+function isImageFile(name: string) {
+  return /\.(jpe?g|png)$/i.test(name)
+}
+
+function statusIcon(item: RagIngestItem) {
+  switch (item.status) {
     case "success":
       return <CheckCircle2 size={16} className="text-emerald-600" />
     case "failed":
-      return <XCircle size={16} className="text-red-600" />
+      return item.duplicate
+        ? <AlertTriangle size={16} className="text-amber-600" />
+        : <XCircle size={16} className="text-red-600" />
     case "uploading":
       return <Loader2 size={16} className="text-amber-600 animate-spin" />
     default:
@@ -62,6 +71,9 @@ export function RagIngestTab({
   addFiles,
   removeItem,
   clearFinished,
+  groupItems,
+  reorderGroupPage,
+  ungroupItem,
   uploadItem,
   uploadAll,
   status,
@@ -76,11 +88,27 @@ export function RagIngestTab({
   runSearch,
 }: RagIngestTabProps) {
   const [dragActive, setDragActive] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const pendingCount = queue.filter((q) => q.status === "pending").length
   const hasFinished = queue.some((q) => q.status === "success" || q.status === "failed")
   const blocked = Boolean(statusError) || (status !== null && !status.ready)
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleGroup = () => {
+    groupItems([...selectedIds])
+    setSelectedIds(new Set())
+  }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -182,8 +210,10 @@ export function RagIngestTab({
       <div className="bg-white dark:bg-gray-900 rounded-xl border-2 border-gray-200 dark:border-gray-700 shadow-sm p-4">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Ingest documents into the RAG pipeline</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Upload PDF, DOCX, TXT, or MD files. Each document is parsed, chunked, embedded, and stored in the vector store for
-          retrieval. The first PDF after a backend restart takes ~60s extra while the layout model loads.
+          Upload PDF, DOCX, TXT, MD files, or photos (JPG/PNG) of a physical document. Each document is parsed, chunked,
+          embedded, and stored in the vector store for retrieval. Photographed a multi-page document? Select the pages
+          below and use &quot;Group into one document&quot; so they&apos;re ingested together, in order. The first PDF
+          after a backend restart takes ~60s extra while the layout model loads.
         </p>
 
         <div
@@ -202,7 +232,7 @@ export function RagIngestTab({
           <p className="text-sm text-gray-600 dark:text-gray-300">
             <span className="font-medium text-sidebar-primary">Click to browse</span> or drag and drop files here
           </p>
-          <p className="text-xs text-gray-400">PDF, DOCX, TXT, MD — up to 50MB each</p>
+          <p className="text-xs text-gray-400">PDF, DOCX, TXT, MD, JPG, PNG — up to 50MB per document</p>
           <input
             ref={inputRef}
             type="file"
@@ -217,6 +247,11 @@ export function RagIngestTab({
           <div className="flex items-center justify-between mt-4">
             <p className="text-xs text-gray-500 dark:text-gray-400">{queue.length} file(s) in queue</p>
             <div className="flex gap-2">
+              {selectedIds.size >= 2 && (
+                <Button size="sm" variant="outline" onClick={handleGroup} className="gap-1.5">
+                  <Layers size={14} /> Group into one document ({selectedIds.size})
+                </Button>
+              )}
               {hasFinished && (
                 <Button size="sm" variant="outline" onClick={clearFinished} className="gap-1.5">
                   <Trash2 size={14} /> Clear finished
@@ -244,27 +279,59 @@ export function RagIngestTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {queue.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white max-w-[220px] truncate">{item.file.name}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{formatBytes(item.file.size)}</td>
+                {queue.map((item) => {
+                  const isGroup = Boolean(item.pages && item.pages.length > 1)
+                  const groupable = item.status === "pending" && !item.pages && isImageFile(item.file.name)
+                  const groupSize = item.pages ? item.pages.reduce((sum, p) => sum + p.size, 0) : item.file.size
+                  return (
+                  <Fragment key={item.id}>
+                  <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white max-w-[260px]">
+                      <div className="flex items-center gap-2">
+                        {groupable && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(item.id)}
+                            onChange={() => toggleSelected(item.id)}
+                            className="shrink-0"
+                            aria-label={`Select ${item.file.name} for grouping`}
+                          />
+                        )}
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate">
+                            {isGroup
+                              ? `${item.pages!.length} pages · ${item.file.name}${item.pages!.length > 1 ? ` + ${item.pages!.length - 1} more` : ""}`
+                              : item.file.name}
+                          </span>
+                          {isGroup && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedGroupId(expandedGroupId === item.id ? null : item.id)}
+                              className="text-[11px] text-sidebar-primary hover:underline text-left flex items-center gap-0.5 w-fit"
+                            >
+                              {expandedGroupId === item.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                              {expandedGroupId === item.id ? "Hide pages" : "Show pages"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{formatBytes(groupSize)}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium capitalize">
-                        {statusIcon(item.status)} {item.status}
+                        {statusIcon(item)} {item.status === "failed" && item.duplicate ? "duplicate" : item.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400 max-w-[280px]">
-                      {item.status === "success" && item.skipped && (
-                        <span className="text-amber-600 dark:text-amber-400">
-                          Already ingested — skipped (duplicate content)
-                        </span>
-                      )}
-                      {item.status === "success" && !item.skipped && (
+                      {item.status === "success" && (
                         <span>
                           {item.title || "Untitled"} · {item.documentType || "unknown"} · {item.chunkCount ?? 0} chunks
                         </span>
                       )}
-                      {item.status === "failed" && <span className="text-red-600">{item.error}</span>}
+                      {item.status === "failed" && item.duplicate && (
+                        <span className="text-amber-600 dark:text-amber-400">Duplicate — already ingested, upload blocked</span>
+                      )}
+                      {item.status === "failed" && !item.duplicate && <span className="text-red-600">{item.error}</span>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1.5">
@@ -273,7 +340,7 @@ export function RagIngestTab({
                             Ingest
                           </Button>
                         )}
-                        {item.status === "failed" && (
+                        {item.status === "failed" && !item.duplicate && (
                           <Button size="sm" variant="outline" className="h-7 text-xs" disabled={blocked} onClick={() => ingestOne(item)}>
                             Retry
                           </Button>
@@ -286,7 +353,63 @@ export function RagIngestTab({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  {isGroup && expandedGroupId === item.id && (
+                    <tr className="bg-gray-50/50 dark:bg-gray-800/30">
+                      <td colSpan={5} className="px-4 py-3">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                              Pages, in order
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 text-xs"
+                              onClick={() => {
+                                ungroupItem(item.id)
+                                setExpandedGroupId(null)
+                              }}
+                            >
+                              Ungroup
+                            </Button>
+                          </div>
+                          {item.pages!.map((page, idx) => (
+                            <div
+                              key={`${item.id}-${idx}`}
+                              className="flex items-center justify-between gap-2 rounded-md border border-gray-200 dark:border-gray-700 px-2.5 py-1.5"
+                            >
+                              <span className="text-xs text-gray-700 dark:text-gray-300 truncate">
+                                {idx + 1}. {page.name}
+                              </span>
+                              <div className="flex gap-1 shrink-0">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0"
+                                  disabled={idx === 0}
+                                  onClick={() => reorderGroupPage(item.id, idx, idx - 1)}
+                                >
+                                  <ChevronUp size={12} />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0"
+                                  disabled={idx === item.pages!.length - 1}
+                                  onClick={() => reorderGroupPage(item.id, idx, idx + 1)}
+                                >
+                                  <ChevronDown size={12} />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

@@ -117,4 +117,10 @@ runs resumable, for the same reason the per-document loop below is.
 - [ ] `backend/rag/pipeline.py` — the one-document-at-a-time orchestrator loop, skipping already-`done` documents on restart. Runs `links.py` once at the end of a run, not per document.
 - [ ] `backend/rag/retriever.py` — MMR retriever setup with metadata pre-filter wired in.
 - [ ] Run the Phase 0 pilot (300-500 docs, from `ARCHITECTURE.md`'s cost plan) through this actual pipeline to get real per-document cost before committing to the full 50,000-document run.
+
+## Known debt — live admin-upload path (`backend/rag/app/ingest/`)
+
+Separate from the bulk pipeline checklist above — this is the pipeline actually running behind the admin RAG Ingest tab today.
+
+- **Deskew / perspective correction for photographed pages** — `loader.py` EXIF auto-orients a photo and hands it straight to RapidOCR (`OcrMode.FULL_PAGE`) with no crop/deskew/contrast step. RapidOCR has some inherent tolerance for mild skew, but a phone photo taken at an angle, with background visible, or under uneven lighting will OCR worse than a flatbed scan. Not built now — size it against real admin photo quality first, since a proper fix means a new CV dependency (e.g. OpenCV-based edge detection + perspective warp) with its own tuning and failure modes, not a one-line change.
 - [ ] Wire in Batch API submission for `extractor.py`/`embedder.py` once the pipeline is verified correct on the pilot batch — build correct first, batch-optimize second.

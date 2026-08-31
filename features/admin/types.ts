@@ -102,14 +102,16 @@ export type RagIngestStatus = "pending" | "uploading" | "success" | "failed"
 export interface RagIngestItem {
   id: string
   file: File
+  // Present only for a multi-page photo group, ordered front-to-back. file === pages[0].
+  pages?: File[]
   status: RagIngestStatus
   error?: string
   documentId?: string
   title?: string
   documentType?: string
   chunkCount?: number
-  // Backend recognised the content hash and skipped re-embedding it.
-  skipped?: boolean
+  // Backend recognised the content hash as already indexed and rejected this upload.
+  duplicate?: boolean
 }
 
 export interface RagStatus {

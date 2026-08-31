@@ -8,10 +8,10 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 
 COPY pyproject.toml uv.lock .
-RUN uv sync --locked --no-install-project
+RUN uv sync --locked --no-install-project --extra rag
 
 COPY . .
-RUN uv sync --locked
+RUN uv sync --locked --extra rag
 
 ENV PATH="/app/.venv/bin:$PATH"
 

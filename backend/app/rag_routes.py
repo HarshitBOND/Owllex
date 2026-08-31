@@ -18,7 +18,7 @@ logger = logging.getLogger("lexvert.rag")
 
 rag_router = APIRouter()
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".jpg", ".jpeg", ".png"}
 
 
 class SearchRequest(BaseModel):
@@ -129,31 +129,49 @@ async def rag_search(payload: SearchRequest):
 @rag_router.post(
     "/ingest",
     summary="Ingest a document into the RAG vector store",
-    description="Upload a document; it is chunked, embedded, and stored in the Chroma vector store.",
+    description=(
+        "Upload a document (or, for a photographed multi-page document, its ordered page images "
+        "under repeated `files` fields); it is chunked, embedded, and stored in the Chroma vector store."
+    ),
 )
-async def ingest_rag_document(file: UploadFile = File(..., description="Document to ingest")):
-    if not file.filename or Path(file.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, or MD files are accepted")
+async def ingest_rag_document(
+    file: UploadFile | None = File(default=None, description="Single document (legacy single-file path)"),
+    files: list[UploadFile] | None = File(default=None, description="Ordered pages of one physical document"),
+):
+    # `files` is the general path (also used for a single non-grouped upload by the Next proxy);
+    # `file` is kept only because rag/scripts/verify_rag.py still posts that legacy shape directly.
+    uploads = files if files else ([file] if file else [])
+    if not uploads:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    for upload in uploads:
+        if not upload.filename or Path(upload.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, MD, JPG, or PNG files are accepted")
 
     _require_openai_key()
     _require_chroma_config()
 
-    content = await file.read()
-    max_bytes = settings.MAX_PDF_SIZE_MB * 1024 * 1024
-    if len(content) > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size: {settings.MAX_PDF_SIZE_MB}MB",
-        )
-
-    raw_name = Path(file.filename).name
-    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
     document_id = uuid.uuid4().hex
-    temp_path = os.path.join(settings.UPLOAD_DIR, f"{document_id}_{safe_name}")
+    max_bytes = settings.MAX_PDF_SIZE_MB * 1024 * 1024
+    raw_name = Path(uploads[0].filename).name
+    temp_paths: list[str] = []
+    total_bytes = 0
 
     try:
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        for idx, upload in enumerate(uploads):
+            content = await upload.read()
+            total_bytes += len(content)
+            if total_bytes > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Combined document size exceeds {settings.MAX_PDF_SIZE_MB}MB",
+                )
+
+            safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(upload.filename).name)
+            temp_path = os.path.join(settings.UPLOAD_DIR, f"{document_id}_{idx:03d}_{safe_name}")
+            with open(temp_path, "wb") as f:
+                f.write(content)
+            temp_paths.append(temp_path)
 
         try:
             from rag.app.ingest.ingest import ingest_document
@@ -163,12 +181,23 @@ async def ingest_rag_document(file: UploadFile = File(..., description="Document
                 detail="RAG dependencies are not installed on this instance (run: uv sync --extra rag)",
             )
 
-        result = await run_in_threadpool(ingest_document, temp_path, document_id)
+        result = await run_in_threadpool(ingest_document, temp_paths, document_id)
 
         if result.get("skipped"):
-            logger.info("Skipped %s: duplicate content (hash=%s)", raw_name, result["content_hash"])
-        else:
-            logger.info("Ingested %s as document_id=%s (%d chunks)", raw_name, document_id, result["chunk_count"])
+            logger.info("Rejected %s: duplicate content (hash=%s)", raw_name, result["content_hash"])
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "This document has already been ingested (duplicate content).",
+                    "existing_document_id": result["existing_document_id"],
+                    "content_hash": result["content_hash"],
+                },
+            )
+
+        logger.info(
+            "Ingested %s (%d page(s)) as document_id=%s (%d chunks)",
+            raw_name, len(uploads), document_id, result["chunk_count"],
+        )
 
         return {
             "success": True,
@@ -185,5 +214,6 @@ async def ingest_rag_document(file: UploadFile = File(..., description="Document
         logger.exception("RAG ingestion failed for %s", raw_name)
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
     finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        for temp_path in temp_paths:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)

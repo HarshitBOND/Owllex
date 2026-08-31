@@ -1,3 +1,5 @@
+import { FileText, UserRound, ShieldCheck, MoreHorizontal } from "lucide-react"
+
 export type ChatMessage = {
   id: string
   role: "user" | "assistant"
@@ -5,6 +7,112 @@ export type ChatMessage = {
   time: string
   clauseHtml?: string
 }
+
+export type DocumentTemplate = {
+  name: string
+  description: string
+  icon: typeof FileText
+  color: string
+  bgColor: string
+}
+
+export const documentTemplates: DocumentTemplate[] = [
+  {
+    name: "Rental Agreement",
+    description: "Lease, subleases, tenancy",
+    icon: FileText,
+    color: "text-emerald-600 dark:text-emerald-400",
+    bgColor: "bg-emerald-50 dark:bg-emerald-500/10",
+  },
+  {
+    name: "Service Agreement",
+    description: "Consultancy, freelance, service",
+    icon: UserRound,
+    color: "text-violet-600 dark:text-violet-400",
+    bgColor: "bg-violet-50 dark:bg-violet-500/10",
+  },
+  {
+    name: "Non-Disclosure Agreement",
+    description: "Confidentiality, NDAs",
+    icon: ShieldCheck,
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-50 dark:bg-orange-500/10",
+  },
+  {
+    name: "More documents",
+    description: "Explore 50+ legal templates",
+    icon: MoreHorizontal,
+    color: "text-blue-600 dark:text-blue-400",
+    bgColor: "bg-blue-50 dark:bg-blue-500/10",
+  },
+]
+
+export type RecentDocument = {
+  name: string
+  status: "Draft" | "Final"
+  lastModified: string
+  type: string
+  icon: typeof FileText
+  color: string
+  bgColor: string
+}
+
+export const recentDocuments: RecentDocument[] = [
+  {
+    name: "Rental Agreement – 123 Main St",
+    status: "Draft",
+    lastModified: "Today, 4:32 PM",
+    type: "Rental Agreement",
+    icon: FileText,
+    color: "text-emerald-600 dark:text-emerald-400",
+    bgColor: "bg-emerald-50 dark:bg-emerald-500/10",
+  },
+  {
+    name: "Service Agreement – Acme Consulting",
+    status: "Draft",
+    lastModified: "Yesterday, 2:15 PM",
+    type: "Service Agreement",
+    icon: UserRound,
+    color: "text-violet-600 dark:text-violet-400",
+    bgColor: "bg-violet-50 dark:bg-violet-500/10",
+  },
+  {
+    name: "Non-Disclosure Agreement – Zenith Labs",
+    status: "Final",
+    lastModified: "Aug 25, 2025",
+    type: "NDA",
+    icon: ShieldCheck,
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-50 dark:bg-orange-500/10",
+  },
+  {
+    name: "Employment Agreement – Rahul Sharma",
+    status: "Draft",
+    lastModified: "Aug 22, 2025",
+    type: "Employment Agreement",
+    icon: FileText,
+    color: "text-blue-600 dark:text-blue-400",
+    bgColor: "bg-blue-50 dark:bg-blue-500/10",
+  },
+  {
+    name: "Rental Agreement – Sunrise Apartments",
+    status: "Final",
+    lastModified: "Aug 18, 2025",
+    type: "Rental Agreement",
+    icon: FileText,
+    color: "text-emerald-600 dark:text-emerald-400",
+    bgColor: "bg-emerald-50 dark:bg-emerald-500/10",
+  },
+  {
+    name: "Service Agreement – BrightTech Solutions",
+    status: "Draft",
+    lastModified: "Aug 15, 2025",
+    type: "Service Agreement",
+    icon: UserRound,
+    color: "text-violet-600 dark:text-violet-400",
+    bgColor: "bg-violet-50 dark:bg-violet-500/10",
+  },
+]
 
 export const baseDocumentHtml = `
 <h1>RENTAL AGREEMENT</h1>
