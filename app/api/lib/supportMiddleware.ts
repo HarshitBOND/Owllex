@@ -38,7 +38,7 @@ export async function requireSupport(
 
   if (!userId) {
     return NextResponse.json(
-      { success: false, error: "Unauthorized — please sign in" },
+      { success: false, error: "Unauthorized please sign in" },
       { status: 401 },
     );
   }
@@ -79,7 +79,7 @@ export async function requireSupport(
 
   if (role !== "support" && role !== "admin") {
     return NextResponse.json(
-      { success: false, error: "Forbidden — support access required" },
+      { success: false, error: "Forbidden support access required" },
       { status: 403 },
     );
   }

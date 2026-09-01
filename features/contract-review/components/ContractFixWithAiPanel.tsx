@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai"
 import { AlertCircle, ArrowUp, Check, ChevronDown, Sparkles, Wand2, X } from "lucide-react"
@@ -35,6 +36,7 @@ export default function ContractFixWithAiPanel({
   open,
   onOpenChange,
 }: ContractFixWithAiPanelProps) {
+  const router = useRouter()
   const [input, setInput] = useState("")
   const [model, setModel] = useState<ModelKey>(DEFAULT_MODEL)
   const allowedModels = useAllowedModels()
@@ -77,7 +79,7 @@ export default function ContractFixWithAiPanel({
   const fixIssue = (issue: ContractIssue) => {
     onOpenChange(true)
     send(
-      `Fix this issue: [${issue.severity}] ${issue.title} — ${issue.description}${
+      `Fix this issue: [${issue.severity}] ${issue.title} ${issue.description}${
         issue.quote ? ` (quoting: "${issue.quote}")` : ""
       }`,
     )
@@ -162,7 +164,7 @@ export default function ContractFixWithAiPanel({
                 <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center">
                   <Check className="w-6 h-6 text-emerald-500" />
                   <p className="text-[12.5px] font-medium text-gray-900 dark:text-foreground">
-                    All issues resolved — ask anything else below
+                    All issues resolved ask anything else below
                   </p>
                 </div>
               ))}
@@ -308,13 +310,12 @@ export default function ContractFixWithAiPanel({
                     return (
                       <DropdownMenuItem
                         key={key}
-                        disabled={locked}
-                        onClick={() => !locked && setModel(key)}
-                        className="flex-col items-start gap-0.5"
+                        onClick={() => locked ? router.push("/pricing") : setModel(key)}
+                        className={`flex-col items-start gap-0.5 ${locked ? "opacity-60" : ""}`}
                       >
                         <span className="text-[13px] font-medium">
                           {MODELS[key].name}
-                          {locked && <span className="ml-1.5 text-[10px] text-muted-foreground">Upgrade</span>}
+                          {locked && <span className="ml-1.5 text-[10px] text-accent">Upgrade</span>}
                         </span>
                         <span className="text-[11px] text-muted-foreground">{MODELS[key].description}</span>
                       </DropdownMenuItem>

@@ -7,9 +7,9 @@ const steps = [
   {
     step: "01",
     icon: Search,
-    title: "Choose your service",
+    title: "Choose your tool",
     description:
-      "Select from our range of legal services — from document generation to lawyer consultations and case tracking.",
+      "Select from document drafting, contract review, legal research, or case tracking — all in one workspace.",
   },
   {
     step: "02",
@@ -23,7 +23,7 @@ const steps = [
     icon: Sparkles,
     title: "AI-powered generation",
     description:
-      "Our advanced AI instantly creates legally valid documents using verified templates and expert-reviewed processes.",
+      "Our AI instantly drafts documents, reviews contracts, or answers research questions — grounded in your own case files and citations you can verify.",
   },
 ]
 
@@ -37,8 +37,8 @@ export function HowItWorksSection() {
             How ravenslaw works
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Our integrated platform handles everything from document creation to delivery. One account, unlimited
-            legal solutions.
+            Our integrated platform handles everything from drafting to case tracking. One account, every tool your
+            practice needs.
           </p>
         </Reveal>
 

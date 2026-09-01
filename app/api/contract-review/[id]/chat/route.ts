@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ? review.issues
         .map((i) => `- [${i.severity}] ${i.title}: ${i.description}${i.quote ? ` (quoting: "${i.quote}")` : ""}`)
         .join("\n")
-    : "(no issues on file — run a review first if you want a starting list)"
+    : "(no issues on file run a review first if you want a starting list)"
 
   const system = [
     CONTRACT_REVIEW_SYSTEM_PROMPT,

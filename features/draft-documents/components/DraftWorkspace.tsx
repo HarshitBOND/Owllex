@@ -93,7 +93,7 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
         <div className="shrink-0 rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-4 py-2.5 flex flex-wrap items-center gap-3">
           <p className="text-[12.5px] text-amber-800 dark:text-amber-300 flex items-center gap-1.5 flex-1 min-w-[240px]">
             <AlertTriangle className="w-4 h-4 shrink-0" />
-            This draft was changed in another tab or window. Reload to get the latest version — your unsaved
+            This draft was changed in another tab or window. Reload to get the latest version your unsaved
             changes here will be lost.
           </p>
           <div className="flex items-center gap-2">

@@ -148,12 +148,12 @@ export async function POST(request: NextRequest) {
           stage("rewriting")
           verified = false
           const flaggedBlock = verify.object.flagged
-            .map((f) => `- "${f.sentence}" — ${f.problem}`)
+            .map((f) => `- "${f.sentence}" ${f.problem}`)
             .join("\n")
           const rewrite = await generateText({
             model: modelFor("balanced"),
             system: RESEARCH_SYNTHESIS_PROMPT,
-            prompt: `${researchPrompt}\n\nHere is a draft answer. A citation checker flagged these sentences:\n${flaggedBlock}\n\nRewrite the draft, fixing ONLY the flagged sentences — soften or remove unsupported claims, fix wrong citations, keep everything else word for word.\n\nDraft:\n${draft.text}`,
+            prompt: `${researchPrompt}\n\nHere is a draft answer. A citation checker flagged these sentences:\n${flaggedBlock}\n\nRewrite the draft, fixing ONLY the flagged sentences soften or remove unsupported claims, fix wrong citations, keep everything else word for word.\n\nDraft:\n${draft.text}`,
           })
           await recordAiUsage({ clerkUid, feature: "research", modelKey: "balanced", usage: rewrite.totalUsage })
           finalText = rewrite.text

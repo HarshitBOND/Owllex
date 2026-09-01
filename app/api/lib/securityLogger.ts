@@ -7,6 +7,7 @@ type SecurityEventType =
   | "admin_access_attempt"
   | "upload_failed"
   | "rate_limited"
+  | "trial_expired_block"
 
 const getClientIp = (request?: NextRequest) => {
   if (!request) return "unknown"

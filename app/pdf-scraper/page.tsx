@@ -561,7 +561,7 @@ export default function PDFScraperPage() {
     )
   }
 
-  // Not admin — access denied
+  // Not admin access denied
   if (isAdmin === false) {
     return (
       <div className="flex">
@@ -630,7 +630,7 @@ export default function PDFScraperPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                 <div>
                   <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
-                    Admin Panel — PDF Scraper
+                    Admin Panel PDF Scraper
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1">
                     Admin-only dashboard · Automated Delhi HC cause list extraction

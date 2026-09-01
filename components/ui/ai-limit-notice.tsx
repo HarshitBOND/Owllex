@@ -37,7 +37,7 @@ export function AiLimitNotice({ limit }: { limit: NonNullable<ReturnType<typeof 
         <p className="font-medium text-text-100">{limit.message}</p>
         <p className="text-text-300">
           {resetLabel ? `Your limit resets at ${resetLabel}.` : "Your limit resets soon."}{" "}
-          <Link href="/dashboard/overview" className="text-accent hover:underline">
+          <Link href="/pricing" className="text-accent hover:underline">
             Upgrade your plan
           </Link>{" "}
           for higher limits.

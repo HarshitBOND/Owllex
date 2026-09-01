@@ -99,7 +99,7 @@ function walk($: cheerio.CheerioAPI, nodes: Nodes, blocks: Block[], depth: numbe
       return
     }
 
-    // Unknown block wrapper — keep its content rather than dropping it.
+    // Unknown block wrapper keep its content rather than dropping it.
     const children = $(el).children() as Nodes
     if (children.length) {
       walk($, children, blocks, depth, quote)

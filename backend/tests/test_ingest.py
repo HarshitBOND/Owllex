@@ -1,7 +1,7 @@
 """
 Tests for the ingest pipeline (rag/ledger.py, rag/storage.py, rag/ingest.py).
 
-Entirely offline — no R2 calls, no Docling models, no network. The expensive
+Entirely offline no R2 calls, no Docling models, no network. The expensive
 stages are stubbed; what's under test is the dedup/resume bookkeeping that
 decides whether those stages get to run at all.
 
@@ -44,7 +44,7 @@ class TestLedger(unittest.TestCase):
             self.assertTrue(led.seen("a" * 64))
 
     def test_hashes_survive_reopen(self):
-        """The in-memory set is rebuilt from SQLite — that's what makes it durable."""
+        """The in-memory set is rebuilt from SQLite that's what makes it durable."""
         with open_ledger(self.path) as led:
             self._add(led)
         with open_ledger(self.path) as reopened:
@@ -84,7 +84,7 @@ class TestStorageKeys(unittest.TestCase):
         self.assertEqual(storage.object_key("sci", h), f"raw/sci/{h}.pdf")
 
     def test_metadata_is_header_safe(self):
-        messy = "  National Insurance — Co. Ltd.\n versus  Smt.\tThungala  "
+        messy = "  National Insurance Co. Ltd.\n versus  Smt.\tThungala  "
         cleaned = storage._header_safe(messy)
         self.assertNotIn("\n", cleaned)
         self.assertNotIn("\t", cleaned)

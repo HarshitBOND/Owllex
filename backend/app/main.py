@@ -172,7 +172,7 @@ async def on_startup():
             app.state.scheduler = scheduler
             logger.info("PDF scraper scheduler started (daily at 06:00)")
         except ImportError:
-            logger.warning("APScheduler not installed — scheduler disabled")
+            logger.warning("APScheduler not installed scheduler disabled")
         except Exception as e:
             logger.error("Failed to start scheduler: %s", e)
     elif os.getenv("PDF_DOWNLOAD_ENABLED", "false").lower() == "true":

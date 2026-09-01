@@ -1,5 +1,5 @@
 """
-Ravenslaw MongoDB Operations — optional persistent storage layer.
+Ravenslaw MongoDB Operations optional persistent storage layer.
 """
 
 import logging
@@ -36,7 +36,7 @@ class MongoDB:
             logger.info("MongoDB connected to %s", self._db_name)
             return True
         except ImportError:
-            logger.warning("pymongo not installed — MongoDB disabled")
+            logger.warning("pymongo not installed MongoDB disabled")
             return False
         except Exception as e:
             logger.error("MongoDB connection failed: %s", e)

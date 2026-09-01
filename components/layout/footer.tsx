@@ -5,7 +5,8 @@ const linkGroups = [
   {
     title: "Services",
     links: [
-      { label: "Legal Consultation", href: "/contact-us" },
+      { label: "Contract Review", href: "/contract-review" },
+      { label: "Legal Research", href: "/legal-research" },
       { label: "Case Tracking", href: "/case-tracking" },
       { label: "Get Started", href: "/sign-up" },
     ],
@@ -13,26 +14,19 @@ const linkGroups = [
   {
     title: "Company",
     links: [
-      { label: "About Us", href: "/contact-us" },
-      { label: "Careers", href: "/contact-us" },
-      { label: "Press", href: "/contact-us" },
-      { label: "Contact", href: "/contact-us" },
+      { label: "Pricing", href: "/pricing" },
+      { label: "Contact", href: "mailto:support@ravenslaw.com" },
     ],
   },
   {
     title: "Legal",
-    links: [
-      { label: "Privacy Policy", href: "/terms-of-use" },
-      { label: "Terms of Service", href: "/terms-of-use" },
-      { label: "Cookie Policy", href: "/terms-of-use" },
-      { label: "Compliance", href: "/terms-of-use" },
-    ],
+    links: [{ label: "Terms of Use", href: "/terms-of-use" }],
   },
 ]
 
 export function Footer() {
   return (
-    <footer className="relative overflow-hidden bg-[#0b1720] px-6 text-slate-300">
+    <footer id="contact" className="relative overflow-hidden bg-[#0b1720] px-6 text-slate-300">
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"

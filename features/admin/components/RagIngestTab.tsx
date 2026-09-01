@@ -167,7 +167,7 @@ export function RagIngestTab({
               <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2 mb-3">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span>
-                  <b>OPENAI_API_KEY is not set.</b> Add it to <code>backend/.env</code> and restart the backend — ingestion and
+                  <b>OPENAI_API_KEY is not set.</b> Add it to <code>backend/.env</code> and restart the backend ingestion and
                   search both return 503 until then.
                 </span>
               </div>
@@ -232,7 +232,7 @@ export function RagIngestTab({
           <p className="text-sm text-gray-600 dark:text-gray-300">
             <span className="font-medium text-sidebar-primary">Click to browse</span> or drag and drop files here
           </p>
-          <p className="text-xs text-gray-400">PDF, DOCX, TXT, MD, JPG, PNG — up to 50MB per document</p>
+          <p className="text-xs text-gray-400">PDF, DOCX, TXT, MD, JPG, PNG up to 50MB per document</p>
           <input
             ref={inputRef}
             type="file"
@@ -329,7 +329,7 @@ export function RagIngestTab({
                         </span>
                       )}
                       {item.status === "failed" && item.duplicate && (
-                        <span className="text-amber-600 dark:text-amber-400">Duplicate — already ingested, upload blocked</span>
+                        <span className="text-amber-600 dark:text-amber-400">Duplicate already ingested, upload blocked</span>
                       )}
                       {item.status === "failed" && !item.duplicate && <span className="text-red-600">{item.error}</span>}
                     </td>
@@ -450,7 +450,7 @@ export function RagIngestTab({
         {searchResults !== null && !searchError && (
           <div className="mt-3 space-y-2">
             {searchResults.length === 0 && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">No matches — the store may still be empty.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">No matches the store may still be empty.</p>
             )}
             {searchResults.map((hit, i) => (
               <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">

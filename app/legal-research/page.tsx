@@ -38,7 +38,7 @@ export default function Page() {
         <div className="px-3 sm:px-4 md:px-6 pt-3 md:pt-4">
           <Navbar
             location="Deep Research"
-            subtitle="Multi-step legal research over your own corpus — retrieved, cited, and verified before you see it."
+            subtitle="Multi-step legal research over your own corpus retrieved, cited, and verified before you see it."
           />
         </div>
         <div className="px-3 sm:px-4 md:px-6 pb-6 pt-4">

@@ -14,7 +14,7 @@ const plans = [
     description: "For solo practitioners starting out",
     features: [
       "Up to 50 active cases",
-      "AI assistant — Fast & Balanced models",
+      "AI assistant Fast & Balanced models",
       "₹1,200 of AI usage every month",
       "5 Deep Research runs per month",
       "Index up to 50 documents per month",

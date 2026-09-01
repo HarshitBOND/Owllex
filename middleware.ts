@@ -40,8 +40,8 @@ const isAllowedOrigin = (originHeader: string, request: NextRequest) => {
 
 const buildCspHeader = (nonce: string, isDevelopment: boolean) => {
   const scriptSrc = isDevelopment
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com"
-    : `script-src 'self' 'nonce-${nonce}' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com`;
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com https://checkout.razorpay.com https://*.razorpay.com"
+    : `script-src 'self' 'nonce-${nonce}' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://va.vercel-scripts.com https://checkout.razorpay.com https://*.razorpay.com`;
 
   // Deliberately no nonce here. Two CSP rules combine badly for a React app:
   // a directive containing a nonce makes browsers ignore 'unsafe-inline', and
@@ -52,8 +52,8 @@ const buildCspHeader = (nonce: string, isDevelopment: boolean) => {
   const styleSrc = "style-src 'self' 'unsafe-inline' https://*.clerk.com";
 
   const connectSrc = isDevelopment
-    ? "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://clerk-telemetry.com https://vitals.vercel-insights.com wss://*.clerk.com wss://*.clerk.accounts.dev ws://localhost:* http://localhost:*"
-    : "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://clerk-telemetry.com https://vitals.vercel-insights.com wss://*.clerk.com wss://*.clerk.accounts.dev";
+    ? "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://clerk-telemetry.com https://vitals.vercel-insights.com wss://*.clerk.com wss://*.clerk.accounts.dev ws://localhost:* http://localhost:* https://api.razorpay.com https://*.razorpay.com https://lumberjack.razorpay.com"
+    : "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://clerk-telemetry.com https://vitals.vercel-insights.com wss://*.clerk.com wss://*.clerk.accounts.dev https://api.razorpay.com https://*.razorpay.com https://lumberjack.razorpay.com";
 
   const parts = [
     "default-src 'self'",
@@ -62,7 +62,7 @@ const buildCspHeader = (nonce: string, isDevelopment: boolean) => {
     "img-src 'self' data: blob: https://img.clerk.com https:",
     "font-src 'self' https://*.clerk.com https:",
     connectSrc,
-    "frame-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com",
+    "frame-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk.browser.com https://challenges.cloudflare.com https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com",
     "worker-src 'self' blob:",
     "media-src 'self' blob:",
     "object-src 'none'",

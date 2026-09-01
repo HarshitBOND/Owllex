@@ -403,13 +403,12 @@ export default function AiAssistantPanel({
                     return (
                       <DropdownMenuItem
                         key={key}
-                        disabled={locked}
-                        onClick={() => !locked && setModel(key)}
-                        className="flex-col items-start gap-0.5"
+                        onClick={() => locked ? router.push("/pricing") : setModel(key)}
+                        className={cn("flex-col items-start gap-0.5", locked && "opacity-60")}
                       >
                         <span className="text-[13px] font-medium">
                           {MODELS[key].name}
-                          {locked && <span className="ml-1.5 text-[10px] text-muted-foreground">Upgrade</span>}
+                          {locked && <span className="ml-1.5 text-[10px] text-accent">Upgrade</span>}
                         </span>
                         <span className="text-[11px] text-muted-foreground">{MODELS[key].description}</span>
                       </DropdownMenuItem>

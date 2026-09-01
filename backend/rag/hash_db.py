@@ -1,7 +1,7 @@
 """LMDB-backed content-hash index.
 
 O(1) exists/put/get/delete against an on-disk B-tree, so memory usage stays
-flat no matter how many hashes are indexed — nothing is loaded into RAM at
+flat no matter how many hashes are indexed nothing is loaded into RAM at
 import time. The environment is opened once, here, at module import, and
 reused by every caller.
 """

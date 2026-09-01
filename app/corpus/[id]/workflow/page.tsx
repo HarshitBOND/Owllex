@@ -98,7 +98,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               <span className="font-medium text-gray-700 dark:text-foreground">
                 {corpus?.name ?? "this corpus"}
               </span>
-              {corpus ? ` — ${corpus.caseCount} case${corpus.caseCount === 1 ? "" : "s"}, ${corpus.clientCount} client${corpus.clientCount === 1 ? "" : "s"}` : ""}
+              {corpus ? ` ${corpus.caseCount} case${corpus.caseCount === 1 ? "" : "s"}, ${corpus.clientCount} client${corpus.clientCount === 1 ? "" : "s"}` : ""}
               {documentCount !== null ? ` and ${documentCount} document${documentCount === 1 ? "" : "s"}` : ""}. Drag
               nodes to rearrange them, click a dot to pull a wire to another node, and click a wire to break it.
             </p>
@@ -106,13 +106,13 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             {documentCount === 0 && (
               <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
                 <FileText className="w-3.5 h-3.5" />
-                This corpus has no documents yet — add some so the intake step has something to work on.
+                This corpus has no documents yet add some so the intake step has something to work on.
               </p>
             )}
           </div>
 
           <N8nWorkflowBlock
-            label={corpus ? `${corpus.name} — Workflow` : "Corpus Workflow"}
+            label={corpus ? `${corpus.name} Workflow` : "Corpus Workflow"}
             nodes={initialWorkflowNodes}
             connections={initialWorkflowConnections}
             templates={legalNodeTemplates}

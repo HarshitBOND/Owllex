@@ -24,19 +24,19 @@ Thumbs.db
 # Test artifacts
 *.txt
 
-# Scraper session files — these hold live session cookies copied from a
+# Scraper session files these hold live session cookies copied from a
 # browser. They are credentials: never commit them.
 rag/scrapping/**/sessions/
 *.curl.txt
 *.cookies.json
 
-# Scraped corpus — large, and re-fetchable from the source sites.
+# Scraped corpus large, and re-fetchable from the source sites.
 # Both patterns are needed: a pattern containing a slash is anchored to this
 # file's directory, so `data/raw/` alone matches only `backend/data/raw/` and
 # silently misses the scrapers' actual output tree under `rag/scrapping/`.
 data/raw/
 rag/scrapping/data/
 
-# Ingest artefacts — extracted text and the SQLite ledger. Rebuildable
+# Ingest artefacts extracted text and the SQLite ledger. Rebuildable
 # from the PDFs in R2; the ledger in particular is machine-local state.
 rag/data/

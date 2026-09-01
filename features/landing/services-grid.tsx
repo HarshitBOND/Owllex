@@ -1,21 +1,31 @@
-import { FileText, MessageCircle, Calendar, Users, Truck, PenTool, Scale, Clock } from "lucide-react"
+import { FileText, FileSearch, BookOpen, Workflow, Scale, Calendar, Users, Receipt } from "lucide-react"
 import { Reveal, RevealGroup, RevealItem } from "@/components/motion/reveal"
 
 const services = [
   {
     icon: FileText,
     title: "Document Generation",
-    description: "Create affidavits, agreements, and legal documents instantly with AI-powered templates.",
+    description: "Draft affidavits, agreements, and legal documents instantly with AI-powered templates.",
   },
   {
-    icon: MessageCircle,
-    title: "Legal Consultation",
-    description: "Chat or call verified lawyers instantly for expert legal advice and guidance.",
+    icon: FileSearch,
+    title: "Contract Review",
+    description: "Upload any contract and let AI surface risks, gaps, and issues in minutes.",
+  },
+  {
+    icon: BookOpen,
+    title: "Legal Research",
+    description: "Ask complex legal questions and get multi-step, cited answers grounded in your own case files.",
+  },
+  {
+    icon: Workflow,
+    title: "AI Workflow Automation",
+    description: "Chain document drafting, review, and research into repeatable AI-powered workflows.",
   },
   {
     icon: Scale,
     title: "Case Tracking",
-    description: "Monitor your court cases across India with real-time updates and alerts.",
+    description: "Monitor your court cases across India with real-time hearing updates and alerts.",
   },
   {
     icon: Calendar,
@@ -24,23 +34,13 @@ const services = [
   },
   {
     icon: Users,
-    title: "Lawyer Network",
-    description: "Access our verified network of legal professionals across all practice areas.",
+    title: "Client Management",
+    description: "Keep every client's contact details, cases, and notes organized in one place.",
   },
   {
-    icon: Truck,
-    title: "Doorstep Delivery",
-    description: "Get your legal documents delivered to your door within hours of completion.",
-  },
-  {
-    icon: PenTool,
-    title: "Digital Notarization",
-    description: "Complete notary services online or schedule home visits for document authentication.",
-  },
-  {
-    icon: Clock,
-    title: "Express Processing",
-    description: "Fast-track your legal work with priority processing and same-day services.",
+    icon: Receipt,
+    title: "Invoicing & Billing",
+    description: "Track invoices and outstanding payments alongside your active matters.",
   },
 ]
 

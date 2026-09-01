@@ -1,5 +1,5 @@
 """
-Ravenslaw Configuration — all settings from environment variables.
+Ravenslaw Configuration all settings from environment variables.
 """
 
 import os

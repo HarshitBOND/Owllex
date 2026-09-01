@@ -6,7 +6,7 @@ Use this file as your launch tracker. Tick each item as you complete it.
 
 ---
 
-## 1) P0 — Blocking Items (Must be done before deploy)
+## 1) P0 Blocking Items (Must be done before deploy)
 
 - [x] Replace Stripe billing flow with Razorpay (UPI-friendly) across checkout, invoice links, and webhook processing.
 - [x] Run `npm run build` and confirm it exits with code `0`.

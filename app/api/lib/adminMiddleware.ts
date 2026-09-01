@@ -44,7 +44,7 @@ export async function requireAdmin(
       request,
     });
     return NextResponse.json(
-      { success: false, error: "Unauthorized — please sign in" },
+      { success: false, error: "Unauthorized please sign in" },
       { status: 401 }
     );
   }
@@ -112,7 +112,7 @@ export async function requireAdmin(
     );
   }
 
-  // Admin check — role must be "admin" in the database
+  // Admin check role must be "admin" in the database
   if (role !== "admin") {
     logSecurityEvent({
       type: "admin_access_attempt",
@@ -123,7 +123,7 @@ export async function requireAdmin(
       details: { role },
     });
     return NextResponse.json(
-      { success: false, error: "Forbidden — admin access required" },
+      { success: false, error: "Forbidden admin access required" },
       { status: 403 }
     );
   }
@@ -137,7 +137,7 @@ export async function requireAdmin(
 }
 
 /**
- * Lightweight admin check — returns true/false.
+ * Lightweight admin check returns true/false.
  */
 export async function isCurrentUserAdmin(): Promise<boolean> {
   const result = await requireAdmin();

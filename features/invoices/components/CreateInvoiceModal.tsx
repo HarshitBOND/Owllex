@@ -150,7 +150,7 @@ export function CreateInvoiceModal({
     }}>
       <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-8">
         <DialogHeader>
-          <DialogTitle className="text-lg sm:text-2xl font-bold">{editInvoice ? `Edit Invoice — ${editInvoice.invoiceNumber}` : 'Create New Invoice'}</DialogTitle>
+          <DialogTitle className="text-lg sm:text-2xl font-bold">{editInvoice ? `Edit Invoice ${editInvoice.invoiceNumber}` : 'Create New Invoice'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 sm:space-y-6 py-2 sm:py-4">

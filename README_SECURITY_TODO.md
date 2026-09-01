@@ -3,7 +3,7 @@
 > Goal: reduce real attack surface and close risky patterns found in the current codebase.
 > Note: “zero risk” is not realistic, but this list gets you much closer to production-grade security.
 
-## P0 — Critical (fix first)
+## P0 Critical (fix first)
 
 - [x] **Remove/disable debug auth endpoint in production**
   - Risk: user/account data disclosure and internal debug info exposure.
@@ -30,7 +30,7 @@
   - Evidence: `backend/app/config.py` defaults `RAVENSLAW_CORS_ORIGINS` to `*`; `backend/app/main.py` uses `allow_credentials=True`.
   - Action: fail startup when CORS env is missing in production; explicit allowlist only.
 
-## P1 — High
+## P1 High
 
 - [x] **Eliminate unsafe CSP directives (`unsafe-inline`, `unsafe-eval`) where possible**
   - Risk: easier XSS/script injection impact.
@@ -62,7 +62,7 @@
   - Evidence: `backend/app/main.py` enables `/docs` and `/redoc` always.
   - Action: disable docs/redoc in production or protect behind admin/internal auth.
 
-## P2 — Medium
+## P2 Medium
 
 - [x] **Reduce sensitive logging in API/webhook flows**
   - Risk: PII/token-adjacent data leakage in logs.

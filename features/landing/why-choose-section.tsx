@@ -1,26 +1,26 @@
 import Image from "next/image"
-import { Zap, Smartphone, Shield, BarChart3 } from "lucide-react"
+import { FolderKanban, Smartphone, BookOpenCheck, BarChart3 } from "lucide-react"
 import { Reveal, RevealGroup, RevealItem } from "@/components/motion/reveal"
 import { imageBlurDataURL } from "@/lib/image-placeholders"
 
 const features = [
   {
-    icon: Zap,
-    title: "Lightning Fast Delivery",
-    description: "Legal documents delivered to your door within hours, not days.",
-    stats: "2-4 hours average",
+    icon: FolderKanban,
+    title: "A Workspace Per Matter",
+    description: "Every case gets its own AI workspace — chat, drafting, and research all grounded in that matter's files.",
+    stats: "One workspace, every matter",
   },
   {
     icon: Smartphone,
-    title: "Complete Digital Experience",
-    description: "Handle all your legal needs from your smartphone, start to finish.",
+    title: "Complete Digital Practice",
+    description: "Run drafting, review, research, cases, clients, and invoicing from a single dashboard.",
     stats: "100% digital workflow",
   },
   {
-    icon: Shield,
-    title: "Verified Legal Experts",
-    description: "Every lawyer, notary, and service provider is thoroughly vetted.",
-    stats: "Rigorously verified",
+    icon: BookOpenCheck,
+    title: "Cited & Verifiable",
+    description: "Research answers and drafts are grounded in your own corpus, with sources you can check.",
+    stats: "Grounded in your corpus",
   },
   {
     icon: BarChart3,

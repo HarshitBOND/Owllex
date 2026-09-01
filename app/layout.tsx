@@ -52,7 +52,7 @@ export const metadata: Metadata = {
   },
   title: "Ravenslaw - Your Complete Legal Ecosystem",
   description:
-    "Draft documents, track cases, find lawyers, and get doorstep delivery — all powered by cutting-edge technology.",
+    "Draft documents, track cases, find lawyers, and get doorstep delivery all powered by cutting-edge technology.",
 }
 
 export default async function RootLayout({

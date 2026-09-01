@@ -21,7 +21,7 @@ const verifyPayloadSchema = z
 
 export async function POST(request: NextRequest) {
   try {
-    const userContext = await requireUserContext(request)
+    const userContext = await requireUserContext(request, { allowExpiredTrial: true })
     if (userContext instanceof NextResponse) {
       return userContext
     }

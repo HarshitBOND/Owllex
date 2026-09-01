@@ -1,4 +1,4 @@
-# Ravenslaw — Delhi High Court Cause List Parser API
+# Ravenslaw Delhi High Court Cause List Parser API
 
 Production-ready backend service that parses Delhi High Court cause list PDFs into structured JSON data.
 
@@ -18,7 +18,7 @@ copy .env.example .env       # Windows
 uv run python run.py
 ```
 
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/). No manual venv setup needed — `uv sync` creates `.venv` and installs the exact locked versions from `uv.lock`.
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/). No manual venv setup needed `uv sync` creates `.venv` and installs the exact locked versions from `uv.lock`.
 
 Server starts at **http://localhost:8000**
 
@@ -27,7 +27,7 @@ Server starts at **http://localhost:8000**
 
 ## API Endpoints
 
-### `POST /api/v1/parse` — Parse uploaded PDF
+### `POST /api/v1/parse` Parse uploaded PDF
 
 Upload a cause list PDF file and get structured data back.
 
@@ -64,7 +64,7 @@ curl -X POST http://localhost:8000/api/v1/parse \
 }
 ```
 
-### `GET /health` — Health check
+### `GET /health` Health check
 
 ```json
 {"status": "ok", "version": "1.0.0", "mongodb": "not configured"}

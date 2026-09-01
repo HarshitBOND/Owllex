@@ -1,4 +1,4 @@
-// Types for the My Cases section — connected to MongoDB via API
+// Types for the My Cases section connected to MongoDB via API
 
 import { parseCourtDate } from "@/lib/utils";
 

@@ -1,7 +1,7 @@
 """
 Tests for the recipe-driven scraper (rag/scrapping).
 
-Entirely offline — cURL parsing, selector extraction, pagination maths, block
+Entirely offline cURL parsing, selector extraction, pagination maths, block
 detection and dedup all run against fixtures, so this suite never touches a
 government server.
 

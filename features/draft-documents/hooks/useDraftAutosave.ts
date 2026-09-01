@@ -59,7 +59,7 @@ export function useDraftAutosave(draftId: string, initialVersion: number, endpoi
         saved = true
       }
     } catch {
-      // Network failure — the patch goes back on the queue below.
+      // Network failure the patch goes back on the queue below.
     }
 
     inFlightRef.current = false

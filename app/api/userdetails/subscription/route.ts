@@ -20,7 +20,7 @@ const subscriptionActionSchema = z
 
 export async function GET() {
   try {
-    const userContext = await requireUserContext(undefined)
+    const userContext = await requireUserContext(undefined, { allowExpiredTrial: true })
     if (userContext instanceof NextResponse) {
       return userContext
     }
@@ -47,7 +47,7 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const userContext = await requireUserContext(request)
+    const userContext = await requireUserContext(request, { allowExpiredTrial: true })
     if (userContext instanceof NextResponse) {
       return userContext
     }

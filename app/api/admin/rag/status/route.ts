@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("RAG status proxy error:", error);
     return NextResponse.json(
-      { success: false, error: "Backend unreachable — is the FastAPI server running?" },
+      { success: false, error: "Backend unreachable is the FastAPI server running?" },
       { status: 503 }
     );
   }

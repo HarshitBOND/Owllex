@@ -213,7 +213,7 @@ export default function DocumentEditorPanel({
     ) : saveStatus === "conflict" ? (
       <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
         <AlertTriangle className="w-3.5 h-3.5" />
-        Not saving — opened elsewhere
+        Not saving opened elsewhere
       </span>
     ) : (
       <span className="flex items-center gap-1 text-emerald-600 dark:text-accent">

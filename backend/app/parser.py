@@ -587,7 +587,7 @@ def parse_cases(lines: List[str], source_pdf: str,
 
     Returns
     -------
-    List[CaseEntry] — parsed cases with all available fields populated
+    List[CaseEntry] parsed cases with all available fields populated
     """
     cases = []
     _adv = adv_texts or [""] * len(lines)

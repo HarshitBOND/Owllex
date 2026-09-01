@@ -1,5 +1,5 @@
 """
-Ravenslaw Data Models — CaseEntry dataclass + Pydantic response schemas.
+Ravenslaw Data Models CaseEntry dataclass + Pydantic response schemas.
 """
 
 from dataclasses import dataclass, asdict, field

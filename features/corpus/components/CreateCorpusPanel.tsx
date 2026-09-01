@@ -240,7 +240,7 @@ export default function CreateCorpusPanel({
 
               {cases.length === 0 && clients.length === 0 && (
                 <p className="text-xs text-gray-500 dark:text-muted-foreground leading-relaxed">
-                  Nothing in your case files matched this description. The corpus still works &mdash; add documents
+                  Nothing in your case files matched this description. The corpus still works   ; add documents
                   to it, or link cases from the corpus page.
                 </p>
               )}

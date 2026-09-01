@@ -116,6 +116,26 @@ const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
 
 const ACTIVE_STATUSES = new Set<SubscriptionStatus>(["active", "trial", "past_due"])
 
+// The free plan is a 7-day trial. The clock is anchored to `signupDate`, which is stamped
+// once at account creation (Clerk webhook / ensureUser) and never touched by any subscription
+// mutation (renew/change-plan/etc), so it can't be reset by re-invoking those actions.
+export const FREE_TRIAL_DURATION_DAYS = 7
+
+const getTrialEndDate = (signupDate: Date) => {
+  const end = new Date(signupDate)
+  end.setDate(end.getDate() + FREE_TRIAL_DURATION_DAYS)
+  return end
+}
+
+const computeTrialState = (plan: SubscriptionPlan, signupDate: Date) => {
+  if (plan !== "free") {
+    return { trialEndsAt: null as Date | null, isTrialExpired: false }
+  }
+
+  const trialEndsAt = getTrialEndDate(signupDate)
+  return { trialEndsAt, isTrialExpired: Date.now() >= trialEndsAt.getTime() }
+}
+
 const isSubscriptionPlan = (value: unknown): value is SubscriptionPlan =>
   typeof value === "string" && SUBSCRIPTION_PLANS.includes(value as SubscriptionPlan)
 
@@ -197,6 +217,8 @@ export type SubscriptionSummary = {
   stripeSubscriptionId: string | null
   stripeCustomerId: string | null
   lastPaymentError: string
+  isTrialExpired: boolean
+  trialEndsAt: string | null
 }
 
 export function buildSubscriptionSummaryFromUserRecord(
@@ -204,13 +226,16 @@ export function buildSubscriptionSummaryFromUserRecord(
     | {
         subscription?: Record<string, unknown> | null
         cases?: unknown[] | null
+        signupDate?: unknown
       }
     | null,
 ): SubscriptionSummary {
   const normalized = normalizeSubscription(userRecord?.subscription)
   const planConfig = PLAN_CONFIG[normalized.plan]
   const casesUsed = getCaseCount(userRecord?.cases)
-  const isActive = ACTIVE_STATUSES.has(normalized.status)
+  const signupDate = toDate(userRecord?.signupDate) || new Date()
+  const { trialEndsAt, isTrialExpired } = computeTrialState(normalized.plan, signupDate)
+  const isActive = ACTIVE_STATUSES.has(normalized.status) && !isTrialExpired
   const caseLimit = planConfig.caseLimit
   const casesRemaining = caseLimit === null ? null : Math.max(caseLimit - casesUsed, 0)
   const canCreateCase = isActive && (caseLimit === null || casesUsed < caseLimit)
@@ -235,6 +260,8 @@ export function buildSubscriptionSummaryFromUserRecord(
     stripeSubscriptionId: normalized.stripeSubscriptionId || null,
     stripeCustomerId: normalized.stripeCustomerId || null,
     lastPaymentError: normalized.lastPaymentError || "",
+    isTrialExpired,
+    trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
   }
 }
 
@@ -266,7 +293,7 @@ export async function ensureUserSubscriptionDefaults(clerkUid: string) {
 export async function getUserSubscriptionSummary(clerkUid: string): Promise<SubscriptionSummary | null> {
   await ensureUserSubscriptionDefaults(clerkUid)
 
-  const user = await User.findOne({ clerkUid }).select("subscription cases").lean().exec()
+  const user = await User.findOne({ clerkUid }).select("subscription cases signupDate").lean().exec()
   if (!user) {
     return null
   }
@@ -288,7 +315,9 @@ export async function checkCaseCreationAllowance(clerkUid: string) {
   if (!subscription.isActive) {
     return {
       allowed: false,
-      reason: "Subscription is not active. Renew to continue adding cases.",
+      reason: subscription.isTrialExpired
+        ? "Your 7-day free trial has ended. Upgrade your plan to continue."
+        : "Subscription is not active. Renew to continue adding cases.",
       subscription,
     }
   }

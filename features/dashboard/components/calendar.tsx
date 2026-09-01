@@ -67,7 +67,7 @@ export default function Calendar({ isOpen }: { isOpen: boolean }) {
         <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white dark:bg-card rounded-xl shadow-lg dark:shadow-2xl dark:shadow-cyan-500/5 p-6 w-full max-w-sm mx-4 border dark:border-border" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900 dark:text-foreground">Add Event — {modalDate}</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-foreground">Add Event {modalDate}</h3>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-muted rounded-md text-gray-600 dark:text-muted-foreground"><X size={18} /></button>
             </div>
             <input

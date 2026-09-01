@@ -143,6 +143,7 @@ interface ModelSelectorProps {
 const ModelSelector: React.FC<ModelSelectorProps> = ({ models, selectedModel, onSelect }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
 
     const currentModel = models.find(m => m.id === selectedModel) || models[0];
 
@@ -181,11 +182,15 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ models, selectedModel, on
                         <button
                             key={model.id}
                             onClick={() => {
-                                if (model.badge === 'Upgrade') return;
+                                if (model.badge === 'Upgrade') {
+                                    setIsOpen(false);
+                                    router.push('/pricing');
+                                    return;
+                                }
                                 onSelect(model.id);
                                 setIsOpen(false);
                             }}
-                            className={`w-full text-left px-3 py-2.5 rounded-xl flex items-start justify-between group transition-colors ${model.badge === 'Upgrade' ? 'opacity-60 cursor-not-allowed' : 'hover:bg-bg-200'}`}
+                            className={`w-full text-left px-3 py-2.5 rounded-xl flex items-start justify-between group transition-colors ${model.badge === 'Upgrade' ? 'opacity-60 hover:opacity-100 hover:bg-bg-200' : 'hover:bg-bg-200'}`}
                         >
                             <div className="flex flex-col gap-0.5">
                                 <div className="flex items-center gap-2">
@@ -513,7 +518,7 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        // isComposing guards IME input (Devanagari etc.) — Enter commits a candidate, it does not send
+        // isComposing guards IME input (Devanagari etc.) Enter commits a candidate, it does not send
         if (e.key === 'Enter' && !e.shiftKey && !(e.nativeEvent as any).isComposing) {
             e.preventDefault();
             handleSend();

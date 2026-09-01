@@ -12,7 +12,7 @@ export function sanitizeDocumentHtml(html: string) {
   $(DROP_WITH_CONTENT).remove()
 
   // Unwrapping a disallowed tag can expose another one beneath it, so repeat
-  // until the tree is clean. Text is always kept — nothing is silently dropped.
+  // until the tree is clean. Text is always kept nothing is silently dropped.
   for (let pass = 0; pass < 10; pass++) {
     const bad = $("*").filter((_, el) => "tagName" in el && !ALLOWED_TAGS.includes(el.tagName.toLowerCase()))
     if (bad.length === 0) break

@@ -1,12 +1,12 @@
-# India Code — acts, their sections/rules/schedules, and PDFs
+# India Code acts, their sections/rules/schedules, and PDFs
 
-Source: <https://indiacode.gov.in/> — an Angular SPA over a **DSpace 9.1 REST
+Source: <https://indiacode.gov.in/> an Angular SPA over a **DSpace 9.1 REST
 API**. Unlike `../sci-judgments/`, there is no CAPTCHA and nothing to solve by
 hand; this runs unattended.
 
 ## Two things that will waste your afternoon
 
-1. **Use `https://indiacode.gov.in` — no `www`.** The app is served from
+1. **Use `https://indiacode.gov.in` no `www`.** The app is served from
    `www.indiacode.gov.in` but its API lives on the bare domain, and the CORS
    preflight from `www` is refused. Every deep page loaded via `www` renders a
    "500 Service unavailable" that has nothing to do with the server being down.
@@ -27,7 +27,7 @@ behind it. The API also gives fields the page never shows (`linked_id`,
 **No AI is needed for metadata.** `dc.*` already carries act number, year,
 ministry, department, section number and ordering; amendment footnotes come
 through as marked-up text that `parseFootnotes` turns into
-`{marker, text, operation, amendedBy}` with plain regexes — including resolving
+`{marker, text, operation, amendedBy}` with plain regexes including resolving
 `ibid` back to the act named in the previous footnote.
 
 ## The three calls that matter
@@ -97,7 +97,7 @@ new hash and re-embeds just that document.
 
 | File | What |
 |---|---|
-| `act_<year>_<uuid8>.json` | The act record — metadata, preamble, amendment list |
+| `act_<year>_<uuid8>.json` | The act record metadata, preamble, amendment list |
 | `act_<year>_<uuid8>.pdf` | Act PDFs from the ORIGINAL bundle (`_2` suffix for the Hindi copy) |
 | `section_<year>_s<num>_<uuid8>.txt` | Section text plus its footnotes |
 | `rule_<year>_<uuid8>.txt` / `.pdf` | Rules, schedules, notifications, … same shape |
@@ -111,4 +111,4 @@ cd backend && python -m rag.ingest --source india_code
 | File | Responsibility |
 |---|---|
 | `download.ts` | The scraper: walk acts, their children and amendments, download PDFs, dedup, write manifest |
-| `inspect.ts` | Prints an act's live API shape — every `dc.*` field, child types, bitstreams, amendments |
+| `inspect.ts` | Prints an act's live API shape every `dc.*` field, child types, bitstreams, amendments |

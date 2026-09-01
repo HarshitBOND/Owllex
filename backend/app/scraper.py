@@ -1,5 +1,5 @@
 """
-Ravenslaw PDF Scraper — Downloads and parses Delhi HC cause list PDFs.
+Ravenslaw PDF Scraper Downloads and parses Delhi HC cause list PDFs.
 Runs on a daily schedule or can be triggered manually.
 """
 
@@ -366,7 +366,7 @@ def process_single_pdf(pdf_path: str, db, source_url: str = "") -> Dict:
             {"file_hash": fhash},
             {"$set": {"parse_status": "failed", "error_message": str(e)}},
         )
-        # Don't delete on error — keep for manual review
+        # Don't delete on error keep for manual review
         return {"filename": filename, "status": "failed", "error": str(e)}
 
 

@@ -6,6 +6,7 @@ import { ensureUser } from "@/app/api/lib/ensureUser"
 import User from "@/app/api/lib/models/user"
 import { applyRateLimit, type RateLimitResult } from "@/app/api/lib/rateLimit"
 import { logSecurityEvent } from "@/app/api/lib/securityLogger"
+import { buildSubscriptionSummaryFromUserRecord } from "@/app/api/lib/services/subscription"
 
 export const objectIdSchema = z
   .string()
@@ -16,7 +17,10 @@ export type AuthenticatedUserContext = {
   clerkUid: string
 }
 
-export async function requireUserContext(request?: NextRequest): Promise<AuthenticatedUserContext | NextResponse> {
+export async function requireUserContext(
+  request?: NextRequest,
+  options?: { allowExpiredTrial?: boolean },
+): Promise<AuthenticatedUserContext | NextResponse> {
   try {
     const session = await auth()
     const { userId } = session || {}
@@ -34,7 +38,32 @@ export async function requireUserContext(request?: NextRequest): Promise<Authent
       )
     }
 
-    await ensureUser(userId)
+    const user = await ensureUser(userId)
+
+    if (!options?.allowExpiredTrial && user) {
+      const subscriptionSummary = buildSubscriptionSummaryFromUserRecord(user as any)
+
+      if (subscriptionSummary.isTrialExpired) {
+        logSecurityEvent({
+          type: "trial_expired_block",
+          level: "info",
+          message: "Blocked request: free trial expired",
+          request,
+          userId,
+        })
+        return NextResponse.json(
+          {
+            success: false,
+            error: "trial_expired",
+            details: {
+              message: "Your 7-day free trial has ended. Upgrade your plan to keep using Owllex.",
+              trialEndsAt: subscriptionSummary.trialEndsAt,
+            },
+          },
+          { status: 402 },
+        )
+      }
+    }
 
     return {
       clerkUid: userId,

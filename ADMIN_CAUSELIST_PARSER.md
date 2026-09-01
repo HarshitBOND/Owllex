@@ -439,11 +439,11 @@ Next run: Only fetch PDFs AFTER "causelist_2024_01_15.pdf"
 
 ## 🔗 Related Files
 
-- `backend/app/scraper.py` — Existing PDF parser logic
-- `backend/app/scraper_routes.py` — Existing scraper endpoints
-- `app/admin/dashboard/page.tsx` — Admin panel (add new section here)
-- `PDF_SCRAPER_WORKFLOW.md` — Original workflow documentation
-- `lib/backendClient.ts` — Existing backend client (reuse for new endpoints)
+- `backend/app/scraper.py` Existing PDF parser logic
+- `backend/app/scraper_routes.py` Existing scraper endpoints
+- `app/admin/dashboard/page.tsx` Admin panel (add new section here)
+- `PDF_SCRAPER_WORKFLOW.md` Original workflow documentation
+- `lib/backendClient.ts` Existing backend client (reuse for new endpoints)
 
 ---
 

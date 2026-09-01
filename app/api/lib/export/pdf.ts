@@ -93,7 +93,7 @@ export function renderPdf(
         continue
       }
 
-      // table — equal column widths, no cell spanning
+      // table equal column widths, no cell spanning
       const columns = Math.max(...block.rows.map((r) => r.cells.length))
       const colWidth = width / columns
       doc.moveDown(0.4)

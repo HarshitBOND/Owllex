@@ -23,7 +23,7 @@ export function HeroButtons() {
                     className="w-full sm:w-auto"
                     onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
                 >
-                    Watch Demo
+                    See How It Works
                 </Button>
             </SignedOut>
             <SignedIn>

@@ -9,7 +9,7 @@ import { requireAdmin } from "@/app/api/lib/adminAuth";
 export async function GET() {
   const result = await requireAdmin();
   if (result instanceof NextResponse) {
-    // Not admin — return the status from the guard
+    // Not admin return the status from the guard
     return result;
   }
 

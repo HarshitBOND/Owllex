@@ -152,7 +152,7 @@ export default function AiWorkflowPage() {
             </div>
 
             <p className="text-sm text-muted-foreground max-w-2xl">
-              Chain the AI tools into a repeatable pipeline — intake a document, extract
+              Chain the AI tools into a repeatable pipeline intake a document, extract
               its clauses, check risk and citations, then draft and send the response.
               Drag nodes to rearrange them, click a dot to pull a wire to another node,
               and click a wire to break it, or describe the change to the assistant on the right.

@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
         await connectMongoWithRetry()
 
         if (!caseNumber && !caseType && forum) {
-            // Advocate name search — search both collections
+            // Advocate name search search both collections
             let foundCases = await CauseListCase.find({
               advocate: { $regex: safeAdvocateName, $options: "i" },
               case_no: { $regex: safeCaseYear, $options: "i" }

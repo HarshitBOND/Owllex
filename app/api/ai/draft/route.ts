@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
           summary: z
             .string()
             .max(200)
-            .describe("One line describing what changed, e.g. 'Added clause 6 — interest on delayed refund'."),
+            .describe("One line describing what changed, e.g. 'Added clause 6 interest on delayed refund'."),
         }),
       }),
     },
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     onEnd: async ({ messages: finalMessages, isAborted }) => {
       if (isAborted) return
       await connectMongoWithRetry()
-      // Chat history only — the editor owns contentHtml through autosave.
+      // Chat history only the editor owns contentHtml through autosave.
       await DraftDocument.updateOne(
         { _id: draftId, clerkUid: userContext.clerkUid },
         { $set: { chatMessages: finalMessages } }

@@ -25,6 +25,7 @@ import { useEffect, useState } from "react"
 import React from "react"
 import MobileBottomNav from "./mobile-bottom-nav"
 import { AiChatHistoryFlyout } from "./ai-chat-history-flyout"
+import { TrialPaywallGate } from "@/components/ui/trial-paywall-gate"
 
 type NavLink = { name: string; icon: React.ReactElement; href: string }
 type NavAction = { name: string; icon: React.ReactElement; action: "new-chat" | "chat-history" }
@@ -240,11 +241,11 @@ const Sidebar = () => {
                 <div className="flex items-center min-w-0 flex-shrink-0">
                     {isMobile || isOpen ? (
                         <Image
-                            className="h-14 w-14 min-h-14 min-w-14 flex-shrink-0 object-contain"
+                            className="h-10 w-auto max-w-[168px] flex-shrink-0 object-contain object-left"
                             src="/ravenslaw.png"
                             alt="Logo"
-                            width={56}
-                            height={56}
+                            width={519}
+                            height={151}
                             priority
                             loading="eager"
                         />
@@ -384,6 +385,8 @@ const Sidebar = () => {
 
             {/* Floating, scrollable chat-history panel */}
             <AiChatHistoryFlyout />
+
+            <TrialPaywallGate />
         </>
     )
 }

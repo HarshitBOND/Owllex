@@ -693,9 +693,16 @@ const Dashboard = () => {
                 </div>
                 <div className="p-3 rounded-lg border dark:border-border bg-gray-50 dark:bg-muted">
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Parser Access</p>
-                  <p className="font-semibold text-gray-900 dark:text-foreground">
-                    {subscription.features.parserUpload ? "Included" : "Paid plans only"}
-                  </p>
+                  {subscription.features.parserUpload ? (
+                    <p className="font-semibold text-gray-900 dark:text-foreground">Included</p>
+                  ) : (
+                    <button
+                      onClick={() => router.push("/pricing")}
+                      className="font-semibold text-sidebar-primary hover:underline text-left"
+                    >
+                      Paid plans only
+                    </button>
+                  )}
                 </div>
                 <div className="p-3 rounded-lg border dark:border-border bg-gray-50 dark:bg-muted">
                   <p className="text-xs text-gray-500 dark:text-muted-foreground">Renewal</p>
@@ -804,9 +811,16 @@ const Dashboard = () => {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="p-3 rounded-lg border dark:border-border bg-gray-50 dark:bg-muted">
                       <p className="text-xs text-gray-500 dark:text-muted-foreground">Automation</p>
-                      <p className="font-semibold text-gray-900 dark:text-foreground">
-                        {operations.automationEnabled ? "Enabled" : "Upgrade required"}
-                      </p>
+                      {operations.automationEnabled ? (
+                        <p className="font-semibold text-gray-900 dark:text-foreground">Enabled</p>
+                      ) : (
+                        <button
+                          onClick={() => router.push("/pricing")}
+                          className="font-semibold text-sidebar-primary hover:underline text-left"
+                        >
+                          Upgrade required
+                        </button>
+                      )}
                     </div>
                     <div className="p-3 rounded-lg border dark:border-border bg-gray-50 dark:bg-muted">
                       <p className="text-xs text-gray-500 dark:text-muted-foreground">Open Billing Issues</p>

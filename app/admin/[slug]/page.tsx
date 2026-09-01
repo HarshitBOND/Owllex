@@ -548,7 +548,7 @@ export default function AdminSecretPage() {
     )
   }
 
-  // Not signed in — silently redirect
+  // Not signed in silently redirect
   if (!isSignedIn) {
     if (typeof window !== "undefined") window.location.href = "/"
     return null
@@ -566,7 +566,7 @@ export default function AdminSecretPage() {
     )
   }
 
-  // Not admin — redirect to home (industry-standard: don't reveal admin panel exists)
+  // Not admin redirect to home (industry-standard: don't reveal admin panel exists)
   if (isAdmin === false) {
     if (typeof window !== "undefined") {
       window.location.href = "/"
@@ -598,7 +598,7 @@ export default function AdminSecretPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                 <div>
                   <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
-                    Admin Panel — PDF Scraper
+                    Admin Panel PDF Scraper
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1">
                     Admin-only dashboard · Automated Delhi HC cause list extraction

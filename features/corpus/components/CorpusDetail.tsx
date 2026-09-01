@@ -378,7 +378,7 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
                     </span>
                     <span className="text-sm font-medium text-gray-900 dark:text-foreground truncate">{filename}</span>
                   </span>
-                  <span className="hidden sm:block text-xs text-gray-400">&mdash;</span>
+                  <span className="hidden sm:block text-xs text-gray-400">  ;</span>
                   <span className="hidden sm:block text-xs text-gray-500 dark:text-muted-foreground">Uploading</span>
                   <span className="hidden sm:block" />
                   <span className="hidden sm:block" />

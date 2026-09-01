@@ -508,7 +508,7 @@ export function N8nWorkflowBlock({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Node finder — jump back to a node when the canvas gets away from you */}
+          {/* Node finder jump back to a node when the canvas gets away from you */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

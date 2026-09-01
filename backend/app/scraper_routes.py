@@ -1,5 +1,5 @@
 """
-Ravenslaw Scraper API Routes — endpoints for PDF scraper management.
+Ravenslaw Scraper API Routes endpoints for PDF scraper management.
 """
 
 import logging

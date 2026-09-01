@@ -130,7 +130,7 @@ export default function WorkflowAiChatPanel({ chatId, currentWorkflow, onApply }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
   }, [messages, status])
 
-  // Auto-apply a workflow the moment the model finishes proposing it — there is
+  // Auto-apply a workflow the moment the model finishes proposing it there is
   // nothing destructive here (unlike a document redline), so no accept step.
   useEffect(() => {
     for (const msg of messages) {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { AlertTriangle, BadgeCheck, Check, FileText, Library, Loader2, Search, Sparkles } from "lucide-react"
@@ -122,7 +123,7 @@ export default function DeepResearch() {
         <textarea
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask a research question about this matter — e.g. 'What is our strongest ground to resist the injunction, based on the pleadings on file?'"
+          placeholder="Ask a research question about this matter e.g. 'What is our strongest ground to resist the injunction, based on the pleadings on file?'"
           rows={3}
           className="w-full bg-transparent resize-none text-sm text-text-100 dark:text-foreground placeholder:text-text-400 outline-none"
         />
@@ -160,9 +161,21 @@ export default function DeepResearch() {
         </div>
         {outOfRuns && !running && (
           <p className="text-[12px] text-amber-600 mt-2">
-            {runsInfo?.limit === 0
-              ? "Deep Research is available on paid plans. Upgrade to use it."
-              : "You've used all your Deep Research runs for this month."}
+            {runsInfo?.limit === 0 ? (
+              <>
+                Deep Research is available on paid plans.{" "}
+                <Link href="/pricing" className="underline hover:text-amber-700">
+                  Upgrade to use it.
+                </Link>
+              </>
+            ) : (
+              <>
+                You&apos;ve used all your Deep Research runs for this month.{" "}
+                <Link href="/pricing" className="underline hover:text-amber-700">
+                  Upgrade for more.
+                </Link>
+              </>
+            )}
           </p>
         )}
       </div>
@@ -207,7 +220,7 @@ export default function DeepResearch() {
               }`}
             >
               <BadgeCheck className="w-3.5 h-3.5" />
-              {verified ? "Citations verified" : "Verification incomplete — check citations before relying on them"}
+              {verified ? "Citations verified" : "Verification incomplete check citations before relying on them"}
             </div>
           )}
           <div className="text-sm text-text-100 dark:text-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none">

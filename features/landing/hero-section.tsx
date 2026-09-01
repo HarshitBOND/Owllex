@@ -18,7 +18,7 @@ export function HeroSection() {
             <Reveal>
               <div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-4 py-1.5 text-sm font-medium text-muted-foreground">
                 <Scale className="h-4 w-4 text-primary" />
-                India&apos;s comprehensive legal ecosystem
+                India&apos;s AI-native legal practice platform
               </div>
             </Reveal>
 
@@ -31,9 +31,9 @@ export function HeroSection() {
 
             <Reveal delay={0.16}>
               <p className="mt-6 text-lg leading-relaxed text-muted-foreground lg:max-w-xl">
-                From document generation to lawyer consultations and nationwide case tracking, ravenslaw brings the full
-                weight of legal expertise to your doorstep &mdash; backed by technology, delivered with the gravity it
-                deserves.
+                From document drafting to contract review, legal research, and nationwide case tracking, ravenslaw
+                brings AI-powered legal practice management to your desk — grounded in your own case files, delivered
+                with the gravity it deserves.
               </p>
             </Reveal>
 
@@ -63,8 +63,8 @@ export function HeroSection() {
                   <Scale className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Verified legal experts</p>
-                  <p className="text-xs text-muted-foreground">Vetted across every practice area</p>
+                  <p className="text-sm font-semibold text-foreground">Grounded in your case files</p>
+                  <p className="text-xs text-muted-foreground">Every draft and answer is verifiable</p>
                 </div>
               </div>
             </div>
