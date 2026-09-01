@@ -1,6 +1,6 @@
 
 """
-LexVert - Delhi High Court Cause List Parser Engine
+Ravenslaw - Delhi High Court Cause List Parser Engine
 ====================================================
 Handles ALL Delhi HC cause list formats:
   - Combined Cause List      (combined_adv_DD.MM.YYYY.pdf)
@@ -22,7 +22,7 @@ import pdfplumber
 
 from .models import CaseEntry
 
-logger = logging.getLogger("lexvert.parser")
+logger = logging.getLogger("ravenslaw.parser")
 
 
 # ═════════════════════════════════════════════════════════════════════════════

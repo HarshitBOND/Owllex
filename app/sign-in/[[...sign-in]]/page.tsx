@@ -7,8 +7,8 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { imageBlurDataURL } from "@/lib/image-placeholders"
 
 export const metadata: Metadata = {
-  title: "Sign In | Lexvert",
-  description: "Sign in to your Lexvert account.",
+  title: "Sign In | Ravenslaw",
+  description: "Sign in to your Ravenslaw account.",
 }
 
 const clerkAppearance = {

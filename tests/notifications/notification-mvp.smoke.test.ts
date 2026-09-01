@@ -331,9 +331,9 @@ describe("Notification MVP smoke flow", () => {
     vi.setSystemTime(new Date("2026-03-15T05:30:00.000Z"))
 
     vi.stubEnv("SENDGRID_API_KEY", "sg_test_key")
-    vi.stubEnv("NOTIFICATION_FROM_EMAIL", "notifications@lexvert.test")
-    vi.stubEnv("NOTIFICATION_FROM_NAME", "LexVert")
-    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://lexvert.example")
+    vi.stubEnv("NOTIFICATION_FROM_EMAIL", "notifications@ravenslaw.test")
+    vi.stubEnv("NOTIFICATION_FROM_NAME", "Ravenslaw")
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://ravenslaw.example")
   })
 
   afterEach(() => {
@@ -382,7 +382,7 @@ describe("Notification MVP smoke flow", () => {
 
     const [sendArgs] = mockState.sendMailMock.mock.calls[0]
     expect(sendArgs.subject).toContain("Upcoming hearing in 7 days")
-    expect(sendArgs.text).toContain("https://lexvert.example/case-tracking/view/case_001")
+    expect(sendArgs.text).toContain("https://ravenslaw.example/case-tracking/view/case_001")
 
     const beforeMarkRead = await listNotificationsForUser("user_123", 8)
     expect(beforeMarkRead.unreadCount).toBe(1)
@@ -449,7 +449,7 @@ describe("Notification MVP smoke flow", () => {
 
     const [sendArgs] = mockState.sendMailMock.mock.calls[0]
     expect(sendArgs.subject).toContain("Upcoming event in 7 days")
-    expect(sendArgs.text).toContain("https://lexvert.example/dashboard")
+    expect(sendArgs.text).toContain("https://ravenslaw.example/dashboard")
   })
 
   it("defers delivery outside the user's configured send window", async () => {

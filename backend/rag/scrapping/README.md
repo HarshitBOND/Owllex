@@ -1,4 +1,4 @@
-# LexVert Scrapping — Court & Statute Document Acquisition
+# Ravenslaw Scrapping — Court & Statute Document Acquisition
 
 Stages Indian legal documents on disk as input to the RAG ingestion pipeline
 (`../ARCHITECTURE.md`). This module's only job is to get files onto disk safely

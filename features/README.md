@@ -6,8 +6,8 @@ page component itself, plus every piece, hook, and helper that only that feature
 
 ## Pattern
 
-Each feature folder follows the shape already used by `components/lexvert-todo/` and
-`components/lexvert-calendar/` before this reorg — copy that shape, don't reinvent it:
+Each feature folder follows the shape already used by `components/ravenslaw-todo/` and
+`components/ravenslaw-calendar/` before this reorg — copy that shape, don't reinvent it:
 
 ```
 features/<name>/

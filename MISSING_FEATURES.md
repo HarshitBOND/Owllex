@@ -1,7 +1,7 @@
-# LexVert - Missing Features & To-Do List
+# Ravenslaw - Missing Features & To-Do List
 
 ## 📋 Overview
-This document tracks all features that are **planned but not fully implemented** in the LexVert platform. Current status: **Alpha stage** - Frontend UI built, Backend API partially implemented, Core features missing.
+This document tracks all features that are **planned but not fully implemented** in the Ravenslaw platform. Current status: **Alpha stage** - Frontend UI built, Backend API partially implemented, Core features missing.
 
 ---
 

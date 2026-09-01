@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/contexts/SidebarContext"
@@ -10,6 +10,7 @@ import { AiChatHistoryPanel } from "@/features/dashboard/ai-chat-history-panel"
 
 export function AiChatHistoryFlyout() {
   const router = useRouter()
+  const pathname = usePathname()
   const { isOpen: isSidebarOpen } = useSidebar()
   const {
     isHistoryOpen,
@@ -27,17 +28,22 @@ export function AiChatHistoryFlyout() {
     if (!isHistoryOpen) return
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
-        closeHistory()
-      }
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      // The sidebar entry toggles the panel; closing here too would reopen it on click.
+      if (target.closest("[data-ai-history-trigger]")) return
+      if (panelRef.current && !panelRef.current.contains(target)) closeHistory()
     }
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeHistory()
     }
 
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
     document.addEventListener("mousedown", handleClickOutside)
     document.addEventListener("keydown", handleEscape)
     return () => {
+      document.body.style.overflow = previousOverflow
       document.removeEventListener("mousedown", handleClickOutside)
       document.removeEventListener("keydown", handleEscape)
     }
@@ -46,7 +52,7 @@ export function AiChatHistoryFlyout() {
   if (!isHistoryOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[300]">
+    <div className="fixed inset-0 z-[300]" role="dialog" aria-modal="true" aria-label="Chat history">
       <div className="absolute inset-0 bg-black/30" />
       <div
         ref={panelRef}
@@ -72,12 +78,12 @@ export function AiChatHistoryFlyout() {
             onNewChat={() => {
               startNewConversation()
               closeHistory()
-              router.push("/dashboard")
+              if (pathname !== "/dashboard") router.push("/dashboard")
             }}
             onSelect={(id) => {
               selectConversation(id)
               closeHistory()
-              router.push("/dashboard")
+              if (pathname !== "/dashboard") router.push("/dashboard")
             }}
             onRename={renameConversation}
             onDelete={deleteConversation}

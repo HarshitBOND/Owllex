@@ -43,7 +43,7 @@ To give another user access to the admin panel:
 ADMIN_EMAILS=harshitprabhakar858@gmail.com
 
 # Multiple admins (add more with comma separation)
-ADMIN_EMAILS=harshitprabhakar858@gmail.com,team@lexvert.com,ops@lexvert.com
+ADMIN_EMAILS=harshitprabhakar858@gmail.com,team@ravenslaw.com,ops@ravenslaw.com
 ```
 
 ## Security Best Practices

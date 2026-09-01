@@ -50,6 +50,7 @@ export function AiChatHistoryPanel({
   const [query, setQuery] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState("")
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     if (!query.trim()) return conversations
@@ -65,7 +66,7 @@ export function AiChatHistoryPanel({
   }
 
   const commitRename = (id: string) => {
-    onRename(id, draftTitle)
+    if (draftTitle.trim()) onRename(id, draftTitle)
     setEditingId(null)
   }
 
@@ -119,16 +120,40 @@ export function AiChatHistoryPanel({
               {group.items.map((c) => {
                 const isActive = c.id === activeId
                 const isEditing = editingId === c.id
+                const isConfirmingDelete = confirmDeleteId === c.id
                 return (
                   <div
                     key={c.id}
-                    onClick={() => !isEditing && onSelect(c.id)}
+                    onClick={() => !isEditing && !isConfirmingDelete && onSelect(c.id)}
                     className={cn(
                       "group flex items-center gap-1.5 rounded-lg px-2 py-2 cursor-pointer transition-colors",
                       isActive ? "bg-accent/10 text-accent" : "text-text-200 hover:bg-bg-200"
                     )}
                   >
-                    {isEditing ? (
+                    {isConfirmingDelete ? (
+                      <>
+                        <span className="flex-1 min-w-0 truncate text-xs text-text-300">Delete this chat?</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setConfirmDeleteId(null)
+                            onDelete(c.id)
+                          }}
+                          className="px-1.5 py-0.5 rounded text-[11px] font-medium text-red-500 hover:bg-red-500/10"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setConfirmDeleteId(null)
+                          }}
+                          className="px-1.5 py-0.5 rounded text-[11px] font-medium text-text-400 hover:text-text-100 hover:bg-bg-0"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : isEditing ? (
                       <>
                         <input
                           autoFocus
@@ -176,7 +201,7 @@ export function AiChatHistoryPanel({
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            onDelete(c.id)
+                            setConfirmDeleteId(c.id)
                           }}
                           className="p-1 rounded text-text-400 hover:text-red-500 hover:bg-bg-0 opacity-0 group-hover:opacity-100 transition-opacity"
                           aria-label="Delete chat"

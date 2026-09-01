@@ -8,6 +8,7 @@ import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import Corpus from "@/app/api/lib/models/corpus"
 import CorpusDocument from "@/app/api/lib/models/corpus-document"
 import { ingestCorpusDocument } from "@/app/api/lib/corpusBackend"
+import { getAiUsage, countCorpusDoc } from "@/app/api/lib/services/aiUsage"
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 const MAX_DOCS_PER_CORPUS = 50
@@ -59,6 +60,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json(
       { success: false, error: `A corpus can hold at most ${MAX_DOCS_PER_CORPUS} documents` },
       { status: 400 }
+    )
+  }
+
+  const usage = await getAiUsage(userContext.clerkUid)
+  if (!usage || !usage.isActive) {
+    return NextResponse.json(
+      { success: false, error: "Your subscription is not active. Renew to upload documents." },
+      { status: 403 }
+    )
+  }
+  if (usage.corpusDocsUsed >= usage.caps.corpusDocsPerMonth) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          usage.caps.corpusDocsPerMonth === 0
+            ? "Document indexing is not available on the free plan. Upgrade to use it."
+            : `You've indexed ${usage.corpusDocsUsed} of ${usage.caps.corpusDocsPerMonth} documents allowed this month. Upgrade for more.`,
+      },
+      { status: 429 }
     )
   }
 
@@ -120,6 +141,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     doc.status = "ready"
     doc.chunkCount = result.chunk_count ?? 0
     await doc.save()
+    await countCorpusDoc(userContext.clerkUid)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Indexing failed"
     console.error("[CORPUS] ingest failed:", message)

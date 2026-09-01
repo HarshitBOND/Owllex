@@ -53,6 +53,12 @@ const SubscriptionSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    aiUsage: {
+      periodKey: { type: String, default: "" },
+      costPaise: { type: Number, default: 0 },
+      researchRuns: { type: Number, default: 0 },
+      corpusDocs: { type: Number, default: 0 },
+    },
   },
   { _id: false },
 );

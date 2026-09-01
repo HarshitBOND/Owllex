@@ -27,7 +27,7 @@
 
 - [x] **Fix permissive CORS default in backend config**
   - Risk: wildcard origin fallback is dangerous and misconfigured with credentials.
-  - Evidence: `backend/app/config.py` defaults `LEXVERT_CORS_ORIGINS` to `*`; `backend/app/main.py` uses `allow_credentials=True`.
+  - Evidence: `backend/app/config.py` defaults `RAVENSLAW_CORS_ORIGINS` to `*`; `backend/app/main.py` uses `allow_credentials=True`.
   - Action: fail startup when CORS env is missing in production; explicit allowlist only.
 
 ## P1 — High

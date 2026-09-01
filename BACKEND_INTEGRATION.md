@@ -1,9 +1,9 @@
-# LexVert Full-Stack Integration Guide
+# Ravenslaw Full-Stack Integration Guide
 
 ## Project Structure
 
 ```
-lexvert/
+ravenslaw/
 ├── frontend/          # Next.js app (current directory)
 ├── backend/           # Python FastAPI service
 ├── .env.local         # Frontend env vars
@@ -94,8 +94,8 @@ Both services can connect to MongoDB:
 
 **Backend**: `.env` (backend folder)
 ```
-MONGODB_URI=mongodb://localhost:27017/lexvert
-MONGODB_DB=lexvert
+MONGODB_URI=mongodb://localhost:27017/ravenslaw
+MONGODB_DB=ravenslaw
 ```
 
 ---
@@ -108,8 +108,8 @@ Backend includes `Dockerfile`. Deploy as microservice:
 
 ```bash
 cd backend
-docker build -t lexvert-backend .
-docker run -p 8000:8000 -e MONGODB_URI=... lexvert-backend
+docker build -t ravenslaw-backend .
+docker run -p 8000:8000 -e MONGODB_URI=... ravenslaw-backend
 ```
 
 ### Production Configuration
@@ -118,12 +118,12 @@ Update backend `app/config.py` and frontend `.env.local`:
 
 ```env
 # Frontend
-NEXT_PUBLIC_BACKEND_API=https://api.lexvert.com
+NEXT_PUBLIC_BACKEND_API=https://api.ravenslaw.com
 
 # Backend .env
 HOST=0.0.0.0
 PORT=8000
-CORS_ORIGINS=["https://lexvert.com", "https://www.lexvert.com"]
+CORS_ORIGINS=["https://ravenslaw.com", "https://www.ravenslaw.com"]
 ```
 
 ---

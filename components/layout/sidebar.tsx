@@ -151,9 +151,10 @@ const Sidebar = () => {
         if (isNavAction(item)) {
             if (item.action === "new-chat") {
                 aiChat.startNewConversation()
-                router.push("/dashboard")
+                aiChat.closeHistory()
+                if (pathname !== "/dashboard") router.push("/dashboard")
             } else {
-                aiChat.openHistory()
+                aiChat.toggleHistory()
             }
             return
         }
@@ -198,6 +199,7 @@ const Sidebar = () => {
                                 <div
                                     key={item.name}
                                     onClick={() => handleLeafClick(item)}
+                                    data-ai-history-trigger={isNavAction(item) && item.action !== "new-chat" ? "" : undefined}
                                     className={cn(
                                         "flex items-center gap-x-2 h-8 px-2 rounded-lg cursor-pointer transition-colors",
                                         active

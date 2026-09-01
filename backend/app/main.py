@@ -1,5 +1,5 @@
 """
-LexVert - FastAPI Application Entry Point
+Ravenslaw - FastAPI Application Entry Point
 ==========================================
 Delhi High Court Cause List Parser API.
 
@@ -38,13 +38,13 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
-logger = logging.getLogger("lexvert")
+logger = logging.getLogger("ravenslaw")
 _request_buckets = defaultdict(deque)
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="LexVert - DHC Cause List Parser",
+    title="Ravenslaw - DHC Cause List Parser",
     description="Parse Delhi High Court cause list PDFs into structured JSON data.",
     version=__version__,
     docs_url="/docs" if settings.DEBUG else None,
@@ -143,7 +143,7 @@ async def health_check():
 
 @app.on_event("startup")
 async def on_startup():
-    logger.info("LexVert v%s starting on %s:%s", __version__, settings.HOST, settings.PORT)
+    logger.info("Ravenslaw v%s starting on %s:%s", __version__, settings.HOST, settings.PORT)
     if settings.MONGODB_URI:
         logger.info("MongoDB configured: %s", settings.MONGODB_DB)
     else:
@@ -187,4 +187,4 @@ async def on_shutdown():
             scheduler.shutdown(wait=False)
         except Exception:
             logger.warning("Scheduler shutdown failed")
-    logger.info("LexVert shutting down")
+    logger.info("Ravenslaw shutting down")

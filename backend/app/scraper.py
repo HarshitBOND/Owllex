@@ -1,5 +1,5 @@
 """
-LexVert PDF Scraper — Downloads and parses Delhi HC cause list PDFs.
+Ravenslaw PDF Scraper — Downloads and parses Delhi HC cause list PDFs.
 Runs on a daily schedule or can be triggered manually.
 """
 
@@ -19,7 +19,7 @@ from dataclasses import asdict
 from .config import settings
 from .parser import parse_pdf
 
-logger = logging.getLogger("lexvert.scraper")
+logger = logging.getLogger("ravenslaw.scraper")
 
 TEMP_DIR = os.path.join(settings.UPLOAD_DIR, "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)

@@ -14,9 +14,19 @@ type PlanFeatures = {
   prioritySupport: boolean
 }
 
+export type AiCaps = {
+  window5hPaise: number
+  dailyPaise: number
+  weeklyPaise: number
+  monthlyPaise: number
+  deepResearchRunsPerMonth: number
+  corpusDocsPerMonth: number
+}
+
 type PlanConfig = {
   caseLimit: number | null
   features: PlanFeatures
+  aiCaps: AiCaps
 }
 
 const DEFAULT_SUBSCRIPTION = {
@@ -34,6 +44,9 @@ const DEFAULT_SUBSCRIPTION = {
   lastPaymentError: "",
 }
 
+// Caps are in paise of OUR OpenAI cost (see lib/ai/rates.ts).
+// Selling prices live in RAZORPAY_AMOUNT_<PLAN>_<CYCLE> env vars:
+// starter ₹2,000/mo, professional ₹4,999/mo, enterprise ₹11,999/mo (yearly = 10x).
 const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
   free: {
     caseLimit: 10,
@@ -41,6 +54,14 @@ const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
       parserUpload: false,
       advancedAutomation: false,
       prioritySupport: false,
+    },
+    aiCaps: {
+      window5hPaise: 150,
+      dailyPaise: 150,
+      weeklyPaise: 800,
+      monthlyPaise: 4500,
+      deepResearchRunsPerMonth: 0,
+      corpusDocsPerMonth: 0,
     },
   },
   starter: {
@@ -50,6 +71,14 @@ const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
       advancedAutomation: true,
       prioritySupport: false,
     },
+    aiCaps: {
+      window5hPaise: 6000,
+      dailyPaise: 12000,
+      weeklyPaise: 42000,
+      monthlyPaise: 120000,
+      deepResearchRunsPerMonth: 5,
+      corpusDocsPerMonth: 50,
+    },
   },
   professional: {
     caseLimit: 250,
@@ -58,6 +87,14 @@ const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
       advancedAutomation: true,
       prioritySupport: true,
     },
+    aiCaps: {
+      window5hPaise: 15000,
+      dailyPaise: 30000,
+      weeklyPaise: 105000,
+      monthlyPaise: 300000,
+      deepResearchRunsPerMonth: 25,
+      corpusDocsPerMonth: 250,
+    },
   },
   enterprise: {
     caseLimit: null,
@@ -65,6 +102,14 @@ const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
       parserUpload: true,
       advancedAutomation: true,
       prioritySupport: true,
+    },
+    aiCaps: {
+      window5hPaise: 37500,
+      dailyPaise: 75000,
+      weeklyPaise: 262500,
+      monthlyPaise: 750000,
+      deepResearchRunsPerMonth: 100,
+      corpusDocsPerMonth: 1000,
     },
   },
 }
@@ -143,6 +188,7 @@ export type SubscriptionSummary = {
   isPaidPlan: boolean
   isActive: boolean
   features: PlanFeatures
+  aiCaps: AiCaps
   cancelAtPeriodEnd: boolean
   currentPeriodStart: string | null
   currentPeriodEnd: string | null
@@ -180,6 +226,7 @@ export function buildSubscriptionSummaryFromUserRecord(
     isPaidPlan: normalized.plan !== "free",
     isActive,
     features: planConfig.features,
+    aiCaps: planConfig.aiCaps,
     cancelAtPeriodEnd: normalized.cancelAtPeriodEnd,
     currentPeriodStart: toIsoString(normalized.currentPeriodStart),
     currentPeriodEnd: toIsoString(normalized.currentPeriodEnd),

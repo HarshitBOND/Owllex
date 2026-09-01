@@ -1,5 +1,5 @@
 // Main component
-export { LexvertTodoTask, default } from './lexvert-todo';
+export { RavenslawTodoTask, default } from './ravenslaw-todo';
 
 // Types
 export * from './types';

@@ -32,7 +32,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
       <div className="container flex h-16 items-center justify-between gap-2">
         <Link href="/" className="flex shrink-0 items-center">
-          <img src="/logo.png" alt="lexvert" className="h-7 w-auto sm:h-8 md:h-9" />
+          <img src="/logo.png" alt="ravenslaw" className="h-7 w-auto sm:h-8 md:h-9" />
         </Link>
 
         <nav className="hidden md:flex items-center space-x-6">

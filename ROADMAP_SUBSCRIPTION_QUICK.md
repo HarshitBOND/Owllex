@@ -1,4 +1,4 @@
-# LexVert Subscription Model - Quick Start
+# Ravenslaw Subscription Model - Quick Start
 
 ## THE IDEA IN ONE SENTENCE
 "Lawyers pay monthly subscription → System automatically downloads court PDFs → Matches cases to their keywords → Sends notifications → They never miss a hearing again"

@@ -1,4 +1,4 @@
-# LexVert Deployment Checklist + Env Guide
+# Ravenslaw Deployment Checklist + Env Guide
 
 Use this file as your single source of truth for launch. Tick each item as you complete it.
 
@@ -67,13 +67,13 @@ Set these where the FastAPI backend runs:
 
 - `MONGODB_URI`
 - `MONGODB_DB`
-- `LEXVERT_HOST`
-- `LEXVERT_PORT`
-- `LEXVERT_DEBUG=false`
-- `LEXVERT_UPLOAD_DIR`
-- `LEXVERT_MAX_PDF_SIZE_MB`
-- `LEXVERT_CORS_ORIGINS`
-- `LEXVERT_INTERNAL_TOKEN` (generate a fresh one for production)
+- `RAVENSLAW_HOST`
+- `RAVENSLAW_PORT`
+- `RAVENSLAW_DEBUG=false`
+- `RAVENSLAW_UPLOAD_DIR`
+- `RAVENSLAW_MAX_PDF_SIZE_MB`
+- `RAVENSLAW_CORS_ORIGINS`
+- `RAVENSLAW_INTERNAL_TOKEN` (generate a fresh one for production)
 
 ## How the .env Files Work (Simple Explanation)
 

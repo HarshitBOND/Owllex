@@ -44,7 +44,7 @@ const sections: Section[] = [
             tint: "bg-emerald-50 text-emerald-600",
             label: "Default model",
             hint: "Model used for new chats, drafts and reviews.",
-            selects: [{ key: "model", options: ["Lexvert Pro (most capable)", "Lexvert Balanced", "Lexvert Fast"] }],
+            selects: [{ key: "model", options: ["Ravenslaw Pro (most capable)", "Ravenslaw Balanced", "Ravenslaw Fast"] }],
           },
           {
             icon: AlignLeft,

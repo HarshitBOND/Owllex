@@ -53,7 +53,7 @@ export function WhyChooseSection() {
           <div className="order-1 lg:order-2">
             <Reveal className="mb-10 text-center lg:text-left">
               <h2 className="font-serif text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Why Legal Professionals Choose lexvert
+                Why Legal Professionals Choose ravenslaw
               </h2>
               <p className="mt-4 text-lg text-muted-foreground">
                 Built by legal experts and tech innovators to solve real problems in the legal industry.

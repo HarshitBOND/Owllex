@@ -43,7 +43,7 @@ def check(name, ok, detail=""):
 # A tiny, distinctive document so retrieval is unambiguous.
 SAMPLE = """# Test Judgment - Verification Document
 
-IN THE SUPREME COURT OF LEXVERT
+IN THE SUPREME COURT OF RAVENSLAW
 Criminal Appeal No. 9910 of 2026
 
 The appellant challenged the rejection of anticipatory bail. The Court held
@@ -85,7 +85,7 @@ def run_in_process():
     print(f"       before: {before['document_count']} docs / {before['chunk_count']} chunks")
 
     print("\n--- Ingest ---")
-    tmp = Path(tempfile.gettempdir()) / f"lexvert_verify_{uuid.uuid4().hex}.md"
+    tmp = Path(tempfile.gettempdir()) / f"ravenslaw_verify_{uuid.uuid4().hex}.md"
     tmp.write_text(SAMPLE, encoding="utf-8")
     document_id = uuid.uuid4().hex
 
@@ -136,12 +136,12 @@ def run_in_process():
 def run_http():
     import requests
 
-    base = os.getenv("LEXVERT_API_BASE", "http://localhost:8000")
-    token = os.getenv("LEXVERT_INTERNAL_TOKEN", "")
+    base = os.getenv("RAVENSLAW_API_BASE", "http://localhost:8000")
+    token = os.getenv("RAVENSLAW_INTERNAL_TOKEN", "")
     headers = {"x-internal-token": token}
 
     print(f"\n--- API at {base} ---")
-    if not check("LEXVERT_INTERNAL_TOKEN is set", bool(token)):
+    if not check("RAVENSLAW_INTERNAL_TOKEN is set", bool(token)):
         return
 
     try:
@@ -161,7 +161,7 @@ def run_http():
     if not status.get("ready"):
         return
 
-    tmp = Path(tempfile.gettempdir()) / f"lexvert_verify_{uuid.uuid4().hex}.md"
+    tmp = Path(tempfile.gettempdir()) / f"ravenslaw_verify_{uuid.uuid4().hex}.md"
     tmp.write_text(SAMPLE, encoding="utf-8")
     try:
         with tmp.open("rb") as fh:

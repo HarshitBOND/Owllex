@@ -1,4 +1,4 @@
-"""Quick-start script for LexVert backend."""
+"""Quick-start script for Ravenslaw backend."""
 
 import uvicorn
 from app.config import settings

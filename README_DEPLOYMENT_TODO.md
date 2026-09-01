@@ -1,4 +1,4 @@
-# LexVert Deployment TODO Checklist
+# Ravenslaw Deployment TODO Checklist
 
 Last updated: March 23, 2026
 
@@ -70,9 +70,9 @@ From local audit, these keys were missing in `.env.local` and must be set:
 
 - [ ] Create `backend/.env` from `backend/.env.example`.
 - [ ] Set `MONGODB_URI` and `MONGODB_DB`.
-- [ ] Set `LEXVERT_HOST`, `LEXVERT_PORT`, `LEXVERT_DEBUG`.
-- [ ] Set `LEXVERT_UPLOAD_DIR`, `LEXVERT_MAX_PDF_SIZE_MB`.
-- [ ] Set `LEXVERT_CORS_ORIGINS` to your frontend domain(s).
+- [ ] Set `RAVENSLAW_HOST`, `RAVENSLAW_PORT`, `RAVENSLAW_DEBUG`.
+- [ ] Set `RAVENSLAW_UPLOAD_DIR`, `RAVENSLAW_MAX_PDF_SIZE_MB`.
+- [ ] Set `RAVENSLAW_CORS_ORIGINS` to your frontend domain(s).
 
 ---
 

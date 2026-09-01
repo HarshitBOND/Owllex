@@ -45,16 +45,16 @@ export function Footer() {
       <Reveal className="container relative py-16">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div className="space-y-4">
-            <img src="/logo.png" width={140} alt="lexvert" className="brightness-0 invert opacity-90" />
+            <img src="/logo.png" width={140} alt="ravenslaw" className="brightness-0 invert opacity-90" />
             <p className="max-w-xs text-sm leading-relaxed text-slate-400">
               Your complete legal ecosystem. Revolutionizing how you handle legal work with cutting-edge technology.
             </p>
             <a
-              href="mailto:support@lexvert.com"
+              href="mailto:support@ravenslaw.com"
               className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-primary"
             >
               <Mail className="h-4 w-4" />
-              support@lexvert.com
+              support@ravenslaw.com
             </a>
           </div>
 
@@ -75,7 +75,7 @@ export function Footer() {
         </div>
 
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-8 sm:flex-row">
-          <p className="text-sm text-slate-500">© 2026 lexvert. All rights reserved.</p>
+          <p className="text-sm text-slate-500">© 2026 ravenslaw. All rights reserved.</p>
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Scale className="h-4 w-4" />
             Legal technology, built for India

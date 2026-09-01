@@ -5,7 +5,9 @@ import { enforceRateLimit, objectIdSchema, parseAndValidateJson, requireUserCont
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
 import { modelFor } from "@/lib/ai/provider"
+import { resolveModel } from "@/lib/ai/models"
 import { CONTRACT_REVIEW_SYSTEM_PROMPT } from "@/lib/ai/prompts"
+import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 export const maxDuration = 60
 
@@ -57,6 +59,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     )
   }
 
+  const gate = await checkAiAllowance(userContext.clerkUid)
+  if (!gate.allowed) return aiLimitResponse(gate)
+  const modelKey = resolveModel(gate.snapshot.plan, model, "balanced")
+
   await connectMongoWithRetry()
   const review = await ContractReview.findOne({ _id: id, clerkUid: userContext.clerkUid })
   if (!review) {
@@ -70,12 +76,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   await review.save()
 
   try {
-    const { object } = await generateObject({
-      model: modelFor(model ?? "balanced"),
+    const { object, usage } = await generateObject({
+      model: modelFor(modelKey),
       system: CONTRACT_REVIEW_SYSTEM_PROMPT,
       schema: analysisSchema,
       prompt: `Review this contract and return every issue you find, plus an overall summary.\n\n<document>\n${review.extractedText.slice(0, 60000)}\n</document>`,
     })
+
+    await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-analyze", modelKey, usage })
 
     review.issues = object.issues.map((issue, index) => ({ id: `i${index + 1}`, ...issue }))
     review.summary = object.summary

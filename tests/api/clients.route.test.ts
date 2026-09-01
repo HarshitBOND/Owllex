@@ -112,7 +112,7 @@ describe("userdetails clients route", () => {
       buildPostRequest({
         salutation: "mr",
         name: "Rahul Sharma",
-        company: "LexVert LLP",
+        company: "Ravenslaw LLP",
         email: "rahul@example.com",
         contact: "9999999999",
         alternateContact: "",

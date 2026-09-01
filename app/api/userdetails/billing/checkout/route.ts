@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       amount: selectedAmountMinor,
       currency,
       accept_partial: false,
-      description: `LexVert ${parsedBody.data.plan} (${parsedBody.data.billingCycle}) subscription`,
+      description: `Ravenslaw ${parsedBody.data.plan} (${parsedBody.data.billingCycle}) subscription`,
       callback_url: `${baseUrl}${successPath}`,
       callback_method: "get",
       notify: {

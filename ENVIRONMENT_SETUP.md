@@ -1,4 +1,4 @@
-# LexVert Environment & Production Secret Setup
+# Ravenslaw Environment & Production Secret Setup
 
 Canonical setup reference for the current codebase (updated March 15, 2026).
 
@@ -36,7 +36,7 @@ Use this document as the source of truth for runtime environment variables and p
 | `RAZORPAY_AMOUNT_ENTERPRISE_YEARLY` | Yes (billing) | Enterprise yearly amount in INR |
 | `SENDGRID_API_KEY` | Recommended | Enables support + notification email delivery |
 | `NOTIFICATION_FROM_EMAIL` | Recommended | Sender email for SendGrid |
-| `NOTIFICATION_FROM_NAME` | Optional | Sender display name (defaults to `LexVert`) |
+| `NOTIFICATION_FROM_NAME` | Optional | Sender display name (defaults to `Ravenslaw`) |
 | `SUPPORT_TEAM_EMAIL` | Recommended | Destination inbox for contact form submissions |
 | `CRON_SECRET` | Yes | Protects `/api/internal/notifications/run` |
 | `NEXT_PUBLIC_APP_URL` | Yes | Absolute app URL used in notification links |
@@ -49,15 +49,15 @@ Use this document as the source of truth for runtime environment variables and p
 
 | Key | Required | Purpose |
 |---|---|---|
-| `LEXVERT_HOST` | Optional | Backend host bind |
-| `LEXVERT_PORT` | Optional | Backend port |
-| `LEXVERT_DEBUG` | Optional | Backend debug mode |
-| `LEXVERT_UPLOAD_DIR` | Optional | Temp upload directory |
-| `LEXVERT_MAX_PDF_SIZE_MB` | Optional | Max upload size |
+| `RAVENSLAW_HOST` | Optional | Backend host bind |
+| `RAVENSLAW_PORT` | Optional | Backend port |
+| `RAVENSLAW_DEBUG` | Optional | Backend debug mode |
+| `RAVENSLAW_UPLOAD_DIR` | Optional | Temp upload directory |
+| `RAVENSLAW_MAX_PDF_SIZE_MB` | Optional | Max upload size |
 | `MONGODB_URI` | Recommended | Parser persistence store |
 | `MONGODB_DB` | Recommended | Parser database name |
-| `LEXVERT_CORS_ORIGINS` | Yes (production) | Explicit allowed CORS origins |
-| `LEXVERT_INTERNAL_TOKEN` | Yes | Must match frontend `BACKEND_INTERNAL_TOKEN` |
+| `RAVENSLAW_CORS_ORIGINS` | Yes (production) | Explicit allowed CORS origins |
+| `RAVENSLAW_INTERNAL_TOKEN` | Yes | Must match frontend `BACKEND_INTERNAL_TOKEN` |
 
 ## 4) Production Secret Checklist
 

@@ -9,7 +9,7 @@ from pymongo import DESCENDING, MongoClient, ReturnDocument
 from .config import settings
 from .security import require_authenticated_user
 
-logger = logging.getLogger("lexvert.userdetails")
+logger = logging.getLogger("ravenslaw.userdetails")
 
 userdetails_router = APIRouter(prefix="/api/userdetails", tags=["User Details"])
 

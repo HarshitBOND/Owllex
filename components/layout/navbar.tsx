@@ -217,7 +217,7 @@ const Navbar = ({withBack, location, subtitle, badge, actions}: {withBack?: bool
                     </h1>
                     {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
                 </div>
-                <img src="/logo.png" className="w-9 h-9 lg:hidden" alt="LexVert" />
+                <img src="/logo.png" className="w-9 h-9 lg:hidden" alt="Ravenslaw" />
                 <div className="flex items-center md:gap-x-3 gap-x-2">
                     {actions}
                     {/* Notification Bell */}

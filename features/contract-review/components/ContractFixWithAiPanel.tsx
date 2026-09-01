@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { DEFAULT_MODEL, MODELS, type ModelKey } from "@/lib/ai/models"
 import { sanitizeDraftHtml } from "@/lib/html/sanitize-draft"
+import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
+import { useAllowedModels } from "@/hooks/useAllowedModels"
 import { severityStyles, type ContractIssue } from "../data"
 
 interface ContractFixWithAiPanelProps {
@@ -35,6 +37,7 @@ export default function ContractFixWithAiPanel({
 }: ContractFixWithAiPanelProps) {
   const [input, setInput] = useState("")
   const [model, setModel] = useState<ModelKey>(DEFAULT_MODEL)
+  const allowedModels = useAllowedModels()
   const [applied, setApplied] = useState<Record<string, "applied" | "discarded">>({})
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -258,17 +261,22 @@ export default function ContractFixWithAiPanel({
               </div>
             )}
 
-            {error && (
-              <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2.5">
-                <p className="text-[12px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  <span>{error.message || "The assistant is unavailable right now."}</span>
-                </p>
-                <button type="button" onClick={clearError} className="mt-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-200 underline">
-                  Dismiss
-                </button>
-              </div>
-            )}
+            {error &&
+              (() => {
+                const limit = parseAiLimitError(error.message)
+                if (limit) return <AiLimitNotice limit={limit} />
+                return (
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2.5">
+                    <p className="text-[12px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>{error.message || "The assistant is unavailable right now."}</span>
+                    </p>
+                    <button type="button" onClick={clearError} className="mt-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-200 underline">
+                      Dismiss
+                    </button>
+                  </div>
+                )
+              })()}
           </div>
 
           <div className="border-t border-gray-200 dark:border-border p-2.5 shrink-0">
@@ -295,12 +303,23 @@ export default function ContractFixWithAiPanel({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {(Object.keys(MODELS) as ModelKey[]).map((key) => (
-                    <DropdownMenuItem key={key} onClick={() => setModel(key)} className="flex-col items-start gap-0.5">
-                      <span className="text-[13px] font-medium">{MODELS[key].name}</span>
-                      <span className="text-[11px] text-muted-foreground">{MODELS[key].description}</span>
-                    </DropdownMenuItem>
-                  ))}
+                  {(Object.keys(MODELS) as ModelKey[]).map((key) => {
+                    const locked = allowedModels ? !allowedModels.includes(key) : false
+                    return (
+                      <DropdownMenuItem
+                        key={key}
+                        disabled={locked}
+                        onClick={() => !locked && setModel(key)}
+                        className="flex-col items-start gap-0.5"
+                      >
+                        <span className="text-[13px] font-medium">
+                          {MODELS[key].name}
+                          {locked && <span className="ml-1.5 text-[10px] text-muted-foreground">Upgrade</span>}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">{MODELS[key].description}</span>
+                      </DropdownMenuItem>
+                    )
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
               <button

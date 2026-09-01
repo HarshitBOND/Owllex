@@ -37,7 +37,7 @@ const getOutstandingAmount = (invoice: any) => {
 const getReminderConfig = () => {
   const apiKey = process.env.SENDGRID_API_KEY?.trim() || ""
   const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim() || ""
-  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "LexVert"
+  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "Ravenslaw"
 
   return {
     apiKey,
@@ -101,7 +101,7 @@ const sendOverdueReminderEmail = async ({
     lines.push(`View invoice: ${invoiceLink}`)
   }
 
-  lines.push("", "Regards,", "LexVert")
+  lines.push("", "Regards,", "Ravenslaw")
 
   await sgMail.send({
     to: toEmail,

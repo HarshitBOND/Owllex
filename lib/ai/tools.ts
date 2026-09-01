@@ -7,7 +7,7 @@ export function legalTools(clerkUid: string, corpusId?: string | null) {
   return {
     searchCases: tool({
       description:
-        "Search the advocate's own case files in LexVert. Use whenever they ask about their cases, hearings, court dates, or matters. Returns case number, title, court, stage, status and next hearing date.",
+        "Search the advocate's own case files in Ravenslaw. Use whenever they ask about their cases, hearings, court dates, or matters. Returns case number, title, court, stage, status and next hearing date.",
       inputSchema: z.object({
         query: z.string().optional().describe("Text to match against case number, title, court, advocate or stage"),
         limit: z.number().min(1).max(25).optional().describe("How many cases to return, default 10"),
@@ -20,7 +20,7 @@ export function legalTools(clerkUid: string, corpusId?: string | null) {
 
     searchClients: tool({
       description:
-        "Search the advocate's own client records in LexVert. Use when they ask who a client is, for contact details, or which clients exist.",
+        "Search the advocate's own client records in Ravenslaw. Use when they ask who a client is, for contact details, or which clients exist.",
       inputSchema: z.object({
         query: z.string().optional().describe("Text to match against client name, company, email or contact"),
         limit: z.number().min(1).max(25).optional().describe("How many clients to return, default 10"),

@@ -1,4 +1,4 @@
-# LexVert Subscription Model - Automated Hearing Tracker
+# Ravenslaw Subscription Model - Automated Hearing Tracker
 ## "We Handle Everything - Lawyers Get Alerts & Peace of Mind"
 
 ---
@@ -300,7 +300,7 @@ notification_logs
 
 ### **Day 0: Lawyer Signs Up**
 ```
-1. Visits lexvert.com/signup
+1. Visits ravenslaw.com/signup
 2. Creates account (Clerk auth)
 3. Selects tier: Professional ($299/month)
 4. Pays via Stripe (adds card)

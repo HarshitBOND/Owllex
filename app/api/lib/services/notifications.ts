@@ -469,7 +469,7 @@ const buildEmailText = (notification: NotificationDocument) => {
   const lines = [
     "Hello,",
     "",
-    `This is a LexVert reminder for ${notification.caseTitle}.`,
+    `This is a Ravenslaw reminder for ${notification.caseTitle}.`,
     `${reminderLabel} date: ${formatDisplayDate(notification.hearingDate)}`,
     `Reminder window: ${formatReminderWindow(notification.reminderWindowDays)}`,
     notification.message,
@@ -477,10 +477,10 @@ const buildEmailText = (notification: NotificationDocument) => {
 
   const resourceUrl = buildNotificationResourceUrl(notification)
   if (resourceUrl) {
-    lines.push(`Open in LexVert: ${resourceUrl}`)
+    lines.push(`Open in Ravenslaw: ${resourceUrl}`)
   }
 
-  lines.push("", "Regards,", "LexVert")
+  lines.push("", "Regards,", "Ravenslaw")
 
   return lines.join("\n")
 }
@@ -488,7 +488,7 @@ const buildEmailText = (notification: NotificationDocument) => {
 const getSendGridConfig = () => {
   const apiKey = process.env.SENDGRID_API_KEY?.trim() || ""
   const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim() || ""
-  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "LexVert"
+  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "Ravenslaw"
 
   return {
     apiKey,

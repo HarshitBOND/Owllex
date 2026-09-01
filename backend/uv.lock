@@ -1302,7 +1302,7 @@ wheels = [
 ]
 
 [[package]]
-name = "lexvert-backend"
+name = "ravenslaw-backend"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [

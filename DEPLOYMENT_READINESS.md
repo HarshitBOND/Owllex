@@ -1,4 +1,4 @@
-# LexVert Deployment Readiness Guide
+# Ravenslaw Deployment Readiness Guide
 
 Last updated: March 15, 2026
 
@@ -56,12 +56,12 @@ Set in backend host/container:
 
 - `MONGODB_URI`
 - `MONGODB_DB`
-- `LEXVERT_HOST`
-- `LEXVERT_PORT`
-- `LEXVERT_DEBUG`
-- `LEXVERT_UPLOAD_DIR`
-- `LEXVERT_MAX_PDF_SIZE_MB`
-- `LEXVERT_CORS_ORIGINS`
+- `RAVENSLAW_HOST`
+- `RAVENSLAW_PORT`
+- `RAVENSLAW_DEBUG`
+- `RAVENSLAW_UPLOAD_DIR`
+- `RAVENSLAW_MAX_PDF_SIZE_MB`
+- `RAVENSLAW_CORS_ORIGINS`
 
 ## 4) External Endpoint Setup
 

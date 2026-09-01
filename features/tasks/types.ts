@@ -1,4 +1,4 @@
-// Shared types for lexvert-todo
+// Shared types for ravenslaw-todo
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 export type Category = 'hearing' | 'filing' | 'deposition' | 'client-meeting' | 'research' | 'case-review' | 'motion' | 'discovery';
 export type SortOption = 'createdAt' | 'dueDate' | 'priority' | 'title' | 'category';

@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { AiUsageMeter } from "@/components/ui/ai-usage-meter"
 import { useUser } from "@clerk/nextjs"
 
 // Mobile Dashboard Section tabs
@@ -708,6 +709,8 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
+
+            <AiUsageMeter />
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
               <button

@@ -1,5 +1,5 @@
 """
-LexVert MongoDB Operations — optional persistent storage layer.
+Ravenslaw MongoDB Operations — optional persistent storage layer.
 """
 
 import logging
@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from .models import CaseEntry
 
-logger = logging.getLogger("lexvert.db")
+logger = logging.getLogger("ravenslaw.db")
 
 
 class MongoDB:

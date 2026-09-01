@@ -1,4 +1,4 @@
-# LexVert - Complete Legal Workbench Platform
+# Ravenslaw - Complete Legal Workbench Platform
 
 ## 📋 Table of Contents
 1. [Product Overview](#product-overview)
@@ -25,7 +25,7 @@ Lawyers waste hours:
 - No unified workspace for case, contact, and payment management
 
 ### The Solution
-**LexVert** - A complete legal workbench where:
+**Ravenslaw** - A complete legal workbench where:
 - System **automatically tracks court cases** via PDF parsing
 - Lawyers manage **all client information in one place**
 - **Automated notifications** to clients before hearings
@@ -224,7 +224,7 @@ Lawyers waste hours:
 {
   _id: ObjectId,
   clerk_id: "user_123", // From Clerk
-  email: "harish@lexvert.com",
+  email: "harish@ravenslaw.com",
   name: "Harish Kumar",
   phone: "+91-98765-43210",
   profile_photo: "https://s3.../photo.jpg",
@@ -346,7 +346,7 @@ Lawyers waste hours:
     
     // Email
     email_enabled: true,
-    email_address: "harish@lexvert.com",
+    email_address: "harish@ravenslaw.com",
     
     // Push
     push_enabled: true,
@@ -740,10 +740,10 @@ Lawyers waste hours:
   },
   
   storage: {
-    s3_bucket: "lexvert-cases",
+    s3_bucket: "ravenslaw-cases",
     s3_key: "user_123/case_456/affidavit.pdf",
     s3_url: "https://s3.../affidavit.pdf",
-    cdn_url: "https://cdn.lexvert.com/...", // Faster delivery
+    cdn_url: "https://cdn.ravenslaw.com/...", // Faster delivery
     access_level: "private" // private | team | client
   },
   
@@ -1360,7 +1360,7 @@ Response:
 
 ### **Flow 1: Lawyer Subscribes**
 ```
-1. Visit lexvert.com/subscribe
+1. Visit ravenslaw.com/subscribe
 2. Select tier (Professional)
 3. Click "Subscribe Now"
 4. Stripe payment page

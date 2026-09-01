@@ -50,7 +50,7 @@
   /* Kept in sync with the sidebar's actual width in components/layout/sidebar.tsx; this is just the pre-hydration fallback (sidebar defaults open) */
   --sidebar-offset: 192px;
 
-  /* Updated color palette for lexvert legal platform */
+  /* Updated color palette for ravenslaw legal platform */
   --background: #ffffff;
   --foreground: #475569;
   --card: #ffffff;
@@ -198,7 +198,7 @@
   --color-text-500: var(--text-500);
   --color-accent-hover: var(--accent-hover);
 
-  /* Added custom fonts for lexvert */
+  /* Added custom fonts for ravenslaw */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-averia-serif-libre), ui-serif, Georgia, serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -600,7 +600,7 @@
   --shadow-calendar: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
 }
 
-/* Lexvert calendar custom colors */
+/* Ravenslaw calendar custom colors */
 .bg-calendar-event-light {
   background-color: var(--calendar-event-light);
 }

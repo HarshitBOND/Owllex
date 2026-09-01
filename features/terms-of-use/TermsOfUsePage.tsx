@@ -14,7 +14,7 @@ export default function TermsOfUsePage() {
               Terms of Use
             </h1>
             <p className="mt-3 text-muted-foreground text-center">
-              Please read these terms carefully before using Lexvert. By accessing or using our
+              Please read these terms carefully before using Ravenslaw. By accessing or using our
               services, you agree to be bound by these Terms of Use.
             </p>
             <p className="mt-4 text-xs text-muted-foreground">
@@ -29,7 +29,7 @@ export default function TermsOfUsePage() {
           <div className="mx-auto grid max-w-3xl gap-6">
             <TermsSection
               title="1. Acceptance of Terms"
-              description="By using Lexvert, you confirm that you have read, understood, and agree to these terms."
+              description="By using Ravenslaw, you confirm that you have read, understood, and agree to these terms."
               className="text-foreground prose-headings:text-foreground prose-a:text-primary"
             >
               <p>
@@ -72,7 +72,7 @@ export default function TermsOfUsePage() {
 
             <TermsSection
               title="5. Intellectual Property"
-              description="All content, trademarks, and technology on Lexvert are owned by us or our licensors."
+              description="All content, trademarks, and technology on Ravenslaw are owned by us or our licensors."
             >
               <p>
                 You are granted a limited, non-exclusive, non-transferable license to access and use the
@@ -86,7 +86,7 @@ export default function TermsOfUsePage() {
               description="Information provided by the platform is for informational purposes and not legal advice."
             >
               <p>
-                Lexvert is not a law firm and does not provide legal representation. Consult a qualified
+                Ravenslaw is not a law firm and does not provide legal representation. Consult a qualified
                 attorney for legal advice specific to your situation.
               </p>
             </TermsSection>
@@ -104,7 +104,7 @@ export default function TermsOfUsePage() {
 
             <TermsSection
               title="8. Limitation of liability"
-              description="To the maximum extent permitted by law, Lexvert shall not be liable for indirect or consequential damages."
+              description="To the maximum extent permitted by law, Ravenslaw shall not be liable for indirect or consequential damages."
             >
               <p>
                 Our total liability for any claim arising out of or relating to these terms or the
@@ -138,7 +138,7 @@ export default function TermsOfUsePage() {
               description="Questions about these Terms of Use? We’re here to help."
             >
               <p>
-                Contact our support team at <a className="text-primary underline" href="mailto:support@lexvert.ai">support@lexvert.ai</a>.
+                Contact our support team at <a className="text-primary underline" href="mailto:support@ravenslaw.ai">support@ravenslaw.ai</a>.
               </p>
             </TermsSection>
           </div>

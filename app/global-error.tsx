@@ -14,7 +14,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           <div style={{ maxWidth: "28rem", textAlign: "center" }}>
             <h1 style={{ fontSize: "1.5rem", fontWeight: 500, marginBottom: "0.5rem" }}>Something went wrong</h1>
             <p style={{ fontSize: "0.875rem", color: "#64748b", marginBottom: "1.5rem" }}>
-              LexVert hit an unexpected error and couldn't finish loading.
+              Ravenslaw hit an unexpected error and couldn't finish loading.
             </p>
             {error.digest && (
               <p style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: "1.5rem" }}>Reference: {error.digest}</p>

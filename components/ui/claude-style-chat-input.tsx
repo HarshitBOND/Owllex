@@ -181,10 +181,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ models, selectedModel, on
                         <button
                             key={model.id}
                             onClick={() => {
+                                if (model.badge === 'Upgrade') return;
                                 onSelect(model.id);
                                 setIsOpen(false);
                             }}
-                            className={`w-full text-left px-3 py-2.5 rounded-xl flex items-start justify-between group transition-colors hover:bg-bg-200`}
+                            className={`w-full text-left px-3 py-2.5 rounded-xl flex items-start justify-between group transition-colors ${model.badge === 'Upgrade' ? 'opacity-60 cursor-not-allowed' : 'hover:bg-bg-200'}`}
                         >
                             <div className="flex flex-col gap-0.5">
                                 <div className="flex items-center gap-2">
@@ -411,14 +412,16 @@ interface ClaudeChatInputProps {
     corpora?: CorpusOption[];
     activeCorpusId?: string | null;
     onSelectCorpus?: (id: string | null) => void;
+    allowedModels?: string[];
+    defaultModel?: string;
 }
 
-export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage, placeholder = "How can I help you today?", disabled = false, isGenerating = false, onStop, corpora = [], activeCorpusId = null, onSelectCorpus }) => {
+export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage, placeholder = "How can I help you today?", disabled = false, isGenerating = false, onStop, corpora = [], activeCorpusId = null, onSelectCorpus, allowedModels, defaultModel }) => {
     const [message, setMessage] = useState("");
     const [files, setFiles] = useState<AttachedFile[]>([]);
     const [pastedContent, setPastedContent] = useState<PastedContent[]>([]);
     const [isDragging, setIsDragging] = useState(false);
-    const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
+    const [selectedModel, setSelectedModel] = useState<string>(defaultModel ?? DEFAULT_MODEL);
     const [isThinkingEnabled] = useState(false);
     const [activeMode, setActiveMode] = useState<ToolMode | null>(null);
     const activeCorpus = corpora.find(c => c.id === activeCorpusId) ?? null;
@@ -426,7 +429,19 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const models = Object.entries(MODELS).map(([id, m]) => ({ id, name: m.name, description: m.description }));
+    const models = Object.entries(MODELS).map(([id, m]) => ({
+        id,
+        name: m.name,
+        description: m.description,
+        badge: allowedModels && !allowedModels.includes(id) ? "Upgrade" : undefined,
+    }));
+
+    // If the plan info arrives after mount and the current pick is not allowed, drop to an allowed one.
+    useEffect(() => {
+        if (allowedModels && !allowedModels.includes(selectedModel)) {
+            setSelectedModel(allowedModels.includes(defaultModel ?? "") ? defaultModel! : allowedModels[0]);
+        }
+    }, [allowedModels, selectedModel, defaultModel]);
 
     useEffect(() => {
         if (textareaRef.current) {

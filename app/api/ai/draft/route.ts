@@ -6,7 +6,9 @@ import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import DraftDocument from "@/app/api/lib/models/draft-document"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import { modelFor } from "@/lib/ai/provider"
+import { resolveModel } from "@/lib/ai/models"
 import { DRAFTING_SYSTEM_PROMPT, DRAFT_TOOL_RULES } from "@/lib/ai/prompts"
+import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 export const maxDuration = 60
 
@@ -51,6 +53,10 @@ export async function POST(request: NextRequest) {
 
   const { id: draftId, model, documentHtml, messages } = parsed.data
 
+  const gate = await checkAiAllowance(userContext.clerkUid)
+  if (!gate.allowed) return aiLimitResponse(gate)
+  const modelKey = resolveModel(gate.snapshot.plan, model, "balanced")
+
   // Sanitized before it reaches the model, so a poisoned document body cannot
   // smuggle markup or handlers into the prompt.
   const safeDocument = sanitizeDocumentHtml(documentHtml).slice(-MAX_CONTEXT_CHARS)
@@ -60,9 +66,9 @@ export async function POST(request: NextRequest) {
     : `${DRAFTING_SYSTEM_PROMPT}\n\n${DRAFT_TOOL_RULES}\n\n<current_document>\n(The document is empty.)\n</current_document>`
 
   const result = streamText({
-    model: modelFor(model),
+    model: modelFor(modelKey),
     system,
-    messages: await convertToModelMessages(messages as UIMessage[]),
+    messages: await convertToModelMessages(messages.slice(-40) as UIMessage[]),
     tools: {
       // No execute: this streams to the client and waits for the advocate to
       // accept or discard the redline before anything touches the editor.
@@ -83,6 +89,9 @@ export async function POST(request: NextRequest) {
     },
     stopWhen: stepCountIs(3),
     experimental_transform: smoothStream({ chunking: "word" }),
+    onFinish: async ({ totalUsage }) => {
+      await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "draft", modelKey, usage: totalUsage })
+    },
   })
 
   return result.toUIMessageStreamResponse({

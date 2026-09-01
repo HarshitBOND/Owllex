@@ -9,8 +9,8 @@ type RateLimitStoreEntry = {
 type RateLimitStore = Map<string, RateLimitStoreEntry>
 
 type GlobalRateLimitState = typeof globalThis & {
-  __lexvertRateLimitStore?: RateLimitStore
-  __lexvertRateLimitRedis?: Redis | null
+  __ravenslawRateLimitStore?: RateLimitStore
+  __ravenslawRateLimitRedis?: Redis | null
 }
 
 export type RateLimitInput = {
@@ -28,25 +28,25 @@ export type RateLimitResult = {
 }
 
 const globalState = globalThis as GlobalRateLimitState
-const store = globalState.__lexvertRateLimitStore || new Map<string, RateLimitStoreEntry>()
+const store = globalState.__ravenslawRateLimitStore || new Map<string, RateLimitStoreEntry>()
 
-globalState.__lexvertRateLimitStore = store
+globalState.__ravenslawRateLimitStore = store
 
-const getRedisClient = () => {
-  if (globalState.__lexvertRateLimitRedis !== undefined) {
-    return globalState.__lexvertRateLimitRedis
+export const getRedisClient = () => {
+  if (globalState.__ravenslawRateLimitRedis !== undefined) {
+    return globalState.__ravenslawRateLimitRedis
   }
 
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
 
   if (!url || !token) {
-    globalState.__lexvertRateLimitRedis = null
+    globalState.__ravenslawRateLimitRedis = null
     return null
   }
 
-  globalState.__lexvertRateLimitRedis = new Redis({ url, token })
-  return globalState.__lexvertRateLimitRedis
+  globalState.__ravenslawRateLimitRedis = new Redis({ url, token })
+  return globalState.__ravenslawRateLimitRedis
 }
 
 const getRequestIp = (request: NextRequest) => {

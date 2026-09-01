@@ -3,8 +3,8 @@
 ## 📁 Project Structure
 
 ```
-lexvert/
-├── backend/                          # Python FastAPI service (renamed from lexvert_backend_parser)
+ravenslaw/
+├── backend/                          # Python FastAPI service (renamed from ravenslaw_backend_parser)
 │   ├── app/
 │   │   ├── main.py                 # FastAPI app entry point
 │   │   ├── routes.py               # API endpoints: POST /api/v1/parse
@@ -137,7 +137,7 @@ const result = await response.json();
 NEXT_PUBLIC_BACKEND_API=http://localhost:8000
 
 # For production
-# NEXT_PUBLIC_BACKEND_API=https://api.lexvert.com
+# NEXT_PUBLIC_BACKEND_API=https://api.ravenslaw.com
 ```
 
 ### Backend `backend/.env`
@@ -149,8 +149,8 @@ DEBUG=true
 CORS_ORIGINS=["http://localhost:3000"]
 
 # Optional MongoDB
-MONGODB_URI=mongodb://localhost:27017/lexvert
-MONGODB_DB=lexvert
+MONGODB_URI=mongodb://localhost:27017/ravenslaw
+MONGODB_DB=ravenslaw
 
 # Upload settings
 MAX_PDF_SIZE_MB=50

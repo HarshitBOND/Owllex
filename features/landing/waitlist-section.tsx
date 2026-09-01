@@ -49,7 +49,7 @@ export function WaitlistSection() {
           </div>
 
           <h2 className="font-serif text-3xl font-bold tracking-tight sm:text-4xl mb-4">
-            Be Among the First to Experience lexvert
+            Be Among the First to Experience ravenslaw
           </h2>
           <p className="text-xl text-primary-foreground/80 mb-10 max-w-2xl mx-auto">
             Join our exclusive waitlist and get early access to India's most comprehensive legal ecosystem. Plus, enjoy
@@ -98,7 +98,7 @@ export function WaitlistSection() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2">You're on the list!</h3>
                 <p className="text-primary-foreground/80 text-sm">
-                  We'll notify you as soon as lexvert launches. Get ready for the future of legal services!
+                  We'll notify you as soon as ravenslaw launches. Get ready for the future of legal services!
                 </p>
               </div>
             </div>

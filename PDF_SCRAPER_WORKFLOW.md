@@ -1,4 +1,4 @@
-# LexVert - Automated PDF Scraper & Parser Workflow
+# Ravenslaw - Automated PDF Scraper & Parser Workflow
 
 ## 🎯 Workflow Overview
 
@@ -317,7 +317,7 @@ async def run_pdf_scraper():
 
 **Content**:
 ```
-LexVert Daily Scraper Report
+Ravenslaw Daily Scraper Report
 ============================
 
 Run Date: 09-Mar-2026 06:00 AM to 06:45 AM
@@ -406,7 +406,7 @@ UPLOADS_MAX_SIZE_MB=1000  # Max PDF file size
 COURT_WEBSITE_URL=https://delhihighcourt.nic.in/web/cause-lists/cause-list
 
 # Email Notifications
-ADMIN_EMAIL=admin@lexvert.com
+ADMIN_EMAIL=admin@ravenslaw.com
 ENABLE_SCRAPER_NOTIFICATIONS=true
 ```
 

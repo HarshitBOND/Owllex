@@ -28,7 +28,7 @@ const sortOptions: { value: SortField; label: string }[] = [
 ];
 
 const isAutoCreatedClient = (client: Client) => {
-  return (client.email || "").endsWith("@autoclient.lexvert.local") || client.contact === "0000000000";
+  return (client.email || "").endsWith("@autoclient.ravenslaw.local") || client.contact === "0000000000";
 };
 
 const ClientDashboard = () => {

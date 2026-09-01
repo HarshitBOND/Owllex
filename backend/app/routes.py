@@ -1,5 +1,5 @@
 """
-LexVert API Routes — FastAPI endpoints for cause list parsing.
+Ravenslaw API Routes — FastAPI endpoints for cause list parsing.
 """
 
 import logging
@@ -17,7 +17,7 @@ from .config import settings
 from .models import CaseResponse, ErrorResponse, ParseResponse
 from .parser import parse_pdf
 
-logger = logging.getLogger("lexvert.routes")
+logger = logging.getLogger("ravenslaw.routes")
 
 router = APIRouter()
 

@@ -39,7 +39,7 @@ async function notifySupportTeam(payload: {
   const supportInbox = process.env.SUPPORT_TEAM_EMAIL?.trim();
   const apiKey = process.env.SENDGRID_API_KEY?.trim();
   const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim();
-  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "LexVert";
+  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "Ravenslaw";
 
   if (!supportInbox || !apiKey || !fromEmail) {
     return;
@@ -56,7 +56,7 @@ async function notifySupportTeam(payload: {
     replyTo: payload.email,
     subject: `[Fraud Report] ${payload.incidentTitle}`,
     text: [
-      "New fraud report received in LexVert.",
+      "New fraud report received in Ravenslaw.",
       "",
       `Report ID: ${payload.reportId}`,
       `From: ${payload.name} <${payload.email}>`,

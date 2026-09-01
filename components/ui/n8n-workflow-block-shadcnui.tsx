@@ -69,6 +69,8 @@ interface N8nWorkflowBlockProps {
   /** Label shown beside the status badge. */
   label?: string;
   className?: string;
+  /** Fires whenever nodes or connections change, so a parent can mirror the graph. */
+  onChange?: (nodes: WorkflowNode[], connections: WorkflowConnection[]) => void;
 }
 
 // Constants
@@ -148,7 +150,7 @@ const initialConnections: WorkflowConnection[] = [
   { from: "node-2", to: "node-3" },
 ];
 
-const colorClasses: Record<string, string> = {
+export const colorClasses: Record<string, string> = {
   emerald: "border-emerald-400/40 bg-emerald-400/10 text-emerald-400",
   blue: "border-blue-400/40 bg-blue-400/10 text-blue-400",
   amber: "border-amber-400/40 bg-amber-400/10 text-amber-400",
@@ -252,10 +254,19 @@ export function N8nWorkflowBlock({
   templates = nodeTemplates,
   label = "Workflow Builder",
   className = "",
+  onChange,
 }: N8nWorkflowBlockProps = {}) {
   const [nodes, setNodes] = useState<WorkflowNode[]>(nodesProp);
   const [connections, setConnections] =
     useState<WorkflowConnection[]>(connectionsProp);
+
+  // Mirror every graph change upward; a ref keeps the effect from re-running
+  // just because the parent passed a new callback identity.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current?.(nodes, connections);
+  }, [nodes, connections]);
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragStartPosition = useRef<{ x: number; y: number } | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);

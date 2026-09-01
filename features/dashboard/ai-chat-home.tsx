@@ -5,13 +5,24 @@ import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport, getToolName, isToolUIPart, type FileUIPart } from "ai"
+import {
+  DefaultChatTransport,
+  getToolName,
+  isToolUIPart,
+  type FileUIPart,
+  type UIDataTypes,
+  type UIMessage,
+  type UIMessagePart,
+  type UITools,
+} from "ai"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { AlertTriangle, ArrowDown, Check, Copy, Library, RefreshCw, Search, Users } from "lucide-react"
+import ChatReasoning from "@/components/ui/chat-reasoning"
 import { ClaudeChatInput, type ClaudeChatInputSubmission } from "@/components/ui/claude-style-chat-input"
 import { useAiChat } from "@/contexts/AiChatContext"
-import { DEFAULT_MODEL } from "@/lib/ai/models"
+import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
+import { useAllowedModels } from "@/hooks/useAllowedModels"
 
 const SUGGESTIONS = [
   "Draft an affidavit",
@@ -25,6 +36,8 @@ const TOOL_LABELS: Record<string, { running: string; done: string; icon: typeof 
   searchClients: { running: "Looking up your clients", done: "Looked up your clients", icon: Users },
   searchCorpusDocuments: { running: "Reading corpus documents", done: "Read corpus documents", icon: Library },
 }
+
+type ChatPart = UIMessagePart<UIDataTypes, UITools>
 
 const readAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -60,16 +73,62 @@ const markdownComponents = {
   td: (p: any) => <td className="border border-bg-300 px-2.5 py-1.5 align-top" {...p} />,
 }
 
+// Reasoning steps and tool calls share the collapsible thinking trail above the answer.
+const renderThinkingPart = (part: ChatPart, key: string | number) => {
+  if (part.type === "reasoning") {
+    return (
+      <p key={key} className="text-[13px] text-text-300 leading-relaxed py-1 whitespace-pre-wrap">
+        {(part as any).text}
+      </p>
+    )
+  }
+
+  if (isToolUIPart(part)) {
+    const name = getToolName(part)
+    const meta = TOOL_LABELS[name] ?? { running: `Running ${name}`, done: `Ran ${name}`, icon: Search }
+    const done = part.state === "output-available"
+    const failed = part.state === "output-error"
+    const Icon = meta.icon
+    return (
+      <div key={key} className="flex items-center gap-2 text-[13px] text-text-300 py-1">
+        {failed ? (
+          <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />
+        ) : done ? (
+          <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+        ) : (
+          <Icon className="w-3.5 h-3.5 animate-pulse shrink-0" />
+        )}
+        <span>
+          {failed ? `Could not ${meta.running.toLowerCase()}` : done ? meta.done : `${meta.running}…`}
+        </span>
+      </div>
+    )
+  }
+
+  return null
+}
+
 export function AiChatHome() {
   const { user } = useUser()
   const router = useRouter()
-  const { activeId, conversations, refresh, corpora, activeCorpusId, setActiveCorpusId } = useAiChat()
+  const { activeId, conversations, loaded, refresh, corpora, activeCorpusId, setActiveCorpusId } = useAiChat()
   const reduceMotion = useReducedMotion()
 
-  const [model, setModel] = useState<string>(DEFAULT_MODEL)
+  const [model, setModel] = useState<string>("fast")
+  const allowedModels = useAllowedModels()
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const atBottomRef = useRef(true)
+
+  // Messages already seen for a conversation, so switching back is instant instead of
+  // blanking to the greeting screen while a refetch is in flight.
+  const cacheRef = useRef(new Map<string, { messages: UIMessage[]; partial: boolean }>())
+  const conversationsRef = useRef(conversations)
+  conversationsRef.current = conversations
+  const loadedRef = useRef(loaded)
+  loadedRef.current = loaded
 
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/ai/chat", body: { model, corpusId: activeCorpusId } }),
@@ -82,27 +141,64 @@ export function AiChatHome() {
     onFinish: () => refresh(),
   })
 
-  useEffect(() => {
-    let cancelled = false
-    setMessages([])
-    if (!conversations.some((c) => c.id === activeId)) return
+  const busy = status === "submitted" || status === "streaming"
 
-    fetch(`/api/ai/conversations/${activeId}`)
+  useEffect(() => {
+    if (!messages.length) return
+    cacheRef.current.set(activeId, { messages, partial: busy })
+  }, [activeId, messages, busy])
+
+  // Runs only when the conversation actually changes. Refreshing the sidebar list must
+  // never reach in here and wipe a live thread.
+  useEffect(() => {
+    const id = activeId
+    const cached = cacheRef.current.get(id)
+    const known = conversationsRef.current.some((c) => c.id === id)
+
+    setAtBottom(true)
+    atBottomRef.current = true
+    setMessages(cached ? cached.messages : [])
+
+    // A locally created id that is not in the list is a brand new chat: nothing to load.
+    if (!cached && loadedRef.current && !known) {
+      setLoadingHistory(false)
+      return
+    }
+    if (cached && !cached.partial) {
+      setLoadingHistory(false)
+      return
+    }
+
+    const controller = new AbortController()
+    let aborted = false
+    setLoadingHistory(!cached)
+
+    fetch(`/api/ai/conversations/${id}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!cancelled && d?.conversation?.messages) setMessages(d.conversation.messages)
+        const stored = d?.conversation?.messages
+        if (Array.isArray(stored) && stored.length) {
+          cacheRef.current.set(id, { messages: stored, partial: false })
+          setMessages(stored)
+        }
+        setLoadingHistory(false)
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!aborted) setLoadingHistory(false)
+      })
+
     return () => {
-      cancelled = true
+      aborted = true
+      controller.abort()
     }
-  }, [activeId, conversations, setMessages])
+  }, [activeId, setMessages])
 
   useEffect(() => {
-    if (atBottom) {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-    }
-  }, [messages, status, atBottom])
+    if (!atBottomRef.current) return
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: busy ? "smooth" : "auto" })
+  }, [messages, status, busy, loadingHistory])
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours()
@@ -134,34 +230,59 @@ export function AiChatHome() {
       }))
     )
 
+    setAtBottom(true)
+    atBottomRef.current = true
     sendMessage({ text: text + pasted, files: files.length ? files : undefined })
   }
 
-  const copy = (id: string, text: string) => {
-    navigator.clipboard.writeText(text)
+  const copy = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      return
+    }
     setCopiedId(id)
     setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500)
   }
 
   const hasMessages = messages.length > 0
-  const busy = status === "submitted" || status === "streaming"
+  const showThread = hasMessages || loadingHistory
+  const lastAssistantIndex = messages.map((m) => m.role).lastIndexOf("assistant")
   const spring = reduceMotion
     ? { duration: 0 }
     : { type: "spring" as const, stiffness: 260, damping: 30 }
 
   return (
     <div className="flex flex-col h-full min-h-0 relative">
-      {hasMessages && (
+      {showThread && (
         <div
           ref={scrollRef}
           onScroll={(e) => {
             const el = e.currentTarget
-            setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 100)
+            const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+            atBottomRef.current = bottom
+            setAtBottom(bottom)
           }}
           className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 py-6"
         >
           <div className="max-w-2xl mx-auto flex flex-col gap-5">
-            {messages.map((m) => {
+            {loadingHistory && !hasMessages && (
+              <div className="flex flex-col gap-5 animate-pulse" aria-hidden>
+                <div className="self-end h-10 w-2/5 rounded-2xl rounded-br-md bg-bg-200" />
+                <div className="flex flex-col gap-2">
+                  <div className="h-3.5 w-11/12 rounded bg-bg-200" />
+                  <div className="h-3.5 w-4/5 rounded bg-bg-200" />
+                  <div className="h-3.5 w-2/3 rounded bg-bg-200" />
+                </div>
+                <div className="self-end h-10 w-1/3 rounded-2xl rounded-br-md bg-bg-200" />
+                <div className="flex flex-col gap-2">
+                  <div className="h-3.5 w-10/12 rounded bg-bg-200" />
+                  <div className="h-3.5 w-3/5 rounded bg-bg-200" />
+                </div>
+              </div>
+            )}
+
+            {messages.map((m, index) => {
               const textContent = m.parts
                 .filter((p) => p.type === "text")
                 .map((p: any) => p.text)
@@ -194,6 +315,11 @@ export function AiChatHome() {
                 )
               }
 
+              const thinkingParts = m.parts.filter(
+                (p) => p.type === "reasoning" || isToolUIPart(p)
+              ) as ChatPart[]
+              const thinkingOpen = index === messages.length - 1 && busy && !textContent
+
               return (
                 <motion.div
                   key={m.id}
@@ -202,30 +328,14 @@ export function AiChatHome() {
                   transition={{ duration: 0.25 }}
                   className="group flex flex-col gap-2"
                 >
-                  {m.parts.filter(isToolUIPart).map((part, i) => {
-                    const name = getToolName(part)
-                    const meta = TOOL_LABELS[name] ?? { running: `Running ${name}`, done: `Ran ${name}`, icon: Search }
-                    const done = part.state === "output-available"
-                    const failed = part.state === "output-error"
-                    const Icon = meta.icon
-                    return (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: -4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-2 text-[13px] text-text-300"
-                      >
-                        {failed ? (
-                          <AlertTriangle className="w-3.5 h-3.5 text-destructive" />
-                        ) : done ? (
-                          <Check className="w-3.5 h-3.5 text-accent" />
-                        ) : (
-                          <Icon className="w-3.5 h-3.5 animate-pulse" />
-                        )}
-                        <span>{failed ? `Couldn't ${meta.running.toLowerCase()}` : done ? meta.done : `${meta.running}…`}</span>
-                      </motion.div>
-                    )
-                  })}
+                  {thinkingParts.length > 0 && (
+                    <ChatReasoning
+                      partsInAccordion={thinkingParts}
+                      defaultValue={thinkingOpen ? "reasoning" : undefined}
+                      renderMessagePart={renderThinkingPart}
+                      className="[&>div]:border-b-0"
+                    />
+                  )}
 
                   {textContent && (
                     <div className="text-sm text-text-100 leading-relaxed">
@@ -244,13 +354,15 @@ export function AiChatHome() {
                       >
                         {copiedId === m.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
-                      <button
-                        onClick={() => regenerate()}
-                        className="p-1.5 rounded-md text-text-400 hover:text-text-100 hover:bg-bg-200 transition-colors"
-                        aria-label="Regenerate response"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </button>
+                      {index === lastAssistantIndex && (
+                        <button
+                          onClick={() => regenerate()}
+                          className="p-1.5 rounded-md text-text-400 hover:text-text-100 hover:bg-bg-200 transition-colors"
+                          aria-label="Regenerate response"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -266,31 +378,37 @@ export function AiChatHome() {
               </div>
             )}
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-                <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-                <div className="flex-1 text-[13px] text-text-200">
-                  <p className="font-medium text-text-100">Something went wrong</p>
-                  <p className="text-text-300">{error.message || "The assistant couldn't respond."}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    clearError()
-                    regenerate()
-                  }}
-                  className="text-[13px] font-medium text-accent hover:underline shrink-0"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
+            {error &&
+              (() => {
+                const limit = parseAiLimitError(error.message)
+                if (limit) return <AiLimitNotice limit={limit} />
+                return (
+                  <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+                    <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                    <div className="flex-1 text-[13px] text-text-200">
+                      <p className="font-medium text-text-100">Something went wrong</p>
+                      <p className="text-text-300">{error.message || "The assistant couldn't respond."}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        clearError()
+                        regenerate()
+                      }}
+                      className="text-[13px] font-medium text-accent hover:underline shrink-0"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )
+              })()}
           </div>
         </div>
       )}
 
-      {hasMessages && !atBottom && (
+      {showThread && !atBottom && (
         <button
           onClick={() => {
+            atBottomRef.current = true
             setAtBottom(true)
             scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
           }}
@@ -305,13 +423,13 @@ export function AiChatHome() {
         layout={!reduceMotion}
         transition={spring}
         className={
-          hasMessages
+          showThread
             ? "shrink-0 px-4 pb-4 pt-2"
             : "flex-1 flex flex-col items-center justify-center px-4 py-8"
         }
       >
         <AnimatePresence mode="popLayout">
-          {!hasMessages && (
+          {!showThread && (
             <motion.div
               key="hero"
               initial={{ opacity: 0, y: 8 }}
@@ -342,11 +460,13 @@ export function AiChatHome() {
             corpora={corpora}
             activeCorpusId={activeCorpusId}
             onSelectCorpus={setActiveCorpusId}
+            allowedModels={allowedModels}
+            defaultModel="fast"
           />
         </motion.div>
 
         <AnimatePresence>
-          {!hasMessages && (
+          {!showThread && (
             <motion.div
               key="suggestions"
               initial={{ opacity: 0 }}
@@ -399,6 +519,7 @@ export function AiChatHome() {
       </motion.div>
 
       <div aria-live="polite" className="sr-only">
+        {loadingHistory && "Loading conversation"}
         {status === "submitted" && "Assistant is thinking"}
         {status === "streaming" && "Assistant is responding"}
         {status === "ready" && hasMessages && "Response complete"}

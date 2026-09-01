@@ -31,7 +31,7 @@ export function HeroSection() {
 
             <Reveal delay={0.16}>
               <p className="mt-6 text-lg leading-relaxed text-muted-foreground lg:max-w-xl">
-                From document generation to lawyer consultations and nationwide case tracking, lexvert brings the full
+                From document generation to lawyer consultations and nationwide case tracking, ravenslaw brings the full
                 weight of legal expertise to your doorstep &mdash; backed by technology, delivered with the gravity it
                 deserves.
               </p>

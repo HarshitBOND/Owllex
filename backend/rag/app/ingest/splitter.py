@@ -1,10 +1,11 @@
 from dotenv import load_dotenv
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
-
+# SemanticChunker embedded every sentence just to find split points, and then Chroma
+# embedded the resulting chunks again — two full embedding passes per document.
+# Recursive splitting costs nothing and keeps retrieval quality comparable at this chunk size.
 def semantic_chunk(text):
-    splitter = SemanticChunker(OpenAIEmbeddings(model="text-embedding-3-small"))
+    splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
     return splitter.split_text(text)

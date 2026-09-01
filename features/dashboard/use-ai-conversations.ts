@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Conversation } from "./ai-chat-types"
 
 const newChatId = () =>
@@ -16,7 +16,14 @@ export function useAiConversations(userId: string | null | undefined) {
     const res = await fetch("/api/ai/conversations")
     if (!res.ok) return
     const data = await res.json()
-    setConversations(data.conversations ?? [])
+    const next: Conversation[] = data.conversations ?? []
+    // Keep the old array when nothing changed; a new identity re-renders every consumer.
+    setConversations((prev) =>
+      prev.length === next.length &&
+      prev.every((c, i) => c.id === next[i].id && c.title === next[i].title && c.updatedAt === next[i].updatedAt)
+        ? prev
+        : next
+    )
   }, [])
 
   useEffect(() => {
@@ -77,16 +84,28 @@ export function useAiConversations(userId: string | null | undefined) {
     })
   }, [])
 
-  return {
-    conversations,
-    activeId,
-    loaded,
-    refresh,
-    startNewConversation,
-    selectConversation,
-    deleteConversation,
-    renameConversation,
-  }
+  return useMemo(
+    () => ({
+      conversations,
+      activeId,
+      loaded,
+      refresh,
+      startNewConversation,
+      selectConversation,
+      deleteConversation,
+      renameConversation,
+    }),
+    [
+      conversations,
+      activeId,
+      loaded,
+      refresh,
+      startNewConversation,
+      selectConversation,
+      deleteConversation,
+      renameConversation,
+    ]
+  )
 }
 
 export type UseAiConversationsReturn = ReturnType<typeof useAiConversations>

@@ -1,4 +1,4 @@
-# LexVert RAG Pipeline — Concept & Architecture
+# Ravenslaw RAG Pipeline — Concept & Architecture
 
 Status: **acquisition is built; the pipeline is a thin prototype; retrieval is still design.** This document is the working reference for building a legal-document RAG system that hallucinates as little as possible.
 

@@ -15,7 +15,7 @@ export function ContactInfoPanel({ onTopicSelect }: { onTopicSelect: (topic: str
             </div>
             <div>
               <p className="font-medium text-sm text-gray-900">Email</p>
-              <p className="text-sm text-gray-500">support@lexvert.com</p>
+              <p className="text-sm text-gray-500">support@ravenslaw.com</p>
             </div>
           </div>
           <div className="flex items-start gap-3">

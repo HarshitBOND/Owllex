@@ -14,7 +14,7 @@ import {
 } from "docx"
 import type { Align, Block, Inline } from "./htmlBlocks"
 
-const NUMBERING = "lexvert-ordered"
+const NUMBERING = "ravenslaw-ordered"
 
 const alignmentOf = (align: Align) =>
   align === "center" ? AlignmentType.CENTER : align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT

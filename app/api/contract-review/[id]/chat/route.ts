@@ -6,7 +6,9 @@ import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import { modelFor } from "@/lib/ai/provider"
+import { resolveModel } from "@/lib/ai/models"
 import { CONTRACT_REVIEW_SYSTEM_PROMPT, CONTRACT_CHAT_TOOL_RULES } from "@/lib/ai/prompts"
+import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 export const maxDuration = 60
 
@@ -54,6 +56,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!parsed.success) return parsed.response
   const { model, documentHtml, messages } = parsed.data
 
+  const gate = await checkAiAllowance(userContext.clerkUid)
+  if (!gate.allowed) return aiLimitResponse(gate)
+  const modelKey = resolveModel(gate.snapshot.plan, model, "balanced")
+
   await connectMongoWithRetry()
   const review = await ContractReview.findOne({ _id: id, clerkUid: userContext.clerkUid })
   if (!review) {
@@ -75,9 +81,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ].join("\n\n")
 
   const result = streamText({
-    model: modelFor(model),
+    model: modelFor(modelKey),
     system,
-    messages: await convertToModelMessages(messages as UIMessage[]),
+    messages: await convertToModelMessages(messages.slice(-40) as UIMessage[]),
     tools: {
       proposeFix: tool({
         description:
@@ -96,6 +102,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     },
     stopWhen: stepCountIs(3),
     experimental_transform: smoothStream({ chunking: "word" }),
+    onFinish: async ({ totalUsage }) => {
+      await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-chat", modelKey, usage: totalUsage })
+    },
   })
 
   return result.toUIMessageStreamResponse({

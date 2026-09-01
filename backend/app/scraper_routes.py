@@ -1,5 +1,5 @@
 """
-LexVert Scraper API Routes — endpoints for PDF scraper management.
+Ravenslaw Scraper API Routes — endpoints for PDF scraper management.
 """
 
 import logging
@@ -20,7 +20,7 @@ from .scraper import (
     parse_causelist_bulk, get_import_progress, get_running_import_count, get_active_imports_snapshot,
 )
 
-logger = logging.getLogger("lexvert.scraper_routes")
+logger = logging.getLogger("ravenslaw.scraper_routes")
 
 scraper_router = APIRouter()
 

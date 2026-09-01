@@ -4,6 +4,7 @@ import { z } from "zod"
 import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
 import { findCases, findClients } from "@/lib/ai/corpus-match"
 import { modelFor } from "@/lib/ai/provider"
+import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 const bodySchema = z.object({
   description: z.string().trim().min(1).max(4000),
@@ -24,6 +25,10 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return parsed.response
 
   const { description } = parsed.data
+
+  const gate = await checkAiAllowance(userContext.clerkUid)
+  if (!gate.allowed) return aiLimitResponse(gate)
+
   const cases = await findCases(userContext.clerkUid, description, 40)
   const clients = await findClients(userContext.clerkUid, description, 40)
 
@@ -34,7 +39,7 @@ export async function POST(request: NextRequest) {
 
   if (process.env.OPENAI_API_KEY) {
     try {
-      const { object } = await generateObject({
+      const { object, usage } = await generateObject({
         model: modelFor("fast"),
         schema: z.object({
           name: z.string().max(120),
@@ -68,6 +73,8 @@ export async function POST(request: NextRequest) {
           "Use only ids that appear above.",
         ].join("\n"),
       })
+
+      await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "corpus-preview", modelKey: "fast", usage })
 
       keepCases = new Set(object.caseIds.filter((id) => keepCases.has(id)))
       keepClients = new Set(object.clientIds.filter((id) => keepClients.has(id)))

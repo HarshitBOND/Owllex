@@ -456,7 +456,7 @@ export default function MergedTaskWorkspace({ tasks, loading, onAddTask, onRefre
             </div>
             <div>
               <h1 className="flex items-center gap-2 text-xl font-bold text-foreground sm:text-2xl">
-                <span>Lexvert</span>
+                <span>Ravenslaw</span>
                 <span>Task Workspace</span>
                 <Badge variant="secondary" className="text-[10px]">
                   <Sparkles className="mr-1 h-3 w-3" />

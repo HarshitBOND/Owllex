@@ -1,18 +1,23 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { Check, ChevronDown, FileCheck2, Library, Plus } from "lucide-react"
 
 import Sidebar from "@/components/layout/sidebar"
 import Navbar from "@/components/layout/navbar"
-import { N8nWorkflowBlock } from "@/components/ui/n8n-workflow-block-shadcnui"
+import {
+  N8nWorkflowBlock,
+  type WorkflowConnection,
+  type WorkflowNode,
+} from "@/components/ui/n8n-workflow-block-shadcnui"
 import {
   initialWorkflowConnections,
   initialWorkflowNodes,
   legalNodeTemplates,
 } from "@/lib/workflow-nodes"
+import WorkflowAiChatPanel from "@/features/ai-workflow/components/WorkflowAiChatPanel"
 import { useAiChat } from "@/contexts/AiChatContext"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
@@ -24,6 +29,23 @@ export default function AiWorkflowPage() {
   const { corpora } = useAiChat()
   const [pickerOpen, setPickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Mirrors the canvas's live graph (manual edits included) so the AI chat
+  // panel always sends accurate context, and lets an AI proposal replace it.
+  const [workflow, setWorkflow] = useState<{ nodes: WorkflowNode[]; connections: WorkflowConnection[] }>({
+    nodes: initialWorkflowNodes,
+    connections: initialWorkflowConnections,
+  })
+  const [canvasRevision, setCanvasRevision] = useState(0)
+
+  const handleCanvasChange = useCallback((nodes: WorkflowNode[], connections: WorkflowConnection[]) => {
+    setWorkflow({ nodes, connections })
+  }, [])
+
+  const applyAiWorkflow = useCallback((nodes: WorkflowNode[], connections: WorkflowConnection[]) => {
+    setWorkflow({ nodes, connections })
+    setCanvasRevision((r) => r + 1)
+  }, [])
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -133,17 +155,24 @@ export default function AiWorkflowPage() {
               Chain the AI tools into a repeatable pipeline — intake a document, extract
               its clauses, check risk and citations, then draft and send the response.
               Drag nodes to rearrange them, click a dot to pull a wire to another node,
-              and click a wire to break it. Pick a corpus to run it against a specific matter.
+              and click a wire to break it, or describe the change to the assistant on the right.
             </p>
           </div>
 
-          <N8nWorkflowBlock
-            label="Legal Workflow Builder"
-            nodes={initialWorkflowNodes}
-            connections={initialWorkflowConnections}
-            templates={legalNodeTemplates}
-            className="bg-white dark:bg-card border-gray-200 dark:border-border"
-          />
+          <div className="flex flex-col lg:flex-row gap-3 md:gap-4">
+            <div className="flex-1 min-w-0">
+              <N8nWorkflowBlock
+                key={canvasRevision}
+                label="Legal Workflow Builder"
+                nodes={workflow.nodes}
+                connections={workflow.connections}
+                templates={legalNodeTemplates}
+                onChange={handleCanvasChange}
+                className="bg-white dark:bg-card border-gray-200 dark:border-border"
+              />
+            </div>
+            <WorkflowAiChatPanel chatId="ai-workflow" currentWorkflow={workflow} onApply={applyAiWorkflow} />
+          </div>
         </div>
       </div>
     </div>

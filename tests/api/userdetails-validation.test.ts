@@ -36,7 +36,7 @@ describe("Userdetails validation schemas", () => {
       name: "Rahul Sharma",
       email: "rahul@example.com",
       contact: "9999999999",
-      company: "LexVert LLP",
+      company: "Ravenslaw LLP",
       address: {
         city: "New Delhi",
       },

@@ -34,7 +34,7 @@ export function HowItWorksSection() {
         <Reveal className="mx-auto max-w-2xl text-center mb-16">
           <p className="text-sm font-semibold uppercase tracking-widest text-primary">The process</p>
           <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            How lexvert works
+            How ravenslaw works
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
             Our integrated platform handles everything from document creation to delivery. One account, unlimited

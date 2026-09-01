@@ -5,33 +5,35 @@ import { Button } from "@/components/ui/button"
 import { Check, Crown, Sparkles, ArrowRight } from "lucide-react"
 import Link from "next/link"
 
+// Keep in sync with PLAN_CONFIG in app/api/lib/services/subscription.ts
 const plans = [
   {
     name: "Starter",
-    monthly: 99,
-    yearly: 79,
-    description: "Perfect for solo practitioners starting out",
+    monthly: 2000,
+    yearly: 1667,
+    description: "For solo practitioners starting out",
     features: [
-      "Up to 25 active cases",
-      "50 client profiles",
-      "Basic case tracking",
-      "Document generation",
-      "Email support",
+      "Up to 50 active cases",
+      "AI assistant — Fast & Balanced models",
+      "₹1,200 of AI usage every month",
+      "5 Deep Research runs per month",
+      "Index up to 50 documents per month",
+      "Cause-list parser & automation",
     ],
-    cta: "Get Started Free",
+    cta: "Get Starter",
     popular: false,
   },
   {
     name: "Professional",
-    monthly: 299,
-    yearly: 239,
-    description: "For growing law firms with active caseloads",
+    monthly: 4999,
+    yearly: 4166,
+    description: "For advocates who use AI daily",
     features: [
-      "Unlimited cases",
-      "Unlimited clients",
-      "Advanced analytics",
-      "Invoice management",
-      "AI legal assistant",
+      "Up to 250 active cases",
+      "All AI models, including Capable",
+      "₹3,000 of AI usage every month",
+      "25 Deep Research runs per month",
+      "Index up to 250 documents per month",
       "Priority support",
     ],
     cta: "Get Professional",
@@ -39,18 +41,18 @@ const plans = [
   },
   {
     name: "Enterprise",
-    monthly: 999,
-    yearly: 799,
-    description: "For large firms and legal departments",
+    monthly: 11999,
+    yearly: 9999,
+    description: "For firms and heavy research practices",
     features: [
-      "Everything in Professional",
-      "Multi-user teams",
-      "Custom workflows",
-      "API access",
-      "Dedicated account manager",
-      "SLA guarantee",
+      "Unlimited cases",
+      "All AI models, including Capable",
+      "₹7,500 of AI usage every month",
+      "100 Deep Research runs per month",
+      "Index up to 1,000 documents per month",
+      "Priority support",
     ],
-    cta: "Contact Sales",
+    cta: "Get Enterprise",
     popular: false,
   },
 ]
@@ -82,7 +84,7 @@ export function PricingSection() {
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${yearly ? "translate-x-6.5" : "translate-x-0.5"}`} />
           </button>
           <span className={yearly ? "text-gray-900 text-sm font-medium" : "text-gray-400 text-sm"}>
-            Yearly <span className="text-green-600 font-semibold text-xs">Save 20%</span>
+            Yearly <span className="text-green-600 font-semibold text-xs">2 months free</span>
           </span>
         </div>
       </div>

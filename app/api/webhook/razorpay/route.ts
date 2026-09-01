@@ -79,10 +79,12 @@ const resolveTransaction = async ({
   transactionId,
   paymentLinkId,
   paymentId,
+  orderId,
 }: {
   transactionId: string | null
   paymentLinkId: string | null
   paymentId: string | null
+  orderId: string | null
 }) => {
   if (transactionId) {
     const transaction = await Transaction.findById(transactionId).exec()
@@ -98,6 +100,10 @@ const resolveTransaction = async ({
       { checkoutSessionId: paymentLinkId },
       { "metadata.razorpayPaymentLinkId": paymentLinkId },
     )
+  }
+
+  if (orderId) {
+    orFilters.push({ checkoutSessionId: orderId }, { "metadata.razorpayOrderId": orderId })
   }
 
   if (paymentId) {
@@ -136,6 +142,7 @@ const getEventData = (webhookBody: Record<string, unknown>) => {
     notes,
     paymentId,
     paymentLinkId,
+    orderId: toStringOrNull(payment?.order_id),
   }
 }
 
@@ -211,14 +218,14 @@ const handleInvoicePaymentCompleted = async ({
 }
 
 const handlePaymentCaptured = async (webhookBody: Record<string, unknown>) => {
-  const { payment, notes, paymentId, paymentLinkId } = getEventData(webhookBody)
+  const { payment, notes, paymentId, paymentLinkId, orderId } = getEventData(webhookBody)
 
   if (!payment) {
     return
   }
 
   const transactionId = toStringOrNull(notes.transactionId)
-  const transaction = await resolveTransaction({ transactionId, paymentLinkId, paymentId })
+  const transaction = await resolveTransaction({ transactionId, paymentLinkId, paymentId, orderId })
 
   if (transaction) {
     const amount = convertMinorToMajorAmount(
@@ -277,13 +284,13 @@ const handlePaymentCaptured = async (webhookBody: Record<string, unknown>) => {
 }
 
 const handlePaymentFailed = async (webhookBody: Record<string, unknown>) => {
-  const { payment, notes, paymentId, paymentLinkId } = getEventData(webhookBody)
+  const { payment, notes, paymentId, paymentLinkId, orderId } = getEventData(webhookBody)
   if (!payment) {
     return
   }
 
   const transactionId = toStringOrNull(notes.transactionId)
-  const transaction = await resolveTransaction({ transactionId, paymentLinkId, paymentId })
+  const transaction = await resolveTransaction({ transactionId, paymentLinkId, paymentId, orderId })
   const failureReason = getPaymentFailureReason(payment)
 
   if (transaction) {

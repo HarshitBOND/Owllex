@@ -9,9 +9,11 @@ import CorpusDocument from "@/app/api/lib/models/corpus-document"
 import Case from "@/app/api/lib/models/case"
 import Client from "@/app/api/lib/models/client"
 import { modelFor } from "@/lib/ai/provider"
+import { resolveModel } from "@/lib/ai/models"
 import { CHAT_SYSTEM_PROMPT, corpusContextBlock } from "@/lib/ai/prompts"
 import { CASE_FIELDS, CLIENT_FIELDS } from "@/lib/ai/corpus-match"
 import { legalTools } from "@/lib/ai/tools"
+import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 export const maxDuration = 60
 
@@ -57,6 +59,10 @@ export async function POST(request: NextRequest) {
 
   const { id: chatId, model, messages, corpusId } = parsed.data
 
+  const gate = await checkAiAllowance(userContext.clerkUid)
+  if (!gate.allowed) return aiLimitResponse(gate)
+  const modelKey = resolveModel(gate.snapshot.plan, model, "fast")
+
   let system = CHAT_SYSTEM_PROMPT
   let activeCorpusId: string | null = null
 
@@ -65,8 +71,8 @@ export async function POST(request: NextRequest) {
     const corpus = await Corpus.findOne({ clerkUid: userContext.clerkUid, corpusId }).lean<any>()
     if (corpus) {
       activeCorpusId = corpusId
-      const cases = await Case.find({ _id: { $in: corpus.caseIds ?? [] } }).select(CASE_FIELDS).lean()
-      const clients = await Client.find({ _id: { $in: corpus.clientIds ?? [] } }).select(CLIENT_FIELDS).lean()
+      const cases = await Case.find({ _id: { $in: corpus.caseIds ?? [] } }).select(CASE_FIELDS).limit(25).lean()
+      const clients = await Client.find({ _id: { $in: corpus.clientIds ?? [] } }).select(CLIENT_FIELDS).limit(25).lean()
       const documentCount = await CorpusDocument.countDocuments({
         clerkUid: userContext.clerkUid,
         corpusId,
@@ -86,12 +92,15 @@ ${corpusContextBlock({
   }
 
   const result = streamText({
-    model: modelFor(model),
+    model: modelFor(modelKey),
     system,
-    messages: await convertToModelMessages(messages as UIMessage[]),
+    messages: await convertToModelMessages(messages.slice(-40) as UIMessage[]),
     tools: legalTools(userContext.clerkUid, activeCorpusId),
     stopWhen: stepCountIs(6),
     experimental_transform: smoothStream({ chunking: "word" }),
+    onFinish: async ({ totalUsage }) => {
+      await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "chat", modelKey, usage: totalUsage })
+    },
   })
 
   return result.toUIMessageStreamResponse({

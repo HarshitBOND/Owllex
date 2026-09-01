@@ -43,7 +43,7 @@ const generateInvoicePdfBuffer = (invoice: any) =>
     const issueDate = new Date(invoice.issueDate)
     const dueDate = new Date(invoice.dueDate)
 
-    doc.fontSize(20).text("LexVert Invoice", { align: "left" })
+    doc.fontSize(20).text("Ravenslaw Invoice", { align: "left" })
     doc.moveDown(0.4)
     doc.fontSize(10).fillColor("#555").text(`Invoice Number: ${invoice.invoiceNumber}`)
     doc.text(`Issue Date: ${issueDate.toLocaleDateString("en-IN")}`)
@@ -151,7 +151,7 @@ const sendInvoiceEmail = async ({
 
   const apiKey = process.env.SENDGRID_API_KEY?.trim()
   const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim()
-  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "LexVert"
+  const fromName = process.env.NOTIFICATION_FROM_NAME?.trim() || "Ravenslaw"
 
   if (!apiKey || !fromEmail) {
     return { sent: false, reason: "sendgrid-not-configured" }
@@ -165,7 +165,7 @@ const sendInvoiceEmail = async ({
   const lines = [
     `Hello ${invoice.clientName || "Client"},`,
     "",
-    `Invoice ${invoice.invoiceNumber} has been issued from LexVert.`,
+    `Invoice ${invoice.invoiceNumber} has been issued from Ravenslaw.`,
     `Issue date: ${new Date(invoice.issueDate).toLocaleDateString("en-IN")}`,
     `Due date: ${new Date(invoice.dueDate).toLocaleDateString("en-IN")}`,
     `Total: ${toDisplayCurrency(Number(invoice.total || 0), currency)}`,
@@ -176,12 +176,12 @@ const sendInvoiceEmail = async ({
     lines.push("", `Pay online: ${paymentLinkUrl}`)
   }
 
-  lines.push("", "Regards,", "LexVert")
+  lines.push("", "Regards,", "Ravenslaw")
 
   await sgMail.send({
     to: toEmail,
     from: { email: fromEmail, name: fromName },
-    subject: `Invoice ${invoice.invoiceNumber} from LexVert`,
+    subject: `Invoice ${invoice.invoiceNumber} from Ravenslaw`,
     text: lines.join("\n"),
   })
 

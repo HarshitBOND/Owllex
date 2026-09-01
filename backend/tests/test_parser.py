@@ -1,5 +1,5 @@
 """
-LexVert Parser Accuracy Tests
+Ravenslaw Parser Accuracy Tests
 ==============================
 Validates that the production parser produces the same accuracy baseline
 as the original dhc_parser.py:
@@ -8,7 +8,7 @@ as the original dhc_parser.py:
   - All case numbers valid: 100%
 
 Run:
-    cd lexvert_backend
+    cd ravenslaw_backend
     python -m pytest tests/ -v
     # or
     python tests/test_parser.py

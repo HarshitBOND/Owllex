@@ -22,11 +22,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
-interface LexvertTodoTaskProps {
+interface RavenslawTodoTaskProps {
   className?: string;
 }
 
-export const LexvertTodoTask: React.FC<LexvertTodoTaskProps> = ({ className }) => {
+export const RavenslawTodoTask: React.FC<RavenslawTodoTaskProps> = ({ className }) => {
   const {
     tasks, stats, filter, setFilter, sortBy, setSortBy, sortDirection, setSortDirection,
     settings, setSettings, addTask, updateTask, deleteTask, toggleComplete,
@@ -99,7 +99,7 @@ export const LexvertTodoTask: React.FC<LexvertTodoTaskProps> = ({ className }) =
               </div>
               <div>
                 <h1 className="text-2xl font-bold flex items-center gap-2">
-                  <span className="text-gradient">Lexvert</span>
+                  <span className="text-gradient">Ravenslaw</span>
                   <span>Legal Tasks</span>
                   <Badge variant="secondary" className="text-[10px]">
                     <Sparkles className="w-3 h-3 mr-1" />
@@ -174,11 +174,11 @@ export const LexvertTodoTask: React.FC<LexvertTodoTaskProps> = ({ className }) =
             transition={{ delay: 0.5 }}
             className="text-center py-4 text-xs text-muted-foreground"
           >
-            <p>Built with ⚖️ by Lexvert • Drag tasks to reorder • Click to edit</p>
+            <p>Built with ⚖️ by Ravenslaw • Drag tasks to reorder • Click to edit</p>
           </motion.footer>
         </div>
       </div>
   );
 };
 
-export default LexvertTodoTask;
+export default RavenslawTodoTask;

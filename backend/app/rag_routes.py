@@ -1,5 +1,5 @@
 """
-LexVert API Routes - RAG document ingestion, retrieval and health.
+Ravenslaw API Routes - RAG document ingestion, retrieval and health.
 """
 
 import logging
@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from .config import settings
 
-logger = logging.getLogger("lexvert.rag")
+logger = logging.getLogger("ravenslaw.rag")
 
 rag_router = APIRouter()
 

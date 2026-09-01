@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico?v=2",
   },
-  title: "LexVert - Your Complete Legal Ecosystem",
+  title: "Ravenslaw - Your Complete Legal Ecosystem",
   description:
     "Draft documents, track cases, find lawyers, and get doorstep delivery — all powered by cutting-edge technology.",
 }
