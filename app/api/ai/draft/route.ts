@@ -9,10 +9,10 @@ import { modelFor } from "@/lib/ai/provider"
 import { resolveModel } from "@/lib/ai/models"
 import { DRAFTING_SYSTEM_PROMPT, DRAFT_TOOL_RULES } from "@/lib/ai/prompts"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
+import { trimDocumentForPrompt } from "@/lib/ai/document-context"
+import { messagesForStorage, stripEphemeralParts, MAX_STORED_MESSAGES } from "@/lib/ai/message-trim"
 
 export const maxDuration = 60
-
-const MAX_CONTEXT_CHARS = 60000
 
 const bodySchema = z.object({
   id: z.string().min(1).max(64),
@@ -59,16 +59,28 @@ export async function POST(request: NextRequest) {
 
   // Sanitized before it reaches the model, so a poisoned document body cannot
   // smuggle markup or handlers into the prompt.
-  const safeDocument = sanitizeDocumentHtml(documentHtml).slice(-MAX_CONTEXT_CHARS)
+  const safeDocument = trimDocumentForPrompt(sanitizeDocumentHtml(documentHtml))
 
-  const system = safeDocument
-    ? `${DRAFTING_SYSTEM_PROMPT}\n\n${DRAFT_TOOL_RULES}\n\n<current_document>\n${safeDocument}\n</current_document>`
-    : `${DRAFTING_SYSTEM_PROMPT}\n\n${DRAFT_TOOL_RULES}\n\n<current_document>\n(The document is empty.)\n</current_document>`
+  // The system prompt is kept byte-identical across every request. The document
+  // used to live in here, and because it changes on each turn it invalidated the
+  // cached prefix -- system, tool definitions and the whole history behind it --
+  // on every single call. Sending it as the last message instead means
+  // everything before it caches at a tenth of the input rate, and only the
+  // document itself is charged in full.
+  const system = `${DRAFTING_SYSTEM_PROMPT}\n\n${DRAFT_TOOL_RULES}`
+
+  const history = await convertToModelMessages(
+    stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[])
+  )
+  const documentMessage = {
+    role: "user" as const,
+    content: `<current_document>\n${safeDocument || "(The document is empty.)"}\n</current_document>`,
+  }
 
   const result = streamText({
     model: modelFor(modelKey),
     system,
-    messages: await convertToModelMessages(messages.slice(-40) as UIMessage[]),
+    messages: [...history, documentMessage],
     tools: {
       // No execute: this streams to the client and waits for the advocate to
       // accept or discard the redline before anything touches the editor.
@@ -115,7 +127,7 @@ export async function POST(request: NextRequest) {
       // Chat history only the editor owns contentHtml through autosave.
       await DraftDocument.updateOne(
         { _id: draftId, clerkUid: userContext.clerkUid },
-        { $set: { chatMessages: finalMessages } }
+        { $set: { chatMessages: messagesForStorage(finalMessages) } }
       )
     },
   })

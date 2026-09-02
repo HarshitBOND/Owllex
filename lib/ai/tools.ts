@@ -2,9 +2,28 @@ import { tool } from "ai"
 import { z } from "zod"
 import { findCases, findClients } from "./corpus-match"
 import { searchCorpus } from "@/app/api/lib/corpusBackend"
+import { searchJudgments } from "@/app/api/lib/judgmentsBackend"
 
 export function legalTools(clerkUid: string, corpusId?: string | null) {
   return {
+    searchPublicJudgments: tool({
+      description:
+        "Search publicly available judgments and laws. Use this whenever the user asks for legal precedents, articles, constitutional provisions, or case law. Always cite the title and share the viewer link -- never fabricate a citation.",
+      inputSchema: z.object({
+        query: z.string().describe("What to look for -- e.g. a case name, statute, or legal question"),
+        limit: z.number().min(1).max(10).optional().describe("How many passages to return, default 5"),
+      }),
+      execute: async ({ query, limit }: { query: string; limit?: number }) => {
+        try {
+          const data = await searchJudgments({ clerkUid, query, k: limit ?? 5 })
+          return { count: data.results.length, passages: data.results }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Judgment search is unavailable"
+          return { count: 0, passages: [], error: message }
+        }
+      },
+    }),
+
     searchCases: tool({
       description:
         "Search the advocate's own case files in Ravenslaw. Use whenever they ask about their cases, hearings, court dates, or matters. Returns case number, title, court, stage, status and next hearing date.",

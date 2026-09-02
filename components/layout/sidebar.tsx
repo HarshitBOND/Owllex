@@ -6,7 +6,7 @@ import {
     ListTodo, Moon, Sun, FileText, X, HelpCircle, ShieldCheck,
     LifeBuoy, Settings, Sparkles, CirclePlus, History, FileEdit,
     Settings2, Briefcase, LayoutDashboard, Library,
-    CalendarDays, Workflow, FileCheck2,
+    CalendarDays, Workflow, FileCheck2, Lock,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -46,6 +46,7 @@ const aiGroupItems: NavLeaf[] = [
 
 const workspaceGroupItems: NavLeaf[] = [
     { name: "Dashboard", icon: <LayoutDashboard size={16} />, href: "/dashboard/overview" },
+    { name: "Vault", icon: <Lock size={16} />, href: "/vault" },
     { name: "My Cases", icon: <FileSearch size={16} />, href: "/case-tracking" },
     { name: "My Clients", icon: <UsersRound size={16} />, href: "/my-clients" },
     { name: "Invoices", icon: <ReceiptText size={16} />, href: "/invoices" },

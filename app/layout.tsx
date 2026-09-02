@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { headers } from "next/headers"
 import { Outfit, Amethysta, Averia_Serif_Libre, Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Toaster } from "sonner"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
@@ -81,6 +82,7 @@ export default async function RootLayout({
             </SidebarProvider>
             <Toaster position="bottom-right" richColors closeButton />
             <Analytics />
+            <SpeedInsights />
           </ClerkProvider>
         </ThemeProvider>
       </body>

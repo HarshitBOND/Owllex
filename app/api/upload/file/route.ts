@@ -1,9 +1,11 @@
-import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
-import { putPrivateObject } from "@/app/api/lib/storage/r2";
+import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage";
+import { compressAndStore } from "@/app/api/lib/storage/compressAndStore";
+import { headPrivateObject, putPrivateObject } from "@/app/api/lib/storage/r2";
+import { contentAddressedKey } from "@/app/api/lib/storage/dedupe";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import Attachment from "@/app/api/lib/models/attachment";
 
@@ -53,15 +55,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error || "Unsupported file" }, { status: 400 });
     }
 
-    const r2Key = `${userContext.clerkUid}/${randomUUID()}-${validation.sanitizedFileName}`;
-    await putPrivateObject(r2Key, buffer, file.type || "application/octet-stream");
+    const mimeType = file.type || "application/octet-stream";
+
+    // Images are downscaled here; PDFs go to the backend for a Ghostscript pass.
+    const isImage = validation.resourceType === "image";
+    const optimized = isImage ? await optimizeImage(buffer, mimeType) : null;
+
+    const storedName = optimized
+      ? withExtension(validation.sanitizedFileName!, optimized.extension)
+      : validation.sanitizedFileName!;
+    const { key: r2Key, exists } = await contentAddressedKey({
+      prefix: userContext.clerkUid,
+      bytes: buffer,
+      filename: storedName,
+    });
+
+    let storedBytes = buffer.length;
+    let storedMime = mimeType;
+
+    if (exists) {
+      const head = await headPrivateObject(r2Key);
+      storedBytes = head.contentLength ?? storedBytes;
+      if (optimized) storedMime = optimized.contentType;
+    } else if (optimized) {
+      await putPrivateObject(r2Key, optimized.buffer, optimized.contentType);
+      storedBytes = optimized.storedBytes;
+      storedMime = optimized.contentType;
+    } else {
+      const result = await compressAndStore({
+        filename: validation.sanitizedFileName!,
+        bytes: buffer,
+        mimeType,
+        r2Key,
+      });
+      if (result.stored) {
+        storedBytes = result.stored_bytes ?? storedBytes;
+      } else {
+        await putPrivateObject(r2Key, buffer, mimeType);
+      }
+    }
 
     await connectMongoWithRetry();
     const attachment = await Attachment.create({
       clerkUid: userContext.clerkUid,
-      filename: validation.sanitizedFileName,
-      mimeType: file.type || "application/octet-stream",
-      size: file.size,
+      filename: storedName,
+      mimeType: storedMime,
+      size: storedBytes,
       r2Key,
     });
 

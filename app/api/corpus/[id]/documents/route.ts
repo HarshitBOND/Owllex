@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation"
 import { logSecurityEvent } from "@/app/api/lib/securityLogger"
-import { putPrivateObject } from "@/app/api/lib/storage/r2"
+import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage"
+import { compressAndStore } from "@/app/api/lib/storage/compressAndStore"
+import { headPrivateObject, putPrivateObject } from "@/app/api/lib/storage/r2"
+import { contentAddressedKey } from "@/app/api/lib/storage/dedupe"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import Corpus from "@/app/api/lib/models/corpus"
 import CorpusDocument from "@/app/api/lib/models/corpus-document"
@@ -112,19 +115,58 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     )
   }
 
-  const filename = validation.sanitizedFileName!
-  const documentId = randomUUID().replace(/-/g, "")
-  const r2Key = `${userContext.clerkUid}/corpus/${id}/${documentId}-${filename}`
+  const mimeType = file.type || "application/octet-stream"
 
-  await putPrivateObject(r2Key, Buffer.from(buffer), file.type || "application/octet-stream")
+  // Images are downscaled here; PDFs go to the backend for a Ghostscript pass.
+  // Indexing below always reads the uncompressed original, so retrieval quality
+  // is unaffected by what gets archived.
+  const isImage = validation.resourceType === "image"
+  const optimized = isImage ? await optimizeImage(Buffer.from(buffer), mimeType) : null
+
+  const filename = optimized
+    ? withExtension(validation.sanitizedFileName!, optimized.extension)
+    : validation.sanitizedFileName!
+  // documentId still identifies the chunk set in Chroma; only the storage key
+  // becomes content-addressed.
+  const documentId = randomUUID().replace(/-/g, "")
+  const { key: r2Key, exists } = await contentAddressedKey({
+    prefix: `${userContext.clerkUid}/corpus/${id}`,
+    bytes: buffer,
+    filename,
+  })
+
+  let storedBytes = buffer.byteLength
+  let storedMime = mimeType
+
+  if (exists) {
+    const head = await headPrivateObject(r2Key)
+    storedBytes = head.contentLength ?? storedBytes
+    if (optimized) storedMime = optimized.contentType
+  } else if (optimized) {
+    await putPrivateObject(r2Key, optimized.buffer, optimized.contentType)
+    storedBytes = optimized.storedBytes
+    storedMime = optimized.contentType
+  } else {
+    const result = await compressAndStore({
+      filename: validation.sanitizedFileName!,
+      bytes: Buffer.from(buffer),
+      mimeType,
+      r2Key,
+    })
+    if (result.stored) {
+      storedBytes = result.stored_bytes ?? storedBytes
+    } else {
+      await putPrivateObject(r2Key, Buffer.from(buffer), mimeType)
+    }
+  }
 
   const doc = await CorpusDocument.create({
     clerkUid: userContext.clerkUid,
     corpusId: id,
     documentId,
     filename,
-    mimeType: file.type || "application/octet-stream",
-    size: buffer.byteLength,
+    mimeType: storedMime,
+    size: storedBytes,
     r2Key,
     status: "indexing",
   })

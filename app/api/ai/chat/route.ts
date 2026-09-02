@@ -13,6 +13,7 @@ import { resolveModel } from "@/lib/ai/models"
 import { CHAT_SYSTEM_PROMPT, corpusContextBlock } from "@/lib/ai/prompts"
 import { CASE_FIELDS, CLIENT_FIELDS } from "@/lib/ai/corpus-match"
 import { legalTools } from "@/lib/ai/tools"
+import { messagesForStorage, stripEphemeralParts, MAX_STORED_MESSAGES } from "@/lib/ai/message-trim"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 export const maxDuration = 60
@@ -63,7 +64,13 @@ export async function POST(request: NextRequest) {
   if (!gate.allowed) return aiLimitResponse(gate)
   const modelKey = resolveModel(gate.snapshot.plan, model, "fast")
 
-  let system = CHAT_SYSTEM_PROMPT
+  // Byte-identical on every request from every user, so OpenAI can serve it
+  // (and the tool definitions and history behind it) from the prefix cache at a
+  // tenth of the input rate. Per-corpus context is appended to the message
+  // stream below rather than spliced in here, which is what used to make this
+  // string different on each call.
+  const system = CHAT_SYSTEM_PROMPT
+  let corpusContext: string | null = null
   let activeCorpusId: string | null = null
 
   if (corpusId) {
@@ -78,9 +85,7 @@ export async function POST(request: NextRequest) {
         corpusId,
         status: "ready",
       })
-      system = `${CHAT_SYSTEM_PROMPT}
-
-${corpusContextBlock({
+      corpusContext = `${corpusContextBlock({
         name: corpus.name,
         description: corpus.description,
         instructions: corpus.instructions,
@@ -94,10 +99,18 @@ ${corpusContextBlock({
   const result = streamText({
     model: modelFor(modelKey),
     system,
-    messages: await convertToModelMessages(messages.slice(-40) as UIMessage[]),
+    messages: [
+      ...(await convertToModelMessages(
+        stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[])
+      )),
+      ...(corpusContext ? [{ role: "user" as const, content: corpusContext }] : []),
+    ],
     tools: legalTools(userContext.clerkUid, activeCorpusId),
     stopWhen: stepCountIs(6),
     experimental_transform: smoothStream({ chunking: "word" }),
+    providerOptions: {
+      openai: { reasoningSummary: "auto" },
+    },
     onFinish: async ({ totalUsage }) => {
       await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "chat", modelKey, usage: totalUsage })
     },
@@ -114,7 +127,7 @@ ${corpusContextBlock({
       await Conversation.findOneAndUpdate(
         { clerkUid: userContext.clerkUid, chatId },
         {
-          $set: { messages: finalMessages, model, updatedAt: new Date() },
+          $set: { messages: messagesForStorage(finalMessages), model, updatedAt: new Date() },
           $setOnInsert: { clerkUid: userContext.clerkUid, chatId, title, corpusId: activeCorpusId },
         },
         { upsert: true }

@@ -18,6 +18,10 @@ const ScraperLogSchema = new mongoose.Schema({
 
 ScraperLogSchema.index({ run_date: -1 });
 
+// One row per nightly run, each carrying a `results` entry per PDF, kept
+// forever. Nothing reads a scraper log older than a quarter, so they expire.
+ScraperLogSchema.index({ run_date: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+
 const ScraperLog =
   mongoose.models["ScraperLog"] ||
   mongoose.model("ScraperLog", ScraperLogSchema, "scraper_logs");

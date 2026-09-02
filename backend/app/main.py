@@ -14,6 +14,7 @@ import os
 import sys
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi import Request
@@ -141,9 +142,39 @@ async def health_check():
     )
 
 
+def _sweep_stale_uploads(max_age_hours: int = 6) -> None:
+    """Delete leftover temp uploads from previous runs.
+
+    Every route that writes into UPLOAD_DIR removes the file in a finally block,
+    but a killed process (SIGKILL, a container restart, a crashed dev reload)
+    never runs those, so the directory accumulates whole user documents
+    indefinitely. Only files older than max_age_hours are touched, so this can
+    never race with an upload that is still being processed by another worker.
+    """
+    cutoff = time.time() - max_age_hours * 3600
+    upload_dir = Path(settings.UPLOAD_DIR)
+    removed = 0
+    freed = 0
+    for entry in upload_dir.glob("*"):
+        if not entry.is_file():
+            continue
+        try:
+            stat = entry.stat()
+            if stat.st_mtime >= cutoff:
+                continue
+            freed += stat.st_size
+            entry.unlink()
+            removed += 1
+        except OSError:
+            continue
+    if removed:
+        logger.info("Swept %d stale upload(s) from %s (%.1f MB)", removed, upload_dir, freed / 1024 / 1024)
+
+
 @app.on_event("startup")
 async def on_startup():
     logger.info("Ravenslaw v%s starting on %s:%s", __version__, settings.HOST, settings.PORT)
+    _sweep_stale_uploads()
     if settings.MONGODB_URI:
         logger.info("MongoDB configured: %s", settings.MONGODB_DB)
     else:

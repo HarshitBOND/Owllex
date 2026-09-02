@@ -12,6 +12,8 @@ import {
 import { getBackendInternalHeaders } from "@/app/api/lib/backendInternalAuth";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
+import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
+import PublicDocument from "@/app/api/lib/models/public-document";
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || "http://localhost:8000";
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
@@ -93,6 +95,30 @@ export async function POST(request: NextRequest) {
         },
         { status: response.status }
       );
+    }
+
+    if (data.document_id && data.storage_ref) {
+      try {
+        await connectMongoWithRetry();
+        await PublicDocument.updateOne(
+          { documentId: data.document_id },
+          {
+            $set: {
+              title: data.title || primaryFileName,
+              documentType: data.document_type || "",
+              date: data.date || "",
+              sourceUrl: data.source_url || "",
+              storageRef: data.storage_ref,
+              ingestedByAdminId: admin.dbUserId,
+            },
+          },
+          { upsert: true },
+        );
+      } catch (error) {
+        // The vector store write already succeeded; a catalog miss here means the
+        // document just won't be citeable from chat until this is retried, not data loss.
+        console.error("PublicDocument catalog upsert failed:", error);
+      }
     }
 
     const pageSuffix = inputFiles.length > 1 ? ` from ${inputFiles.length} pages` : "";

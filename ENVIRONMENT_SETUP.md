@@ -22,9 +22,16 @@ Use this document as the source of truth for runtime environment variables and p
 | `R2_ACCOUNT_ID` | Yes (uploads) | Cloudflare R2 account ID |
 | `R2_ACCESS_KEY_ID` | Yes (uploads) | Cloudflare R2 API token access key |
 | `R2_SECRET_ACCESS_KEY` | Yes (uploads) | Cloudflare R2 API token secret |
-| `R2_PRIVATE_BUCKET` | Yes (uploads) | Private bucket for task/case attachments (presigned URLs) |
-| `R2_PUBLIC_BUCKET` | Yes (uploads) | Public bucket for inline rich-text images |
-| `R2_PUBLIC_BASE_URL` | Yes (uploads) | Public origin bound to `R2_PUBLIC_BUCKET` |
+| `R2_PRIVATE_BUCKET` | Yes (uploads) | Bucket for private files (attachments, contract reviews, corpus documents) -- accessed only via short-lived presigned URLs, never a public domain |
+| `R2_PUBLIC_BUCKET` | Yes (uploads) | Bucket for public rich-text images (`public/...` keys) |
+| `R2_PUBLIC_BASE_URL` | Yes (uploads) | Public origin for `R2_PUBLIC_BUCKET` |
+
+`R2_PRIVATE_BUCKET`, `R2_PUBLIC_BUCKET`, and `R2_BUCKET` (below) can all be the
+same physical bucket (`owllex-pdf`) -- private/public is enforced by key
+prefix, not bucket separation. This is only safe if the bucket's public
+domain is gated by the `cloudflare/public-docs-gateway` Worker (see that
+folder's README) rather than bound to the bucket directly, since a direct
+binding serves every key with no auth check, private ones included.
 | `RAZORPAY_KEY_ID` | Yes (billing) | Razorpay key ID for payment-link APIs |
 | `RAZORPAY_KEY_SECRET` | Yes (billing) | Razorpay key secret for server-side billing routes |
 | `RAZORPAY_WEBHOOK_SECRET` | Yes (billing) | Razorpay webhook signing secret for `/api/webhook/razorpay` |

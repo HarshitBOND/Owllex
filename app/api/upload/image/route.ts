@@ -4,6 +4,7 @@ import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 import { putPublicObject } from "@/app/api/lib/storage/r2";
+import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage";
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,12 +52,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Only image uploads are allowed" }, { status: 400 });
     }
 
-    const key = `${userContext.clerkUid}/${randomUUID()}-${validation.sanitizedFileName}`;
-    const url = await putPublicObject(key, buffer, file.type || "image/*");
+    // Downscale + re-encode before storing. These objects are served directly
+    // by the public Worker, so whatever lands here is what every viewer pays to
+    // download for the lifetime of the image.
+    const optimized = await optimizeImage(buffer, file.type);
+
+    const storedName = withExtension(validation.sanitizedFileName!, optimized.extension);
+    const key = `public/${userContext.clerkUid}/${randomUUID()}-${storedName}`;
+    const url = await putPublicObject(key, optimized.buffer, optimized.contentType);
 
     return NextResponse.json({
       success: true,
       url,
+      originalBytes: optimized.originalBytes,
+      storedBytes: optimized.storedBytes,
     });
 
   } catch (error: any) {

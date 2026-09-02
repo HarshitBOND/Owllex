@@ -2,6 +2,7 @@
 Ravenslaw API Routes - RAG document ingestion, retrieval and health.
 """
 
+import hashlib
 import logging
 import os
 import re
@@ -22,6 +23,11 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".jpg", ".jpeg", ".png"}
 
 
 class SearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=1000)
+    k: int = Field(5, ge=1, le=20)
+
+
+class JudgmentSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=1000)
     k: int = Field(5, ge=1, le=20)
 
@@ -250,7 +256,11 @@ async def ingest_rag_document(
         "works even without OPENAI_API_KEY or Chroma configured."
     ),
 )
-async def extract_document_text(file: UploadFile = File(...)):
+async def extract_document_text(
+    file: UploadFile = File(...),
+    r2_key: str = Form(default=""),
+    content_type: str = Form(default="application/octet-stream"),
+):
     if not file.filename or Path(file.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, MD, JPG, or PNG files are accepted")
 
@@ -278,7 +288,19 @@ async def extract_document_text(file: UploadFile = File(...)):
         if not text or not text.strip():
             raise HTTPException(status_code=422, detail="Nothing extractable in this document")
 
-        return {"success": True, "text": text}
+        result = {"success": True, "text": text}
+
+        # The caller can hand us the private-bucket key it wants this file stored
+        # under. Doing the write here rather than in Next is what puts uploaded
+        # PDFs through Ghostscript -- that binary cannot run on Vercel. Extraction
+        # above already ran against the uncompressed original, so retrieval
+        # quality is unaffected by what gets archived.
+        if r2_key:
+            result.update(
+                await run_in_threadpool(_compress_and_store, temp_path, r2_key, content_type)
+            )
+
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -287,6 +309,130 @@ async def extract_document_text(file: UploadFile = File(...)):
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+@rag_router.post(
+    "/documents/compress",
+    summary="Compress and archive a document",
+    description=(
+        "Recompresses an uploaded PDF with Ghostscript and writes it to the private "
+        "bucket at the supplied key, returning the SHA-256 of the stored bytes. Does "
+        "not run Docling, so it costs no OCR time -- this is the path for files that "
+        "are stored but never indexed (vault documents, attachments)."
+    ),
+)
+async def compress_document(
+    file: UploadFile = File(...),
+    r2_key: str = Form(...),
+    content_type: str = Form(default="application/octet-stream"),
+):
+    if not file.filename or Path(file.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    max_bytes = settings.MAX_PDF_SIZE_MB * 1024 * 1024
+    content = await file.read()
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"File exceeds {settings.MAX_PDF_SIZE_MB}MB")
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename).name)
+    temp_path = os.path.join(settings.UPLOAD_DIR, f"{uuid.uuid4().hex}_{safe_name}")
+
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(content)
+        result = await run_in_threadpool(_compress_and_store, temp_path, r2_key, content_type)
+        return {"success": True, **result}
+    except Exception as e:
+        logger.exception("Compress-and-store failed for %s", file.filename)
+        raise HTTPException(status_code=500, detail=f"Storage failed: {e}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _compress_and_store(temp_path: str, r2_key: str, content_type: str) -> dict:
+    """Recompress a PDF and write it to the private bucket. Never fatal.
+
+    A storage failure must not lose the extracted text the caller is waiting on,
+    so anything going wrong here is logged and reported as stored=False -- the
+    caller then falls back to uploading the original itself.
+    """
+    from rag.app.ingest.compress import compress_pdf
+    from rag.app.ingest.storage import upload_private_object
+
+    stored_path, stats = compress_pdf(temp_path)
+    try:
+        with open(stored_path, "rb") as f:
+            stored_sha256 = hashlib.sha256(f.read()).hexdigest()
+        upload = upload_private_object(stored_path, r2_key, content_type)
+    except Exception:
+        logger.exception("Failed to store %s in R2", r2_key)
+        return {"stored": False}
+    finally:
+        if stats["compressed"] and stored_path != temp_path:
+            try:
+                os.remove(stored_path)
+            except OSError:
+                pass
+
+    if not upload["key"]:
+        return {"stored": False}
+
+    return {
+        "stored": True,
+        "r2_key": upload["key"],
+        "sha256": stored_sha256,
+        "original_bytes": stats["original_bytes"],
+        "stored_bytes": stats["stored_bytes"],
+        "compressed": stats["compressed"],
+    }
+
+
+@rag_router.post(
+    "/judgments/search",
+    summary="Search the public judgments/laws collection",
+    description=(
+        "Embeds the query and returns the closest chunks from the public corpus. "
+        "Used by the AI chat to find and cite judgments/laws for any authenticated user; "
+        "callers are expected to turn document_id + storage_ref into a scoped, expiring "
+        "viewer link rather than exposing them directly."
+    ),
+)
+async def judgment_search(payload: JudgmentSearchRequest):
+    _require_openai_key()
+    _require_chroma_config()
+
+    def _search():
+        from rag.app.ingest.vector_db import COLLECTION, get_vector_db
+
+        return get_vector_db(COLLECTION).similarity_search_with_score(payload.query, k=payload.k)
+
+    try:
+        hits = await run_in_threadpool(_search)
+    except ImportError:
+        raise HTTPException(status_code=503, detail="RAG dependencies are not installed on this instance")
+    except Exception as e:
+        logger.exception("Judgment search failed")
+        raise HTTPException(status_code=500, detail=f"Search failed: {e}")
+
+    return {
+        "success": True,
+        "query": payload.query,
+        "count": len(hits),
+        "results": [
+            {
+                "text": doc.page_content,
+                "score": float(score),
+                "document_id": doc.metadata.get("document_id"),
+                "title": doc.metadata.get("title"),
+                "document_type": doc.metadata.get("document_type"),
+                "date": doc.metadata.get("date"),
+                "source_url": doc.metadata.get("source_url") or None,
+                "storage_ref": doc.metadata.get("storage_ref") or None,
+            }
+            for doc, score in hits
+        ],
+    }
 
 
 @rag_router.post(
@@ -351,6 +497,7 @@ async def ingest_corpus_document(
             USER_COLLECTION,
             {"corpus_id": corpus_id, "clerk_uid": clerk_uid},
             corpus_id,
+            False,  # persist_source: private corpus docs are already stored privately by the caller
         )
 
         if result.get("skipped"):

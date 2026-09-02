@@ -37,7 +37,25 @@ rag = [
     # Token-length function for the splitter (chunk_size/overlap are measured in tokens, not chars).
     "tiktoken>=0.8",
     "langchain-chroma>=1.1.0",
+    # Declared explicitly, though Docling would pull them in anyway: a
+    # [tool.uv.sources] pin only applies to direct dependencies, and without it
+    # these resolve to the CUDA build (see the pytorch-cpu index below).
+    "torch",
+    "torchvision",
 ]
 
 [tool.uv]
 package = false
+
+# Docling depends on torch, and the default PyPI torch wheel drags in ~43 NVIDIA
+# CUDA packages (several GB) for GPU support this app never uses -- see the note
+# above: the layout model runs on onnxruntime, and the containers are CPU-only.
+# Pinning torch to PyTorch's CPU index drops all of them.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

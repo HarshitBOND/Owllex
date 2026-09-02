@@ -5,14 +5,14 @@ import { enforceRateLimit, objectIdSchema, parseAndValidateJson, requireUserCont
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
+import { trimDocumentForPrompt } from "@/lib/ai/document-context"
+import { messagesForStorage, stripEphemeralParts, MAX_STORED_MESSAGES } from "@/lib/ai/message-trim"
 import { modelFor } from "@/lib/ai/provider"
 import { resolveModel } from "@/lib/ai/models"
 import { CONTRACT_REVIEW_SYSTEM_PROMPT, CONTRACT_CHAT_TOOL_RULES } from "@/lib/ai/prompts"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 export const maxDuration = 60
-
-const MAX_CONTEXT_CHARS = 60000
 
 const bodySchema = z.object({
   model: z.string().optional(),
@@ -66,24 +66,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 })
   }
 
-  const safeDocument = sanitizeDocumentHtml(documentHtml).slice(-MAX_CONTEXT_CHARS)
+  const safeDocument = trimDocumentForPrompt(sanitizeDocumentHtml(documentHtml))
   const issuesBlock = review.issues.length
     ? review.issues
         .map((i) => `- [${i.severity}] ${i.title}: ${i.description}${i.quote ? ` (quoting: "${i.quote}")` : ""}`)
         .join("\n")
     : "(no issues on file run a review first if you want a starting list)"
 
-  const system = [
-    CONTRACT_REVIEW_SYSTEM_PROMPT,
-    CONTRACT_CHAT_TOOL_RULES,
-    `<current_document>\n${safeDocument || "(The document is empty.)"}\n</current_document>`,
-    `<flagged_issues>\n${issuesBlock}\n</flagged_issues>`,
-  ].join("\n\n")
+  // Kept byte-identical across every request. The document and the flagged
+  // issues both change as the review progresses, so holding them here
+  // invalidated the cached prefix -- system, tools and the entire history --
+  // on every turn. Sent as a trailing message instead, everything ahead of them
+  // is billed at the cached input rate.
+  const system = `${CONTRACT_REVIEW_SYSTEM_PROMPT}\n\n${CONTRACT_CHAT_TOOL_RULES}`
+
+  const history = await convertToModelMessages(
+    stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[])
+  )
+  const contextMessage = {
+    role: "user" as const,
+    content: [
+      `<current_document>\n${safeDocument || "(The document is empty.)"}\n</current_document>`,
+      `<flagged_issues>\n${issuesBlock}\n</flagged_issues>`,
+    ].join("\n\n"),
+  }
 
   const result = streamText({
     model: modelFor(modelKey),
     system,
-    messages: await convertToModelMessages(messages.slice(-40) as UIMessage[]),
+    messages: [...history, contextMessage],
     tools: {
       proposeFix: tool({
         description:
@@ -114,7 +125,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await connectMongoWithRetry()
       await ContractReview.updateOne(
         { _id: id, clerkUid: userContext.clerkUid },
-        { $set: { chatMessages: finalMessages } },
+        { $set: { chatMessages: messagesForStorage(finalMessages) } },
       )
     },
   })

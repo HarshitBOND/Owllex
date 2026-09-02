@@ -53,6 +53,9 @@ const JobRunSchema = new mongoose.Schema(
 JobRunSchema.index({ jobName: 1, startedAt: -1 })
 JobRunSchema.index({ status: 1, startedAt: -1 })
 
+// Cron and manual job history, two Mixed blobs per row, previously unbounded.
+JobRunSchema.index({ startedAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 })
+
 const JobRun = mongoose.models["JobRun"] || mongoose.model("JobRun", JobRunSchema)
 
 export default JobRun

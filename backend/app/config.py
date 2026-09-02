@@ -24,6 +24,13 @@ class Settings:
     UPLOAD_DIR: str = os.getenv("RAVENSLAW_UPLOAD_DIR", str(Path(__file__).resolve().parent.parent / "uploads"))
     MAX_PDF_SIZE_MB: int = int(os.getenv("RAVENSLAW_MAX_PDF_SIZE_MB", "50"))
 
+    # Lossy PDF recompression before archival (see rag/app/ingest/compress.py).
+    # Scans shrink 60-85%; DPI is the quality dial if 150 proves too coarse for
+    # seals and signatures. Disable to store originals byte-for-byte.
+    PDF_COMPRESSION_ENABLED: bool = os.getenv("RAVENSLAW_PDF_COMPRESSION", "true").lower() == "true"
+    PDF_COMPRESSION_DPI: int = int(os.getenv("RAVENSLAW_PDF_COMPRESSION_DPI", "150"))
+    PDF_COMPRESSION_TIMEOUT_SECONDS: int = int(os.getenv("RAVENSLAW_PDF_COMPRESSION_TIMEOUT", "120"))
+
     # MongoDB (optional)
     MONGODB_URI: str = os.getenv("MONGODB_URI", "")
     MONGODB_DB: str = os.getenv("MONGODB_DB", "cause_list_db")
@@ -80,6 +87,10 @@ class Settings:
             raise RuntimeError("RAVENSLAW_MAX_CONCURRENT_BULK_IMPORTS must be > 0")
         if self.IMPORT_PROGRESS_TTL_SECONDS < 300:
             raise RuntimeError("RAVENSLAW_IMPORT_PROGRESS_TTL_SECONDS must be >= 300")
+        if not 72 <= self.PDF_COMPRESSION_DPI <= 600:
+            raise RuntimeError("RAVENSLAW_PDF_COMPRESSION_DPI must be between 72 and 600")
+        if self.PDF_COMPRESSION_TIMEOUT_SECONDS <= 0:
+            raise RuntimeError("RAVENSLAW_PDF_COMPRESSION_TIMEOUT must be > 0")
 
         trusted_hosts_raw = os.getenv("RAVENSLAW_TRUSTED_HOSTS", "").strip()
         if trusted_hosts_raw:

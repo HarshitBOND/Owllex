@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { trimDocumentForPrompt } from "@/lib/ai/document-context"
 import { generateObject } from "ai"
 import { z } from "zod"
 import { enforceRateLimit, objectIdSchema, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       model: modelFor(modelKey),
       system: CONTRACT_REVIEW_SYSTEM_PROMPT,
       schema: analysisSchema,
-      prompt: `Review this contract and return every issue you find, plus an overall summary.\n\n<document>\n${review.extractedText.slice(0, 60000)}\n</document>`,
+      prompt: `Review this contract and return every issue you find, plus an overall summary.\n\n<document>\n${trimDocumentForPrompt(review.extractedText)}\n</document>`,
     })
 
     await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-analyze", modelKey, usage })

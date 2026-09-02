@@ -1,4 +1,5 @@
 import os
+import time
 
 import chromadb
 from dotenv import load_dotenv
@@ -29,6 +30,13 @@ def get_vector_db(collection=COLLECTION):
 
 
 def store_chunks(document_id, chunks, metadata, collection=COLLECTION):
+    """Embed and store a document's chunks.
+
+    Every chunk carries a full copy of the document's metadata -- Chroma has no
+    document-level store, and the query API reads title/date/source_url straight
+    off the chunk it retrieved. Keep this dict small: each key added here is
+    multiplied by the chunk count of every document ever ingested.
+    """
     vector_db = get_vector_db(collection)
     ids = [f"{document_id}_{i}" for i in range(len(chunks))]
     metadatas = [{**metadata, "document_id": document_id} for _ in chunks]
@@ -44,14 +52,27 @@ def delete_by(where, collection=USER_COLLECTION):
         pass
 
 
+_STATS_CACHE: dict = {"at": 0.0, "value": None}
+_STATS_TTL_SECONDS = 300
+
+
 def collection_stats():
     """Chunk count + distinct document count.
 
     Talks to Chroma Cloud directly rather than through get_vector_db(), so this
     works as a health check even when no OpenAI key is configured.
+
+    Counting distinct documents means paging the entire collection's metadata,
+    1000 rows at a time -- which this used to do on every /rag/status hit, so a
+    monitor polling the health check walked the whole corpus each time. The
+    numbers move only when something is ingested, so they are cached.
     """
     if not os.getenv("CHROMA_API_KEY"):
         return {"chunk_count": 0, "document_count": 0}
+
+    now = time.monotonic()
+    if _STATS_CACHE["value"] is not None and now - _STATS_CACHE["at"] < _STATS_TTL_SECONDS:
+        return _STATS_CACHE["value"]
 
     client = _cloud_client()
     try:
@@ -69,4 +90,7 @@ def collection_stats():
                 document_ids.add(m["document_id"])
         offset += 1000
 
-    return {"chunk_count": chunk_count, "document_count": len(document_ids)}
+    stats = {"chunk_count": chunk_count, "document_count": len(document_ids)}
+    _STATS_CACHE["at"] = now
+    _STATS_CACHE["value"] = stats
+    return stats

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from rag import hash_db
 
+from .compress import compress_pdf
 from .loader import load_text
 from .metadata import extract_metadata
 from .splitter import semantic_chunk
@@ -13,7 +14,7 @@ from .storage import upload_source_document
 from .vector_db import COLLECTION, store_chunks
 
 
-def ingest_document(paths, document_id, collection=COLLECTION, extra_metadata=None, dedupe_scope=""):
+def ingest_document(paths, document_id, collection=COLLECTION, extra_metadata=None, dedupe_scope="", persist_source=True):
     """Ingest one document, given either a single path or an ordered list of paths.
 
     A list of more than one path is treated as ordered pages of one physical
@@ -24,6 +25,11 @@ def ingest_document(paths, document_id, collection=COLLECTION, extra_metadata=No
     dedupe_scope namespaces the content hash. The admin corpus passes nothing, so its
     hashes stay global and unchanged. Per-user corpora pass their corpus_id, so the same
     file uploaded by two advocates indexes into both instead of the second being skipped.
+
+    persist_source controls whether the raw file is copied into the public, content-addressed
+    R2 store. Only the admin/public corpus should set this -- private per-user corpus documents
+    are already stored privately (with access control) by the caller, and must never also land
+    in the public bucket.
     """
     if isinstance(paths, (str, Path)):
         paths = [paths]
@@ -49,7 +55,11 @@ def ingest_document(paths, document_id, collection=COLLECTION, extra_metadata=No
     if not chunks:
         raise ValueError("Document produced no chunks")
 
-    storage = _upload_source(paths, content_hash)
+    storage = (
+        _upload_source(paths, content_hash)
+        if persist_source
+        else {"key": None, "url": None, "original_bytes": 0, "stored_bytes": 0}
+    )
 
     metadata = extract_metadata(text[:3000])
     metadata_dict = {
@@ -67,17 +77,51 @@ def ingest_document(paths, document_id, collection=COLLECTION, extra_metadata=No
 
 
 def _upload_source(paths: list[Path], content_hash: str) -> dict:
+    """Archive the source in R2, recompressing PDFs on the way in.
+
+    Note the key still carries the hash of the *original* bytes. That hash is
+    the document's identity -- it is the LMDB dedup key and it is baked into
+    every citation link -- while the stored object is a derived artifact. Hashing
+    the compressed output instead would re-ingest every document once and orphan
+    the links that point at the old keys.
+    """
     if len(paths) == 1:
-        return upload_source_document(str(paths[0]), content_hash, "upload", paths[0].suffix)
+        src = paths[0]
+        stored_path, stats = compress_pdf(src)
+        try:
+            result = upload_source_document(stored_path, content_hash, "upload", src.suffix)
+        finally:
+            if stats["compressed"] and stored_path != str(src):
+                try:
+                    os.remove(stored_path)
+                except OSError:
+                    pass
+        return {**result, **stats}
 
     # Multi-page group: zip the ordered pages into one archive so the rest of the
     # schema's one-storage_ref-per-document contract (source citation) still holds.
     fd, zip_path = tempfile.mkstemp(suffix=".zip")
     os.close(fd)
     try:
+        original_bytes = sum(p.stat().st_size for p in paths)
         with zipfile.ZipFile(zip_path, "w") as zf:
             for i, p in enumerate(paths):
-                zf.write(p, arcname=f"page_{i:03d}{p.suffix}")
-        return upload_source_document(zip_path, content_hash, "upload", ".zip")
+                page_path, page_stats = compress_pdf(p)
+                try:
+                    zf.write(page_path, arcname=f"page_{i:03d}{p.suffix}")
+                finally:
+                    if page_stats["compressed"] and page_path != str(p):
+                        try:
+                            os.remove(page_path)
+                        except OSError:
+                            pass
+        stored_bytes = os.path.getsize(zip_path)
+        result = upload_source_document(zip_path, content_hash, "upload", ".zip")
+        return {
+            **result,
+            "original_bytes": original_bytes,
+            "stored_bytes": stored_bytes,
+            "compressed": stored_bytes < original_bytes,
+        }
     finally:
         os.remove(zip_path)

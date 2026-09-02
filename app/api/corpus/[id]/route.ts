@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
+import { deleteIfUnreferenced } from "@/app/api/lib/storage/deleteIfUnreferenced"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import Corpus from "@/app/api/lib/models/corpus"
 import CorpusDocument from "@/app/api/lib/models/corpus-document"
@@ -89,7 +90,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const corpus = await Corpus.findOneAndDelete({ clerkUid: userContext.clerkUid, corpusId: id })
   if (!corpus) return NextResponse.json({ success: false, error: "Corpus not found" }, { status: 404 })
 
+  // Collect the storage keys before the rows go, or the objects they point at
+  // become unreachable orphans -- deleteMany used to drop every document in the
+  // corpus and leave the whole set behind in R2.
+  const docs = await CorpusDocument.find({ clerkUid: userContext.clerkUid, corpusId: id })
+    .select("r2Key")
+    .lean<{ r2Key: string }[]>()
   await CorpusDocument.deleteMany({ clerkUid: userContext.clerkUid, corpusId: id })
+  await Promise.all(docs.map((d) => deleteIfUnreferenced(d.r2Key).catch(() => {})))
   await Conversation.updateMany(
     { clerkUid: userContext.clerkUid, corpusId: id },
     { $set: { corpusId: null } }

@@ -40,6 +40,10 @@ const nextConfig = {
     minimumCacheTTL: 31536000,
   },
   compress: true,
+  // sharp is a native module -- it must not be traced/bundled into the server
+  // build. Upload routes import it directly to downscale images before they
+  // ever reach R2 (app/api/upload/image/route.ts).
+  serverExternalPackages: ['sharp'],
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui', '@tiptap'],
     serverActions: {

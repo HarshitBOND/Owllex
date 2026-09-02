@@ -1,0 +1,12 @@
+name = "owllex-public-docs-gateway"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+account_id = "9f8e30afee462d529c3560ddad044ced"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "owllex-pdf"
+
+[[routes]]
+pattern = "doc.ravenslaw.com"
+custom_domain = true

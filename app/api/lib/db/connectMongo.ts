@@ -107,6 +107,7 @@ const registerModels = async () => {
       import("../models/job-run"),
       import("../models/document-template"),
       import("../models/draft-document"),
+      import("../models/vault-document"),
     ]);
 
     console.log("All models registered successfully.");

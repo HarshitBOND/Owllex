@@ -4,6 +4,8 @@ import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation"
 import { logSecurityEvent } from "@/app/api/lib/securityLogger"
 import { putPrivateObject } from "@/app/api/lib/storage/r2"
+import { contentAddressedKey } from "@/app/api/lib/storage/dedupe"
+import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage"
 import { extractDocumentText } from "@/app/api/lib/contractExtract"
 import { markdownToHtml } from "@/app/api/lib/html/markdownToHtml"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
@@ -85,25 +87,61 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const r2Key = `${userContext.clerkUid}/contract-review/${randomUUID()}-${validation.sanitizedFileName}`
-    await putPrivateObject(r2Key, buffer, file.type || "application/octet-stream")
+    const mimeType = file.type || "application/octet-stream"
+
+    // Images are downscaled here; PDFs are compressed by the backend during
+    // extraction below, because Ghostscript cannot run on Vercel.
+    const isImage = validation.resourceType === "image"
+    const optimized = isImage ? await optimizeImage(buffer, mimeType) : null
+    const storedBuffer = optimized?.buffer ?? buffer
+    const storedMime = optimized?.contentType ?? mimeType
+    const storedName = optimized
+      ? withExtension(validation.sanitizedFileName!, optimized.extension)
+      : validation.sanitizedFileName!
+
+    const { key: r2Key, exists } = await contentAddressedKey({
+      prefix: `${userContext.clerkUid}/contract-review`,
+      bytes: buffer,
+      filename: storedName,
+    })
+
+    // Images are already final, so they are written now. PDFs and DOCX wait for
+    // the extraction call to store the compressed copy -- with a fallback below
+    // so a failed extraction still leaves the user their file. Either way, an
+    // object already at this key is the same bytes and is reused as-is.
+    if (isImage && !exists) {
+      await putPrivateObject(r2Key, storedBuffer, storedMime)
+    }
 
     await connectMongoWithRetry()
     const review = await ContractReview.create({
       clerkUid: userContext.clerkUid,
-      fileName: validation.sanitizedFileName,
-      mimeType: file.type || "application/octet-stream",
-      size: file.size,
+      fileName: storedName,
+      mimeType: storedMime,
+      size: storedBuffer.length,
       r2Key,
       status: "extracting",
     })
 
     try {
-      const { text } = await extractDocumentText({
+      const extracted = await extractDocumentText({
         filename: validation.sanitizedFileName!,
         bytes: buffer,
-        mimeType: file.type || "application/octet-stream",
+        mimeType,
+        // Images were already stored above; everything else is archived by the
+        // backend so it passes through Ghostscript first. A key that already
+        // holds these bytes needs no write at all.
+        r2Key: isImage || exists ? undefined : r2Key,
       })
+      const { text } = extracted
+
+      // The backend declined or failed the write (R2 unconfigured on that
+      // instance, say). Store the original from here so the file is never lost.
+      if (!isImage && !exists && extracted.stored !== true) {
+        await putPrivateObject(r2Key, buffer, mimeType)
+      } else if (extracted.stored_bytes) {
+        review.size = extracted.stored_bytes
+      }
       const contentHtml = sanitizeDocumentHtml(markdownToHtml(text))
 
       review.extractedText = text
@@ -120,6 +158,12 @@ export async function POST(request: NextRequest) {
         fileMeta: { name: review.fileName, size: review.size, uploadedLabel: "Uploaded just now" },
       })
     } catch (error) {
+      if (!isImage && !exists) {
+        // Extraction is what would have stored this file, so on failure the
+        // original is uploaded here instead -- the review row already points at
+        // this key and the user can still download what they sent.
+        await putPrivateObject(r2Key, buffer, mimeType).catch(() => {})
+      }
       review.status = "error"
       review.errorMessage = error instanceof Error ? error.message : "Extraction failed"
       await review.save()
