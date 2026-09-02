@@ -15,8 +15,8 @@ type CategoryStyle = { color: string; bgColor: string; icon: LucideIcon }
 
 export const categoryStyles: Record<DocumentCategory, CategoryStyle> = {
   "Rental & Lease": {
-    color: "text-emerald-700 dark:text-emerald-400",
-    bgColor: "bg-emerald-50 dark:bg-emerald-500/10",
+    color: "text-brand-700 dark:text-brand-400",
+    bgColor: "bg-brand-50 dark:bg-brand-500/10",
     icon: Home,
   },
   "Service Agreements": {

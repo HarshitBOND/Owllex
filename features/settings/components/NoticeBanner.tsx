@@ -10,7 +10,7 @@ export function NoticeBanner({ notice }: { notice: NoticeState }) {
       className={cn(
         "mb-4 rounded-md border px-3 py-2 text-sm flex items-center gap-2",
         notice.kind === "success"
-          ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+          ? "bg-brand-50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-500/30 text-brand-700 dark:text-brand-400"
           : "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400",
       )}
     >

@@ -111,7 +111,7 @@ const ClientDetail = ({ client, onClose }: ClientDetailProps) => {
                 {[
                   { icon: Phone, label: "Call", color: "text-blue-500", href: `tel:${client.contact}` },
                   { icon: Mail, label: "Email", color: "text-purple-500", href: `mailto:${client.email}` },
-                  { icon: Calendar, label: "Schedule", color: "text-green-600", href: "#" },
+                  { icon: Calendar, label: "Schedule", color: "text-brand-600", href: "#" },
                 ].map((action) => (
                   <a
                     key={action.label}

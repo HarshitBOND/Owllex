@@ -27,7 +27,7 @@ export function FileDropzone({ onChange, uploadEndpoint = '/api/upload/file' }: 
       return <Video className="w-5 h-5 text-purple-500" />
     }
     if (['mp3', 'wav', 'ogg', 'flac'].includes(ext || '')) {
-      return <Music className="w-5 h-5 text-green-500" />
+      return <Music className="w-5 h-5 text-brand-500" />
     }
     if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext || '')) {
       return <Archive className="w-5 h-5 text-orange-500" />
@@ -109,7 +109,7 @@ export function FileDropzone({ onChange, uploadEndpoint = '/api/upload/file' }: 
       return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
     }
     if (file.status === 'success') {
-      return <CheckCircle2 className="w-4 h-4 text-green-500" />
+      return <CheckCircle2 className="w-4 h-4 text-brand-500" />
     }
     return <AlertCircle className="w-4 h-4 text-red-500" />
   }

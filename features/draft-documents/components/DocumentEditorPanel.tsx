@@ -216,7 +216,7 @@ export default function DocumentEditorPanel({
         Not saving opened elsewhere
       </span>
     ) : (
-      <span className="flex items-center gap-1 text-emerald-600 dark:text-accent">
+      <span className="flex items-center gap-1 text-brand-600 dark:text-accent">
         <Check className="w-3.5 h-3.5" />
         All changes saved
       </span>

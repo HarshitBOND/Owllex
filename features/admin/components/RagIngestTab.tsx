@@ -37,7 +37,7 @@ function isImageFile(name: string) {
 function statusIcon(item: RagIngestItem) {
   switch (item.status) {
     case "success":
-      return <CheckCircle2 size={16} className="text-emerald-600" />
+      return <CheckCircle2 size={16} className="text-brand-600" />
     case "failed":
       return item.duplicate
         ? <AlertTriangle size={16} className="text-amber-600" />
@@ -141,7 +141,7 @@ export function RagIngestTab({
                 className={cn(
                   "text-[11px] font-semibold px-2 py-0.5 rounded-full",
                   status.ready
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                    ? "bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300"
                     : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"
                 )}
               >

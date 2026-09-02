@@ -57,7 +57,7 @@ const ClientCard = ({ client, index, isSelected, onClick }: ClientCardProps) => 
           <div className="flex flex-col items-end gap-1.5 shrink-0">
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border ${
               caseCount > 0
-                ? "bg-emerald-500/10 text-emerald-600 border-emerald-200"
+                ? "bg-brand-500/10 text-brand-600 border-brand-200"
                 : "bg-muted text-muted-foreground border-border"
             }`}>
               {caseCount} case{caseCount !== 1 ? "s" : ""}

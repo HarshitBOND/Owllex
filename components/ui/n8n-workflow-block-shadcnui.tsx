@@ -151,7 +151,7 @@ const initialConnections: WorkflowConnection[] = [
 ];
 
 export const colorClasses: Record<string, string> = {
-  emerald: "border-emerald-400/40 bg-emerald-400/10 text-emerald-400",
+  emerald: "border-brand-400/40 bg-brand-400/10 text-brand-400",
   blue: "border-blue-400/40 bg-blue-400/10 text-blue-400",
   amber: "border-amber-400/40 bg-amber-400/10 text-amber-400",
   purple: "border-purple-400/40 bg-purple-400/10 text-purple-400",
@@ -338,6 +338,54 @@ export function N8nWorkflowBlock({
     return () => canvas.removeEventListener("wheel", wheel);
   }, [zoomTo]);
 
+  // Two-finger pinch zooms the canvas instead of the whole page. `touch-action:
+  // pan-x pan-y` on the canvas (below) already tells the browser not to use the
+  // gesture for its own page zoom, but iOS/Android still deliver it to us as
+  // touch events, so we turn it into the same zoomTo() the wheel handler uses.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const distance = (a: Touch, b: Touch) =>
+      Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+    let pinchStartDistance = 0;
+    let pinchStartScale = 1;
+
+    const touchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      pinchStartDistance = distance(e.touches[0], e.touches[1]);
+      pinchStartScale = scaleRef.current;
+    };
+
+    const touchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || pinchStartDistance === 0) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const [t0, t1] = [e.touches[0], e.touches[1]];
+      const ratio = distance(t0, t1) / pinchStartDistance;
+      zoomTo(pinchStartScale * ratio, {
+        x: (t0.clientX + t1.clientX) / 2 - rect.left,
+        y: (t0.clientY + t1.clientY) / 2 - rect.top,
+      });
+    };
+
+    const touchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchStartDistance = 0;
+    };
+
+    canvas.addEventListener("touchstart", touchStart, { passive: true });
+    canvas.addEventListener("touchmove", touchMove, { passive: false });
+    canvas.addEventListener("touchend", touchEnd, { passive: true });
+    canvas.addEventListener("touchcancel", touchEnd, { passive: true });
+    return () => {
+      canvas.removeEventListener("touchstart", touchStart);
+      canvas.removeEventListener("touchmove", touchMove);
+      canvas.removeEventListener("touchend", touchEnd);
+      canvas.removeEventListener("touchcancel", touchEnd);
+    };
+  }, [zoomTo]);
+
   const focusNode = (node: WorkflowNode) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -499,7 +547,7 @@ export function N8nWorkflowBlock({
         <div className="flex items-center gap-3">
           <Badge
             variant="outline"
-            className="rounded-full border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400"
+            className="rounded-full border-brand-400/40 bg-brand-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-brand-400"
           >
             Active
           </Badge>
@@ -662,8 +710,8 @@ export function N8nWorkflowBlock({
       <div
         ref={canvasRef}
         onPointerDown={() => setConnectingFrom(null)}
-        className={`relative h-[400px] w-full overflow-auto rounded-xl border bg-background/40 sm:h-[500px] md:h-[600px] ${connectingFrom ? "border-primary/50" : "border-border/30"}`}
-        style={{ minHeight: "400px" }}
+        className={`relative h-[400px] w-full overflow-auto overscroll-contain rounded-xl border bg-background/40 sm:h-[500px] md:h-[600px] ${connectingFrom ? "border-primary/50" : "border-border/30"}`}
+        style={{ minHeight: "400px", touchAction: "pan-x pan-y" }}
         role="region"
         aria-label="Workflow canvas"
         tabIndex={0}
@@ -872,7 +920,7 @@ export function N8nWorkflowBlock({
         <div className="flex flex-wrap items-center gap-4 text-xs text-foreground/60">
           <div className="flex items-center gap-2">
             <div
-              className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+              className="h-1.5 w-1.5 rounded-full bg-brand-500"
               aria-hidden="true"
             />
             <span className="uppercase tracking-[0.15em]">
@@ -893,7 +941,7 @@ export function N8nWorkflowBlock({
         <p className="text-[10px] uppercase tracking-[0.2em] text-foreground/40">
           {connectingFrom
             ? "Click another node's dot to link · Esc to cancel"
-            : "Ctrl + scroll to zoom · click a dot to wire · click a wire to break"}
+            : "Ctrl + scroll or pinch to zoom · click a dot to wire · click a wire to break"}
         </p>
       </div>
 

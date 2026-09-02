@@ -41,7 +41,7 @@ export interface CaseData {
 }
 
 export const statusConfig: Record<string, { label: string; className: string }> = {
-  active: { label: 'Active', className: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30' },
+  active: { label: 'Active', className: 'bg-brand-500/10 text-brand-600 dark:bg-brand-400/15 dark:text-brand-400 border-brand-200 dark:border-brand-500/30' },
   pending: { label: 'Pending', className: 'bg-amber-500/10 text-amber-600 dark:bg-amber-400/15 dark:text-amber-400 border-amber-200 dark:border-amber-500/30' },
   closed: { label: 'Closed', className: 'bg-muted text-muted-foreground border-border' },
   disposed: { label: 'Disposed', className: 'bg-muted text-muted-foreground border-border' },

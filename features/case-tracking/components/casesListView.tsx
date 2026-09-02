@@ -17,7 +17,7 @@ const CasesListView = ({cases, loading, clientView, clientId, setTrigger}: {case
     // Colorful effect - rotate colors for each case
     const colors = [
         { border: "border-blue-200", bg: "bg-blue-50/30", icon: "bg-blue-100", text: "text-blue-600", shadow: "shadow-[0_2px_12px_rgba(59,130,246,0.08)]" },
-        { border: "border-emerald-200", bg: "bg-emerald-50/30", icon: "bg-emerald-100", text: "text-emerald-600", shadow: "shadow-[0_2px_12px_rgba(16,185,129,0.08)]" },
+        { border: "border-brand-200", bg: "bg-brand-50/30", icon: "bg-brand-100", text: "text-brand-600", shadow: "shadow-[0_2px_12px_rgba(16,185,129,0.08)]" },
         { border: "border-violet-200", bg: "bg-violet-50/30", icon: "bg-violet-100", text: "text-violet-600", shadow: "shadow-[0_2px_12px_rgba(124,58,237,0.08)]" },
         { border: "border-orange-200", bg: "bg-orange-50/30", icon: "bg-orange-100", text: "text-orange-600", shadow: "shadow-[0_2px_12px_rgba(249,115,22,0.08)]" },
         { border: "border-cyan-200", bg: "bg-cyan-50/30", icon: "bg-cyan-100", text: "text-cyan-600", shadow: "shadow-[0_2px_12px_rgba(6,182,212,0.08)]" },

@@ -162,7 +162,7 @@ export default function ContractFixWithAiPanel({
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center">
-                  <Check className="w-6 h-6 text-emerald-500" />
+                  <Check className="w-6 h-6 text-brand-500" />
                   <p className="text-[12.5px] font-medium text-gray-900 dark:text-foreground">
                     All issues resolved ask anything else below
                   </p>

@@ -59,7 +59,7 @@
   --popover-foreground: #475569;
   --primary: #164e63;
   --primary-foreground: #ffffff;
-  --secondary: #16cc34;
+  --secondary: #4d7c0f;
   --secondary-foreground: #ffffff;
   --muted: #f0fdf4;
   --muted-foreground: #374151;
@@ -97,6 +97,19 @@
   --text-400: #94a3b8;
   --text-500: #cbd5e1;
   --accent-hover: #65a30d;
+
+  /* Brand green scale (matches --accent, the lime tone used behind the app logo) — replaces stock Tailwind emerald/green in bg-brand-*, text-brand-*, border-brand-*, from-brand-* utilities */
+  --brand-50: #f7fee7;
+  --brand-100: #ecfccb;
+  --brand-200: #d9f99d;
+  --brand-300: #bef264;
+  --brand-400: #a3e635;
+  --brand-500: #84cc16;
+  --brand-600: #65a30d;
+  --brand-700: #4d7c0f;
+  --brand-800: #3f6212;
+  --brand-900: #365314;
+  --brand-950: #1a2e05;
 }
 
 .dark {
@@ -146,6 +159,19 @@
   --text-400: #64748b;
   --text-500: #475569;
   --accent-hover: #2dd4bf;
+
+  /* Brand green scale for dark mode — matches --accent's teal tone here instead of lime */
+  --brand-50: #f0fdfa;
+  --brand-100: #ccfbf1;
+  --brand-200: #99f6e4;
+  --brand-300: #5eead4;
+  --brand-400: #2dd4bf;
+  --brand-500: #14b8a6;
+  --brand-600: #0d9488;
+  --brand-700: #0f766e;
+  --brand-800: #115e59;
+  --brand-900: #134e4a;
+  --brand-950: #042f2e;
 }
 
 @theme inline {
@@ -197,6 +223,18 @@
   --color-text-400: var(--text-400);
   --color-text-500: var(--text-500);
   --color-accent-hover: var(--accent-hover);
+
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+  --color-brand-950: var(--brand-950);
 
   /* Added custom fonts for ravenslaw */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;

@@ -19,8 +19,8 @@ export function ContactInfoPanel({ onTopicSelect }: { onTopicSelect: (topic: str
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <Phone className="h-5 w-5 text-green-600" />
+            <div className="p-2 bg-brand-50 rounded-lg">
+              <Phone className="h-5 w-5 text-brand-600" />
             </div>
             <div>
               <p className="font-medium text-sm text-gray-900">Phone</p>

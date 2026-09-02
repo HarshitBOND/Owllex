@@ -6,7 +6,7 @@
     "predev": "node scripts/fix-onedrive.js",
     "prebuild": "node scripts/fix-onedrive.js",
     "build": "next build",
-    "dev": "node --max-old-space-size=4096 node_modules/next/dist/bin/next dev",
+    "dev": "node --max-old-space-size=4096 node_modules/next/dist/bin/next dev --turbopack",
     "dev:backend": "cd backend && python run.py",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

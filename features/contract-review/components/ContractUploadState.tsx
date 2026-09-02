@@ -43,8 +43,8 @@ const whatYouGet = [
   },
   {
     icon: Scale,
-    iconBg: "bg-emerald-50 dark:bg-emerald-500/10",
-    iconColor: "text-emerald-500 dark:text-emerald-400",
+    iconBg: "bg-brand-50 dark:bg-brand-500/10",
+    iconColor: "text-brand-500 dark:text-brand-400",
     title: "Plain language summary",
     description: "Understand complex legal terms in simple language.",
   },
@@ -85,7 +85,7 @@ export default function ContractUploadState({ onUpload, error }: ContractUploadS
           <div className="flex flex-col items-center text-center pt-14 pb-10 px-6">
             <div className="relative w-16 h-16 mb-4 flex items-center justify-center rounded-2xl bg-gray-100 dark:bg-secondary">
               <FileText className="w-7 h-7 text-gray-400 dark:text-muted-foreground" />
-              <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center ring-4 ring-white dark:ring-card">
+              <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center ring-4 ring-white dark:ring-card">
                 <ArrowUp className="w-3.5 h-3.5 text-white" />
               </span>
             </div>

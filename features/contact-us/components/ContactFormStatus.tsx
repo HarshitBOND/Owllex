@@ -4,11 +4,11 @@ import type { ContactStatus } from "../types"
 export function ContactFormStatus({ status }: { status: ContactStatus }) {
   if (status === "success") {
     return (
-      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl mb-6">
-        <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+      <div className="flex items-center gap-3 p-4 bg-brand-50 border border-brand-200 rounded-xl mb-6">
+        <CheckCircle className="h-5 w-5 text-brand-600 flex-shrink-0" />
         <div>
-          <p className="text-sm font-medium text-green-800">Message sent successfully!</p>
-          <p className="text-xs text-green-600">We&apos;ll get back to you within 24 hours.</p>
+          <p className="text-sm font-medium text-brand-800">Message sent successfully!</p>
+          <p className="text-xs text-brand-600">We&apos;ll get back to you within 24 hours.</p>
         </div>
       </div>
     )

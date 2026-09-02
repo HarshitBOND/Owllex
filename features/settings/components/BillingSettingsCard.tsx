@@ -25,7 +25,7 @@ export function BillingSettingsCard({
   return (
     <div className="bg-white dark:bg-card border border-gray-200 dark:border-border rounded-xl p-5">
       <div className="flex items-center gap-2 mb-1">
-        <ReceiptText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        <ReceiptText className="h-4 w-4 text-brand-600 dark:text-brand-400" />
         <h3 className="font-semibold text-gray-900 dark:text-foreground">Billing Settings</h3>
       </div>
       <p className="text-xs text-gray-500 dark:text-muted-foreground mb-4">Monitor plan lifecycle and transaction history.</p>
@@ -103,7 +103,7 @@ export function BillingSettingsCard({
                     className={cn(
                       "text-xs px-2 py-1 rounded-full border",
                       transaction.status === "completed"
-                        ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30"
+                        ? "bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400 border-brand-200 dark:border-brand-500/30"
                         : transaction.status === "failed"
                           ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/30"
                           : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30",

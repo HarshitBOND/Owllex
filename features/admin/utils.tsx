@@ -49,8 +49,8 @@ export function formatBytes(bytes: number) {
 
 export function statusBadge(status: string) {
   const map: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-    completed: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", icon: <CheckCircle2 size={12} /> },
-    success: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", icon: <CheckCircle2 size={12} /> },
+    completed: { bg: "bg-brand-50 border-brand-200", text: "text-brand-700", icon: <CheckCircle2 size={12} /> },
+    success: { bg: "bg-brand-50 border-brand-200", text: "text-brand-700", icon: <CheckCircle2 size={12} /> },
     pending: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", icon: <Loader2 size={12} className="animate-spin" /> },
     failed: { bg: "bg-red-50 border-red-200", text: "text-red-700", icon: <XCircle size={12} /> },
     refunded: { bg: "bg-blue-50 border-blue-200", text: "text-blue-700", icon: <RefreshCw size={12} /> },

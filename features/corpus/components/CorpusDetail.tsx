@@ -216,7 +216,7 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
                 Save
               </button>
               {savedAt > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400">
                   <Check className="w-3.5 h-3.5" />
                   Saved
                 </span>
@@ -282,8 +282,8 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
                       i !== corpus.clients.length - 1 && "border-b border-gray-100 dark:border-border"
                     )}
                   >
-                    <span className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center shrink-0">
-                      <UsersRound className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                    <span className="w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center shrink-0">
+                      <UsersRound className="w-4 h-4 text-brand-700 dark:text-brand-400" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-gray-900 dark:text-foreground truncate">

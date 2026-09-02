@@ -18,7 +18,7 @@ export function DashboardTab({ loading, stats, recentUsers, recentTransactions, 
         {[
           { name: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-200 dark:border-blue-800" },
           { name: "Total Transactions", value: stats?.totalTransactions ?? 0, icon: CreditCard, color: "text-violet-600", bg: "bg-violet-50 dark:bg-violet-900/20", border: "border-violet-200 dark:border-violet-800" },
-          { name: "Total Revenue", value: formatCurrency(stats?.totalRevenue ?? 0), icon: IndianRupee, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-200 dark:border-emerald-800", isText: true },
+          { name: "Total Revenue", value: formatCurrency(stats?.totalRevenue ?? 0), icon: IndianRupee, color: "text-brand-600", bg: "bg-brand-50 dark:bg-brand-900/20", border: "border-brand-200 dark:border-brand-800", isText: true },
           { name: "Documents Generated", value: stats?.totalDocuments ?? 0, icon: FileText, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", border: "border-amber-200 dark:border-amber-800" },
         ].map((item) => (
           <div
@@ -44,7 +44,7 @@ export function DashboardTab({ loading, stats, recentUsers, recentTransactions, 
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {[
-          { name: "Active Users", value: stats?.activeUsers ?? 0, color: "text-emerald-600" },
+          { name: "Active Users", value: stats?.activeUsers ?? 0, color: "text-brand-600" },
           { name: "Banned Users", value: stats?.bannedUsers ?? 0, color: "text-red-600" },
           { name: "Pending Payments", value: stats?.pendingTransactions ?? 0, color: "text-amber-600" },
           { name: "Admin Actions", value: stats?.totalAdminLogs ?? 0, color: "text-violet-600" },

@@ -78,7 +78,7 @@ const ClientListView = ({ clients, contacts, clientsLoading, setTrigger }: Clien
                                         {client.name}
                                     </h3>
                                     {caseCount > 0 && (
-                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
+                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-brand-100 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400 border border-brand-200 dark:border-brand-500/30">
                                             {caseCount} case{caseCount !== 1 ? "s" : ""}
                                         </span>
                                     )}

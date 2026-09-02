@@ -86,6 +86,19 @@ export async function POST(request: NextRequest) {
             .describe("One line describing what changed, e.g. 'Added clause 6 interest on delayed refund'."),
         }),
       }),
+      // No execute here either: the questions render to the advocate, who answers
+      // in their next message rather than resolving a tool result.
+      askClarification: tool({
+        description:
+          "Ask the advocate for facts you need before you can draft a document that's actually usable, instead of guessing them. Use this only when a missing fact would make the draft wrong — who the parties are, what the document covers, a specific date or amount — never for a stylistic or boilerplate choice you can reasonably default.",
+        inputSchema: z.object({
+          questions: z
+            .array(z.string().min(1).max(200))
+            .min(1)
+            .max(4)
+            .describe("Short, specific questions, one per missing fact."),
+        }),
+      }),
     },
     stopWhen: stepCountIs(3),
     experimental_transform: smoothStream({ chunking: "word" }),

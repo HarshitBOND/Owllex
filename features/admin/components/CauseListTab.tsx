@@ -123,7 +123,7 @@ export function CauseListTab({
 
         <div className="bg-white dark:bg-gray-900 rounded-xl border-2 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
-            <Activity size={16} className="text-emerald-600" />
+            <Activity size={16} className="text-brand-600" />
             <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Current Session</h3>
           </div>
           {clStatus?.current_session ? (
@@ -234,7 +234,7 @@ export function CauseListTab({
                   className={cn(
                     "py-0.5",
                     entry.status === "error" ? "text-red-600" :
-                    entry.status === "completed" ? "text-emerald-600" :
+                    entry.status === "completed" ? "text-brand-600" :
                     "text-gray-700 dark:text-gray-300"
                   )}
                 >
@@ -250,12 +250,12 @@ export function CauseListTab({
         <div className={cn(
           "rounded-xl border p-5 shadow-sm",
           clSummary.status === "completed"
-            ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800"
+            ? "bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-800"
             : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
         )}>
           <div className="flex items-center gap-2 mb-3">
             {clSummary.status === "completed" ? (
-              <CheckCircle2 size={18} className="text-emerald-600" />
+              <CheckCircle2 size={18} className="text-brand-600" />
             ) : (
               <XCircle size={18} className="text-red-600" />
             )}

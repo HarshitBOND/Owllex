@@ -62,7 +62,7 @@ export function PaymentHistory({ payments, invoices }: PaymentHistoryProps) {
               'animate-fade-in'
             )}
           >
-            <div className="flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shrink-0">
+            <div className="flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-brand-100 text-brand-600 shrink-0">
               <Icon className="h-4 w-4 sm:h-6 sm:w-6" />
             </div>
             

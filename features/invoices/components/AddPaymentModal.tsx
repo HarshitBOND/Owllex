@@ -119,14 +119,14 @@ export function AddPaymentModal({ invoice, open, onOpenChange, onPaymentAdded }:
             <span className="font-medium">{formatCurrency(invoice.total)}</span>
           </div>
           {invoice.paidAmount > 0 && (
-            <div className="flex justify-between text-emerald-600">
+            <div className="flex justify-between text-brand-600">
               <span>Already Paid</span>
               <span className="font-medium">-{formatCurrency(invoice.paidAmount)}</span>
             </div>
           )}
           <div className="flex justify-between font-semibold text-base">
             <span>Balance Due</span>
-            <span className={balance <= 0 ? 'text-emerald-600' : 'text-foreground'}>{formatCurrency(balance)}</span>
+            <span className={balance <= 0 ? 'text-brand-600' : 'text-foreground'}>{formatCurrency(balance)}</span>
           </div>
         </div>
 

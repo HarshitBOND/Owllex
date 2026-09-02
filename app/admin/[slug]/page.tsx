@@ -97,7 +97,7 @@ function statusBadge(status: string) {
     case "completed":
     case "success":
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200">
           <CheckCircle2 size={12} /> {status}
         </span>
       )
@@ -224,9 +224,9 @@ export default function AdminSecretPage() {
             name: "Completed",
             value: stats?.completed ?? 0,
             icon: FileCheck2,
-            color: "text-emerald-600",
-            bgColor: "bg-emerald-50",
-            borderColor: "border-emerald-200",
+            color: "text-brand-600",
+            bgColor: "bg-brand-50",
+            borderColor: "border-brand-200",
           },
           {
             name: "Failed",
@@ -473,7 +473,7 @@ export default function AdminSecretPage() {
                   <td className="px-4 py-3">{statusBadge(pdf.parse_status)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
                     {pdf.deleted_at ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600">
+                      <span className="inline-flex items-center gap-1 text-brand-600">
                         <CheckCircle2 size={12} /> Cleaned
                       </span>
                     ) : (

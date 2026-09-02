@@ -98,7 +98,7 @@ export function ClientList({ clients, onSelectClient, selectedClientId }: Client
                   <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3">
                     <div className="space-y-0.5 sm:space-y-1">
                       <p className="text-[10px] sm:text-xs text-muted-foreground">Paid</p>
-                      <p className="text-xs sm:text-sm font-semibold text-emerald-600 flex items-center gap-0.5 sm:gap-1">
+                      <p className="text-xs sm:text-sm font-semibold text-brand-600 flex items-center gap-0.5 sm:gap-1">
                         <TrendingUp className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                         {formatCurrency(client.totalPaid)}
                       </p>

@@ -10,6 +10,8 @@ import {
   Check,
   ChevronDown,
   Copy,
+  FileEdit,
+  HelpCircle,
   History,
   Maximize2,
   Minimize2,
@@ -34,6 +36,13 @@ const quickActions = [
   "Tighten the termination terms",
   "Add an arbitration clause with seat and venue",
 ]
+
+// What the assistant is doing right now, surfaced from the live tool-call state
+// rather than a generic spinner — the advocate sees drafting vs. clarifying.
+const TOOL_STATUS: Record<string, { label: string; icon: typeof FileEdit }> = {
+  proposeDocument: { label: "Drafting the document", icon: FileEdit },
+  askClarification: { label: "Checking what's missing", icon: HelpCircle },
+}
 
 interface AiAssistantPanelProps {
   draftId: string
@@ -132,6 +141,17 @@ export default function AiAssistantPanel({
 
   const lastIsAssistant = messages[messages.length - 1]?.role === "assistant"
 
+  // Which step the assistant is mid-way through, read off the actual tool-call
+  // state of the streaming message rather than guessed from a fixed sequence.
+  const lastMessage = messages[messages.length - 1]
+  const activeToolPart =
+    busy && lastMessage?.role === "assistant"
+      ? [...lastMessage.parts]
+          .reverse()
+          .find((p) => isToolUIPart(p) && p.state !== "output-available" && p.state !== "output-error")
+      : undefined
+  const activeStatus = activeToolPart && isToolUIPart(activeToolPart) ? TOOL_STATUS[getToolName(activeToolPart)] : undefined
+
   return (
     <div
       className={cn(
@@ -205,8 +225,8 @@ export default function AiAssistantPanel({
               Describe what you need
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Ask for a whole document, or a change to the one on the left. Nothing is applied until you
-              approve it.
+              Ask for a whole document, or a change to the one on the left. If key details are missing
+              I&apos;ll ask before drafting, and nothing is applied until you approve it.
             </p>
           </div>
         )}
@@ -233,12 +253,39 @@ export default function AiAssistantPanel({
             | { toolCallId: string; state: string; input?: { html?: string; summary?: string } }
             | undefined
 
+          const clarification = msg.parts.find(
+            (p) => isToolUIPart(p) && getToolName(p) === "askClarification"
+          ) as { toolCallId: string; state: string; input?: { questions?: string[] } } | undefined
+          const questions = clarification?.input?.questions?.filter(Boolean) ?? []
+
           return (
             <div key={msg.id} className="flex flex-col items-start">
               {text && (
                 <p className="text-[13px] leading-relaxed text-gray-800 dark:text-foreground mb-2 whitespace-pre-wrap">
                   {text}
                 </p>
+              )}
+
+              {questions.length > 0 && (
+                <div className="w-full rounded-xl border border-accent/25 bg-accent/[0.06] overflow-hidden">
+                  <div className="px-3.5 py-2 border-b border-accent/20 flex items-center gap-2">
+                    <HelpCircle className="w-3.5 h-3.5 text-accent shrink-0" />
+                    <span className="text-[11px] font-semibold text-gray-700 dark:text-foreground">
+                      A few details would help
+                    </span>
+                  </div>
+                  <ol className="p-3.5 space-y-1.5">
+                    {questions.map((q, i) => (
+                      <li
+                        key={i}
+                        className="flex gap-2 text-[13px] leading-relaxed text-gray-800 dark:text-foreground"
+                      >
+                        <span className="text-accent font-medium shrink-0">{i + 1}.</span>
+                        <span>{q}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
               )}
 
               {proposal?.input?.html && (
@@ -302,7 +349,7 @@ export default function AiAssistantPanel({
                 </div>
               )}
 
-              {(text || proposal) && (
+              {(text || proposal || questions.length > 0) && (
                 <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground">
                   <button
                     type="button"
@@ -319,10 +366,13 @@ export default function AiAssistantPanel({
         })}
 
         {busy && (
-          <div className="flex items-center gap-1 px-1 py-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-text-400 animate-bounce [animation-delay:-0.3s]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-text-400 animate-bounce [animation-delay:-0.15s]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-text-400 animate-bounce" />
+          <div className="flex items-center gap-2 px-1 py-1 text-[12.5px] text-muted-foreground">
+            {activeStatus ? (
+              <activeStatus.icon className="w-3.5 h-3.5 text-accent animate-pulse shrink-0" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-accent animate-pulse shrink-0" />
+            )}
+            <span>{activeStatus ? `${activeStatus.label}…` : "Reading your request…"}</span>
           </div>
         )}
 

@@ -39,7 +39,7 @@ export const NoteList = ({
       'bg-secondary',
       'bg-accent',
       'bg-destructive',
-      'bg-emerald-500',
+      'bg-brand-500',
       'bg-indigo-500',
       'bg-rose-500',
       'bg-amber-500',

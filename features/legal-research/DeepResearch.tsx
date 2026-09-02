@@ -215,7 +215,7 @@ export default function DeepResearch() {
             <div
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium mb-3 ${
                 verified
-                  ? "bg-green-500/10 text-green-600 border border-green-500/20"
+                  ? "bg-brand-500/10 text-brand-600 border border-brand-500/20"
                   : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
               }`}
             >

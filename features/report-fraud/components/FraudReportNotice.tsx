@@ -9,7 +9,7 @@ interface FraudReportNoticeProps {
 export function FraudReportNotice({ status, errorMessage }: FraudReportNoticeProps) {
   if (status === "success") {
     return (
-      <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 flex items-center gap-2">
+      <div className="mb-5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-700 flex items-center gap-2">
         <CheckCircle2 className="h-4 w-4" />
         Fraud report submitted successfully. Support will review it shortly.
       </div>

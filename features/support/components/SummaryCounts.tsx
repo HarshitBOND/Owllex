@@ -23,8 +23,8 @@ export function SummaryCounts({
         <p className="text-xs text-amber-600 font-medium">New Fraud</p>
         <p className="text-2xl font-bold text-gray-900 mt-1">{newFraud}</p>
       </div>
-      <div className="bg-white border border-emerald-200 rounded-xl p-4">
-        <p className="text-xs text-emerald-600 font-medium">Open Notification Issues</p>
+      <div className="bg-white border border-brand-200 rounded-xl p-4">
+        <p className="text-xs text-brand-600 font-medium">Open Notification Issues</p>
         <p className="text-2xl font-bold text-gray-900 mt-1">{openNotificationIssues}</p>
       </div>
       <div className="bg-white border border-gray-200 rounded-xl p-4">

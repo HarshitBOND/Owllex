@@ -179,9 +179,9 @@ const Dashboard = () => {
       name: "Total Clients",
       value: stats.totalClients,
       icon: Users,
-      color: "text-emerald-600 dark:text-emerald-400",
-      bgColor: "bg-emerald-50 dark:bg-emerald-500/10",
-      borderColor: "border-emerald-200 dark:border-emerald-500/30",
+      color: "text-brand-600 dark:text-brand-400",
+      bgColor: "bg-brand-50 dark:bg-brand-500/10",
+      borderColor: "border-brand-200 dark:border-brand-500/30",
       description: "Clients under management",
       href: "/my-clients",
     },
@@ -220,7 +220,7 @@ const Dashboard = () => {
       description: "Register a new client",
       icon: <Users className="text-white" size={20} />,
       href: "/my-clients/add",
-      color: "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+      color: "bg-brand-600 hover:bg-brand-700 dark:bg-brand-600 dark:hover:bg-brand-500"
     },
     {
       name: "View Invoices",
@@ -545,15 +545,15 @@ const Dashboard = () => {
                   <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-border shadow-sm">
                     <div className="p-3 border-b border-gray-100 dark:border-border">
                       <h3 className="text-sm font-semibold text-gray-900 dark:text-foreground flex items-center gap-2">
-                        <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <Users className="h-4 w-4 text-brand-600 dark:text-brand-400" />
                         Recent Clients
                       </h3>
                     </div>
                     <div className="divide-y divide-gray-100 dark:divide-border">
                       {data.recentClients.slice(0, 3).map((client: any, i: number) => (
                         <div key={client._id || i} className="p-3 flex items-center gap-2" onClick={() => router.push(`/my-clients/view/${client._id}`)}>
-                          <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                          <div className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-500/20 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-semibold text-brand-700 dark:text-brand-400">
                               {(client.name || 'U')[0].toUpperCase()}
                             </span>
                           </div>
@@ -849,7 +849,7 @@ const Dashboard = () => {
                           </div>
                           <span className={cn(
                             "text-xs px-2 py-0.5 rounded-full font-medium",
-                            job.status === "success" ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400" :
+                            job.status === "success" ? "bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-400" :
                             job.status === "failed" ? "bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400" :
                             "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400"
                           )}>
@@ -1008,7 +1008,7 @@ const Dashboard = () => {
                   <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-border shadow-sm">
                     <div className="p-4 border-b border-gray-100 dark:border-border flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-foreground flex items-center gap-2">
-                        <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        <Users className="h-5 w-5 text-brand-600 dark:text-brand-400" />
                         Recent Clients
                       </h3>
                       <Button variant="ghost" size="sm" onClick={() => router.push("/my-clients")} className="text-sidebar-primary hover:text-sidebar-primary/80">
@@ -1018,8 +1018,8 @@ const Dashboard = () => {
                     <div className="divide-y divide-gray-100 dark:divide-border">
                       {data.recentClients.slice(0, 4).map((client: any, i: number) => (
                         <div key={client._id || i} className="p-4 hover:bg-gray-50 dark:hover:bg-muted transition-colors cursor-pointer flex items-center gap-3" onClick={() => router.push(`/my-clients/view/${client._id}`)}>
-                          <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                          <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-500/20 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-semibold text-brand-700 dark:text-brand-400">
                               {(client.name || 'U')[0].toUpperCase()}
                             </span>
                           </div>

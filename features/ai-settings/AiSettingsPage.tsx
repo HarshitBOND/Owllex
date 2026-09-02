@@ -41,7 +41,7 @@ const sections: Section[] = [
         rows: [
           {
             icon: Sparkles,
-            tint: "bg-emerald-50 text-emerald-600",
+            tint: "bg-brand-50 text-brand-600",
             label: "Default model",
             hint: "Model used for new chats, drafts and reviews.",
             selects: [{ key: "model", options: ["Ravenslaw Pro (most capable)", "Ravenslaw Balanced", "Ravenslaw Fast"] }],
@@ -90,7 +90,7 @@ const sections: Section[] = [
         rows: [
           {
             icon: MessageSquare,
-            tint: "bg-emerald-50 text-emerald-600",
+            tint: "bg-brand-50 text-brand-600",
             label: "Tone of voice",
             hint: "Choose how the assistant addresses you.",
             selects: [{ key: "tone", options: ["Neutral professional", "Formal legal", "Plain conversational"] }],
@@ -172,7 +172,7 @@ const sections: Section[] = [
         rows: [
           {
             icon: CircleDollarSign,
-            tint: "bg-emerald-50 text-emerald-600",
+            tint: "bg-brand-50 text-brand-600",
             label: "Units & currency",
             hint: "Set your preferred currency and measurement units.",
             selects: [
@@ -202,7 +202,7 @@ const sections: Section[] = [
           },
           {
             icon: Landmark,
-            tint: "bg-emerald-50 text-emerald-600",
+            tint: "bg-brand-50 text-brand-600",
             label: "Court priority",
             hint: "Which courts to surface first in results.",
             selects: [{ key: "courts", options: ["Supreme Court first", "High Courts first", "All courts equally"] }],
@@ -251,7 +251,7 @@ const sections: Section[] = [
           },
           {
             icon: ShieldCheck,
-            tint: "bg-emerald-50 text-emerald-600",
+            tint: "bg-brand-50 text-brand-600",
             label: "Data region",
             hint: "Where your AI data is processed and stored.",
             selects: [{ key: "region", options: ["India (Mumbai)", "Singapore"] }],

@@ -30,7 +30,7 @@ export function CaseStats({ cases }: CaseStatsProps) {
       icon: CheckCircle2,
       label: "Active",
       value: activeCases,
-      color: "text-emerald-600 dark:text-emerald-400",
+      color: "text-brand-600 dark:text-brand-400",
     },
     {
       icon: AlertTriangle,

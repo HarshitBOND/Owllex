@@ -13,14 +13,14 @@ interface StatCardProps {
 
 const variantStyles = {
   default: 'bg-card border-border',
-  success: 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200',
+  success: 'bg-gradient-to-br from-brand-50 to-teal-50 border-brand-200',
   warning: 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200',
   danger: 'bg-gradient-to-br from-rose-50 to-red-50 border-rose-200',
 };
 
 const iconStyles = {
   default: 'bg-primary/10 text-primary',
-  success: 'bg-emerald-500/10 text-emerald-600',
+  success: 'bg-brand-500/10 text-brand-600',
   warning: 'bg-amber-500/10 text-amber-600',
   danger: 'bg-rose-500/10 text-rose-600',
 };
@@ -50,7 +50,7 @@ export function StatCard({
             <p
               className={cn(
                 'text-[9px] sm:text-sm font-medium hidden sm:block',
-                changeType === 'positive' && 'text-emerald-600',
+                changeType === 'positive' && 'text-brand-600',
                 changeType === 'negative' && 'text-rose-600',
                 changeType === 'neutral' && 'text-muted-foreground'
               )}

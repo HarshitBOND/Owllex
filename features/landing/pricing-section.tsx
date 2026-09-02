@@ -84,7 +84,7 @@ export function PricingSection() {
             <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${yearly ? "translate-x-6.5" : "translate-x-0.5"}`} />
           </button>
           <span className={yearly ? "text-gray-900 text-sm font-medium" : "text-gray-400 text-sm"}>
-            Yearly <span className="text-green-600 font-semibold text-xs">2 months free</span>
+            Yearly <span className="text-brand-600 font-semibold text-xs">2 months free</span>
           </span>
         </div>
       </div>
@@ -117,7 +117,7 @@ export function PricingSection() {
             <ul className="space-y-2.5 mb-6">
               {plan.features.map((f) => (
                 <li key={f} className="flex items-center gap-2 text-sm text-gray-600">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  <Check className="h-4 w-4 text-brand-500 flex-shrink-0" />
                   {f}
                 </li>
               ))}

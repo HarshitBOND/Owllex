@@ -204,8 +204,8 @@ const AddClientForm = ({ id, linkCaseId }: { id?: string; linkCaseId?: string })
             {/* Section 2: Contact Details */}
             <div className="bg-white rounded-xl border-2 border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-6">
                 <div className="flex items-center gap-3 mb-5">
-                    <div className="p-2.5 rounded-lg bg-emerald-50">
-                        <Phone className="h-5 w-5 text-emerald-600" />
+                    <div className="p-2.5 rounded-lg bg-brand-50">
+                        <Phone className="h-5 w-5 text-brand-600" />
                     </div>
                     <div>
                         <h2 className="text-lg font-bold text-gray-900">Contact Information</h2>

@@ -450,10 +450,10 @@ export function InvoiceDashboard() {
 
       {/* Stats Cards Grid - Mobile optimized */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
-        <div className="bg-white dark:bg-card rounded-lg sm:rounded-xl border-2 border-emerald-200 dark:border-emerald-500/30 p-3 sm:p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group overflow-hidden">
+        <div className="bg-white dark:bg-card rounded-lg sm:rounded-xl border-2 border-brand-200 dark:border-brand-500/30 p-3 sm:p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer group overflow-hidden">
           <div className="flex items-start justify-between mb-2 sm:mb-3">
-            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
-              <IndianRupee className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
+            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-brand-50 dark:bg-brand-500/10">
+              <IndianRupee className="h-4 w-4 sm:h-5 sm:w-5 text-brand-600 dark:text-brand-400" />
             </div>
             <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-400 transition-colors" />
           </div>
@@ -503,8 +503,8 @@ export function InvoiceDashboard() {
       <div className="hidden sm:grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
         <div className="bg-white dark:bg-card rounded-xl border-2 border-gray-200 dark:border-border p-4 md:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-none hover:shadow-md transition-all duration-300">
           <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
-              <ArrowUpRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-500/10">
+              <ArrowUpRight className="h-5 w-5 text-brand-600 dark:text-brand-400" />
             </div>
             <div>
               <p className="text-lg md:text-2xl font-bold text-gray-900 dark:text-foreground">{stats.paidCount}</p>
@@ -628,9 +628,9 @@ export function InvoiceDashboard() {
                   <div className="rounded-xl border-2 border-gray-200 dark:border-border bg-white dark:bg-card p-4 md:p-6">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-foreground">Payment Summary</h3>
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border-2 border-emerald-100 dark:border-emerald-500/20">
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-brand-50 dark:bg-brand-500/10 border-2 border-brand-100 dark:border-brand-500/20">
                         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Received</span>
-                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="text-lg font-bold text-brand-600 dark:text-brand-400">
                           {formatCurrency(payments.reduce((sum, p) => sum + p.amount, 0))}
                         </span>
                       </div>

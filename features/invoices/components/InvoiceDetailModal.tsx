@@ -107,7 +107,7 @@ export function InvoiceDetailModal({
               Print
             </Button>
             {invoice.status !== 'paid' && (
-              <Button size="sm" variant="outline" onClick={() => onRecordPayment(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50 shrink-0">
+              <Button size="sm" variant="outline" onClick={() => onRecordPayment(invoice)} className="h-8 sm:h-9 text-xs sm:text-sm border-brand-300 text-brand-700 hover:bg-brand-50 shrink-0">
                 <PlusCircle className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
                 <span className="hidden xs:inline">Record</span> Pay
               </Button>
@@ -228,7 +228,7 @@ export function InvoiceDetailModal({
                 <span>{formatCurrency(invoice.subtotal)}</span>
               </div>
               {invoice.discount > 0 && (
-                <div className="flex justify-between text-sm text-emerald-600">
+                <div className="flex justify-between text-sm text-brand-600">
                   <span>Discount</span>
                   <span>-{formatCurrency(invoice.discount)}</span>
                 </div>
@@ -244,7 +244,7 @@ export function InvoiceDetailModal({
               </div>
               {invoice.paidAmount > 0 && (
                 <>
-                  <div className="flex justify-between text-sm text-emerald-600">
+                  <div className="flex justify-between text-sm text-brand-600">
                     <span>Paid</span>
                     <span>-{formatCurrency(invoice.paidAmount)}</span>
                   </div>
@@ -281,8 +281,8 @@ export function InvoiceDetailModal({
                   {payments.map((p: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/30 text-xs sm:text-sm">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-md bg-emerald-50 border border-emerald-100">
-                          <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                        <div className="p-1.5 rounded-md bg-brand-50 border border-brand-100">
+                          <Banknote className="h-3.5 w-3.5 text-brand-600" />
                         </div>
                         <div>
                           <p className="font-medium">{methodLabels[p.method] || p.method}</p>
@@ -292,7 +292,7 @@ export function InvoiceDetailModal({
                           </p>
                         </div>
                       </div>
-                      <span className="font-semibold text-emerald-600">+{formatCurrency(p.amount)}</span>
+                      <span className="font-semibold text-brand-600">+{formatCurrency(p.amount)}</span>
                     </div>
                   ))}
                 </div>

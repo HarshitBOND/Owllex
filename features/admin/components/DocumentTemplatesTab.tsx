@@ -132,7 +132,7 @@ export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocu
                     </td>
                     <td className="px-4 py-3">
                       {t.status === "published" ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 border border-brand-200 text-brand-700 dark:bg-brand-500/10 dark:border-brand-500/20 dark:text-brand-400">
                           Published
                         </span>
                       ) : (

@@ -240,7 +240,7 @@ const CaseView = ({id}: {id: string}) => {
                         <div className='flex gap-x-2 items-end'>
                             <span className="font-semibold">Status</span>
                             <span className={`px-3 py-1 rounded-md text-white text-xs font-semibold ${
-                                caseData?.status?.toLowerCase().includes('active') ? 'bg-green-500' :
+                                caseData?.status?.toLowerCase().includes('active') ? 'bg-brand-500' :
                                 caseData?.status?.toLowerCase().includes('pending') ? 'bg-yellow-500' :
                                 caseData?.status?.toLowerCase().includes('disposed') || caseData?.status?.toLowerCase().includes('closed') ? 'bg-gray-500' :
                                 'bg-blue-500'

@@ -61,7 +61,7 @@ export function formatDateTime(dateValue?: string | null) {
 
 export function statusStyles(status: SupportStatus) {
   if (status === "resolved") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200"
+    return "bg-brand-50 text-brand-700 border-brand-200"
   }
 
   if (status === "in_progress") {
@@ -73,7 +73,7 @@ export function statusStyles(status: SupportStatus) {
 
 export function issueStatusStyles(status: IssueStatus) {
   if (status === "resolved") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200"
+    return "bg-brand-50 text-brand-700 border-brand-200"
   }
 
   if (status === "in_progress") {
@@ -85,7 +85,7 @@ export function issueStatusStyles(status: IssueStatus) {
 
 export function fraudStatusStyles(status: FraudStatus) {
   if (status === "resolved") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200"
+    return "bg-brand-50 text-brand-700 border-brand-200"
   }
 
   if (status === "dismissed") {
@@ -105,7 +105,7 @@ export function fraudStatusStyles(status: FraudStatus) {
 
 export function suggestionStatusStyles(status: SuggestionStatus) {
   if (status === "approved") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200"
+    return "bg-brand-50 text-brand-700 border-brand-200"
   }
 
   if (status === "rejected") {

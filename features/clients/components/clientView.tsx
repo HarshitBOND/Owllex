@@ -183,14 +183,14 @@ const ClientView = ({id}: {id: string}) => {
                     </div>
                     <p className='text-xs text-violet-600/80 mt-0.5'>Upcoming Hearings</p>
                 </div>
-                <div className='p-3 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg border border-emerald-100 dark:border-emerald-500/20'>
+                <div className='p-3 bg-brand-50 dark:bg-brand-500/10 rounded-lg border border-brand-100 dark:border-brand-500/20'>
                     <div className='flex items-center gap-2'>
-                        <Calendar className='h-4 w-4 text-emerald-600' />
-                        <span className='text-sm font-bold text-emerald-600'>
+                        <Calendar className='h-4 w-4 text-brand-600' />
+                        <span className='text-sm font-bold text-brand-600'>
                             {client.createdAt ? new Date(client.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "-"}
                         </span>
                     </div>
-                    <p className='text-xs text-emerald-600/80 mt-0.5'>Client Since</p>
+                    <p className='text-xs text-brand-600/80 mt-0.5'>Client Since</p>
                 </div>
             </div>
         </div>
@@ -216,8 +216,8 @@ const ClientView = ({id}: {id: string}) => {
             {/* Business Details */}
             <div className='bg-card rounded-xl border border-border p-5'>
                 <div className='flex items-center gap-2 mb-4'>
-                    <div className='p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10'>
-                        <Building className='h-4 w-4 text-emerald-600' />
+                    <div className='p-1.5 rounded-lg bg-brand-50 dark:bg-brand-500/10'>
+                        <Building className='h-4 w-4 text-brand-600' />
                     </div>
                     <h3 className='text-sm font-semibold text-foreground'>Business & Other Details</h3>
                 </div>

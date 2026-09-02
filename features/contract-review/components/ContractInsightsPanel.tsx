@@ -63,7 +63,7 @@ export default function ContractInsightsPanel({
                   ? "border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400"
                   : summary.riskLevel === "Medium"
                     ? "border-orange-200 dark:border-orange-500/30 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400"
-                    : "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400"
               }`}
             >
               {summary.riskLevel} risk
@@ -136,7 +136,7 @@ export default function ContractInsightsPanel({
                 <button type="button" onClick={() => onSelectIssue(issue.id)} className="flex items-start gap-3 flex-1 min-w-0 text-left">
                   <span
                     className={`w-5 h-5 rounded-full flex items-center justify-center text-white shrink-0 mt-0.5 ${
-                      isResolved ? "bg-emerald-500" : style.dot
+                      isResolved ? "bg-brand-500" : style.dot
                     }`}
                   >
                     {isResolved && <Check className="w-3 h-3" />}
@@ -146,7 +146,7 @@ export default function ContractInsightsPanel({
                       <span
                         className={
                           isResolved
-                            ? "inline-flex items-center rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium px-1.5 py-0.5"
+                            ? "inline-flex items-center rounded-full border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400 text-[10px] font-medium px-1.5 py-0.5"
                             : `inline-flex items-center rounded-full border ${style.badgeBorder} ${style.badgeBg} ${style.badgeText} text-[10px] font-medium px-1.5 py-0.5`
                         }
                       >
@@ -175,7 +175,7 @@ export default function ContractInsightsPanel({
                   onClick={() => onToggleResolved(issue.id)}
                   title={isResolved ? "Mark unresolved" : "Mark resolved"}
                   className={`shrink-0 mt-0.5 transition-colors ${
-                    isResolved ? "text-emerald-500" : "text-gray-300 dark:text-muted-foreground hover:text-emerald-500"
+                    isResolved ? "text-brand-500" : "text-gray-300 dark:text-muted-foreground hover:text-brand-500"
                   }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />

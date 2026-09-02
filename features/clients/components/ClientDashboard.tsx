@@ -197,7 +197,7 @@ const ClientDashboard = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Total Clients", value: clients.length, icon: Users, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-500/10" },
-            { label: "With Cases", value: clients.filter((c) => c.cases?.length > 0).length, icon: Scale, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
+            { label: "With Cases", value: clients.filter((c) => c.cases?.length > 0).length, icon: Scale, color: "text-brand-600", bg: "bg-brand-50 dark:bg-brand-500/10" },
             { label: "No Cases Yet", value: clients.filter((c) => !c.cases?.length).length, icon: AlertCircle, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-500/10" },
             { label: "Upcoming Hearings", value: upcomingHearings.length, icon: Clock, color: "text-violet-600", bg: "bg-violet-50 dark:bg-violet-500/10" },
           ].map((stat, i) => (
@@ -512,7 +512,7 @@ const ClientCardEnhanced = ({ client, index, isSelected, onClick, onView, onEdit
             <div className="flex items-center gap-1">
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                 caseCount > 0
-                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-500/30"
+                  ? "bg-brand-500/10 text-brand-600 border-brand-200 dark:border-brand-500/30"
                   : "bg-muted text-muted-foreground border-border"
               }`}>
                 {caseCount} case{caseCount !== 1 ? "s" : ""}
@@ -632,7 +632,7 @@ const ClientListRow = ({ client, index, isSelected, onClick, onView, onEdit, onD
       </div>
       <div>
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-          caseCount > 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-muted text-muted-foreground"
+          caseCount > 0 ? "bg-brand-100 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400" : "bg-muted text-muted-foreground"
         }`}>
           {caseCount} case{caseCount !== 1 ? "s" : ""}
         </span>
@@ -748,7 +748,7 @@ const ClientDetailPanel = ({ client, onClose, onRefresh }: DetailPanelProps) => 
                 {[
                   { icon: Eye, label: "View", color: "text-blue-500", action: () => router.push(`/my-clients/view/${client._id}`) },
                   { icon: Pencil, label: "Edit", color: "text-amber-500", action: () => router.push(`/my-clients/edit/${client._id}`) },
-                  { icon: Receipt, label: "Invoice", color: "text-emerald-500", action: () => router.push(`/invoices`) },
+                  { icon: Receipt, label: "Invoice", color: "text-brand-500", action: () => router.push(`/invoices`) },
                   { icon: ClipboardList, label: "Task", color: "text-violet-500", action: () => router.push(`/tasks`) },
                 ].map((action) => (
                   <button
@@ -902,7 +902,7 @@ const ClientDetailPanel = ({ client, onClose, onRefresh }: DetailPanelProps) => 
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                               c.status?.toLowerCase() === "disposed" ? "bg-red-100 text-red-700" :
                               c.status?.toLowerCase() === "pending" ? "bg-amber-100 text-amber-700" :
-                              "bg-emerald-100 text-emerald-700"
+                              "bg-brand-100 text-brand-700"
                             }`}>
                               {c.status}
                             </span>

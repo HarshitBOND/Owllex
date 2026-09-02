@@ -163,7 +163,7 @@ export const Editor = ({
               "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all",
               isSaving 
                 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" 
-                : "bg-green-500/10 text-green-600 dark:text-green-400"
+                : "bg-brand-500/10 text-brand-600 dark:text-brand-400"
             )}>
               {isSaving ? (
                 <>
@@ -262,7 +262,7 @@ export const Editor = ({
                 </>
               ) : (
                 <>
-                  <Check className="h-3.5 w-3.5 text-green-500" />
+                  <Check className="h-3.5 w-3.5 text-brand-500" />
                   <span>Saved</span>
                 </>
               )}
