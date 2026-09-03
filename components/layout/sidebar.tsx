@@ -38,25 +38,27 @@ const isNavAction = (item: NavLeaf): item is NavAction => "action" in item
 const aiGroupItems: NavLeaf[] = [
     { name: "New Chat", icon: <CirclePlus size={16} />, action: "new-chat" },
     { name: "Chat History", icon: <History size={16} />, action: "chat-history" },
+    { name: "Vault", icon: <Lock size={16} />, href: "/vault" },
     { name: "Corpus", icon: <Library size={16} />, href: "/corpus" },
     { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },
     { name: "Contract Review", icon: <FileCheck2 size={16} />, href: "/contract-review" },
     { name: "AI Workflow", icon: <Workflow size={16} />, href: "/ai-workflow" },
 ]
 
-const workspaceGroupItems: NavLeaf[] = [
-    { name: "Dashboard", icon: <LayoutDashboard size={16} />, href: "/dashboard/overview" },
-    { name: "Vault", icon: <Lock size={16} />, href: "/vault" },
-    { name: "My Cases", icon: <FileSearch size={16} />, href: "/case-tracking" },
-    { name: "My Clients", icon: <UsersRound size={16} />, href: "/my-clients" },
-    { name: "Invoices", icon: <ReceiptText size={16} />, href: "/invoices" },
-    { name: "Calendar", icon: <CalendarDays size={16} />, href: "/calendar" },
-    { name: "Tasks", icon: <ListTodo size={16} />, href: "/tasks" },
-]
+// Workspace section is temporarily hidden from the nav (only AI is shown for now).
+// Kept here so it can be restored later.
+// const workspaceGroupItems: NavLeaf[] = [
+//     { name: "Dashboard", icon: <LayoutDashboard size={16} />, href: "/dashboard/overview" },
+//     { name: "My Cases", icon: <FileSearch size={16} />, href: "/case-tracking" },
+//     { name: "My Clients", icon: <UsersRound size={16} />, href: "/my-clients" },
+//     { name: "Invoices", icon: <ReceiptText size={16} />, href: "/invoices" },
+//     { name: "Calendar", icon: <CalendarDays size={16} />, href: "/calendar" },
+//     { name: "Tasks", icon: <ListTodo size={16} />, href: "/tasks" },
+// ]
 
 const sections: { label: string; groups: NavGroup[] }[] = [
     { label: "AI", groups: [{ name: "AI Assistant", icon: <Sparkles size={18} />, items: aiGroupItems }] },
-    { label: "Main", groups: [{ name: "Workspace", icon: <Briefcase size={18} />, items: workspaceGroupItems }] },
+    // { label: "Main", groups: [{ name: "Workspace", icon: <Briefcase size={18} />, items: workspaceGroupItems }] },
 ]
 
 const Sidebar = () => {

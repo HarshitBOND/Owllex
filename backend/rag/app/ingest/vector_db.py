@@ -83,12 +83,14 @@ def collection_stats():
     chunk_count = collection.count()
     document_ids = set()
     offset = 0
+    # Chroma Cloud caps the `Get` action's limit at 300 rows per call for this tenant.
+    page_size = 300
     while offset < chunk_count:
-        batch = collection.get(include=["metadatas"], limit=1000, offset=offset)
+        batch = collection.get(include=["metadatas"], limit=page_size, offset=offset)
         for m in batch["metadatas"] or []:
             if m and m.get("document_id"):
                 document_ids.add(m["document_id"])
-        offset += 1000
+        offset += page_size
 
     stats = {"chunk_count": chunk_count, "document_count": len(document_ids)}
     _STATS_CACHE["at"] = now

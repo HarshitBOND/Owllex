@@ -173,12 +173,7 @@ const ClientDashboard = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push("/case-tracking")}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors"
-              >
-                <Scale className="h-3.5 w-3.5" /> My Cases
-              </button>
+              
               <button
                 onClick={handleExport}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-secondary text-secondary-foreground hover:bg-muted transition-colors"

@@ -19,7 +19,7 @@ const AdminLogSchema = new mongoose.Schema(
       default: "system",
     },
     targetId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       default: null,
     },
     details: {

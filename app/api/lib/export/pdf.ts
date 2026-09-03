@@ -121,6 +121,10 @@ export function renderPdf(
         })
         doc.y = top + rowHeight
       }
+      // Cells are written at explicit x positions, which leaves doc.x parked at
+      // the last column instead of the margin -- reset it or the next block
+      // inherits that x and renders squeezed against the right edge.
+      doc.x = doc.page.margins.left
       doc.moveDown(0.6)
     }
 

@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:notifications": "vitest run tests/notifications/notification-mvp.smoke.test.ts",
     "r2:sweep": "node scripts/r2-orphan-sweep.mjs",
-    "vault:recompress": "tsx scripts/vault-recompress.ts"
+    "vault:recompress": "tsx scripts/vault-recompress.ts",
+    "seed:court-forms": "tsx scripts/seed-court-form-templates.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.52",

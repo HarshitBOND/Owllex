@@ -1,6 +1,7 @@
 import {
   Briefcase,
   FileText,
+  Gavel,
   Handshake,
   Home,
   Mail,
@@ -48,6 +49,11 @@ export const categoryStyles: Record<DocumentCategory, CategoryStyle> = {
     color: "text-amber-700 dark:text-amber-400",
     bgColor: "bg-amber-50 dark:bg-amber-500/10",
     icon: Mail,
+  },
+  "Court Forms & Pleadings": {
+    color: "text-emerald-700 dark:text-emerald-400",
+    bgColor: "bg-emerald-50 dark:bg-emerald-500/10",
+    icon: Gavel,
   },
   "Other Documents": {
     color: "text-indigo-700 dark:text-indigo-400",

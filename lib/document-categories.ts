@@ -6,6 +6,7 @@ export const DOCUMENT_CATEGORIES = [
   "Corporate & Business",
   "Consumer Protection",
   "Notices & Letters",
+  "Court Forms & Pleadings",
   "Other Documents",
 ] as const
 
