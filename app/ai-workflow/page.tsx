@@ -12,7 +12,9 @@ import {
   type WorkflowCanvasHandle,
 } from "@/features/ai-workflow/components/WorkflowCanvasImmersive"
 import WorkflowTopBar from "@/features/ai-workflow/components/WorkflowTopBar"
-import WorkflowAiChatPanel from "@/features/ai-workflow/components/WorkflowAiChatPanel"
+import WorkflowAiChatPanel, {
+  type WorkflowAiChatPanelHandle,
+} from "@/features/ai-workflow/components/WorkflowAiChatPanel"
 import type { WorkflowConnection, WorkflowNode } from "@/components/ui/n8n-workflow-block-shadcnui"
 import {
   initialWorkflowConnections,
@@ -28,6 +30,7 @@ export default function AiWorkflowPage() {
   const { corpora } = useAiChat()
   const { isOpen, setIsOpen } = useSidebar()
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
+  const chatPanelRef = useRef<WorkflowAiChatPanelHandle>(null)
 
   // Immersive canvas mode: collapse the app rail to an icon strip while this
   // page is open, and put it back the way the user had it on the way out.
@@ -61,6 +64,13 @@ export default function AiWorkflowPage() {
   const applyAiWorkflow = useCallback((nodes: WorkflowNode[], connections: WorkflowConnection[]) => {
     setWorkflow({ nodes, connections })
     setCanvasRevision((r) => r + 1)
+  }, [])
+
+  // Always gives visible feedback: opens the panel if it was closed, and
+  // focuses the input either way so the click is never a no-op.
+  const requestAssistant = useCallback(() => {
+    setAssistantOpen(true)
+    requestAnimationFrame(() => chatPanelRef.current?.focusInput())
   }, [])
 
   useEffect(() => {
@@ -101,7 +111,7 @@ export default function AiWorkflowPage() {
               connections={workflow.connections}
               onChange={handleCanvasChange}
               onScaleChange={setScale}
-              onRequestAssistant={() => setAssistantOpen(true)}
+              onRequestAssistant={requestAssistant}
               panMode={panMode}
               className="h-full"
             />
@@ -109,6 +119,7 @@ export default function AiWorkflowPage() {
 
           {assistantOpen && (
             <WorkflowAiChatPanel
+              ref={chatPanelRef}
               chatId="ai-workflow"
               currentWorkflow={workflow}
               onApply={applyAiWorkflow}

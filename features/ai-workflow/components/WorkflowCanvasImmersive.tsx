@@ -454,16 +454,14 @@ export const WorkflowCanvasImmersive = forwardRef<WorkflowCanvasHandle, Workflow
           ref={canvasRef}
           onPointerDown={() => setConnectingFrom(null)}
           className={cn(
-            "absolute inset-0 overflow-auto overscroll-contain",
+            "absolute inset-0 overflow-auto overscroll-contain bg-[#fafafa] dark:bg-[#131417] text-black/15 dark:text-white/15",
             panMode ? "cursor-grab active:cursor-grabbing" : "",
             connectingFrom && "outline outline-2 outline-accent/30 -outline-offset-2"
           )}
           style={{
             touchAction: "pan-x pan-y",
-            backgroundColor: "var(--canvas-bg, #fafafa)",
-            backgroundImage: showGrid ? "radial-gradient(currentColor 1px, transparent 1px)" : undefined,
+            backgroundImage: showGrid ? "radial-gradient(currentColor 1.5px, transparent 1.5px)" : undefined,
             backgroundSize: showGrid ? `${18 * scale}px ${18 * scale}px` : undefined,
-            color: "rgba(0,0,0,0.08)",
           }}
           role="region"
           aria-label="Workflow canvas"

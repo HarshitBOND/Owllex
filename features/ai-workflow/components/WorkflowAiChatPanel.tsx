@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai"
 import { AlertCircle, ArrowUp, Check, ChevronDown, Pin, PinOff, Sparkles, X } from "lucide-react"
@@ -99,7 +99,11 @@ interface WorkflowAiChatPanelProps {
   onClose?: () => void
 }
 
-export default function WorkflowAiChatPanel({
+export interface WorkflowAiChatPanelHandle {
+  focusInput: () => void
+}
+
+const WorkflowAiChatPanel = forwardRef<WorkflowAiChatPanelHandle, WorkflowAiChatPanelProps>(function WorkflowAiChatPanel({
   chatId,
   currentWorkflow,
   onApply,
@@ -108,12 +112,20 @@ export default function WorkflowAiChatPanel({
   pinned = false,
   onTogglePin,
   onClose,
-}: WorkflowAiChatPanelProps) {
+}, ref) {
   const [value, setValue] = useState("")
   const [tab, setTab] = useState<"assistant" | "library">("assistant")
   const [model, setModel] = useState<ModelKey>(DEFAULT_MODEL)
   const allowedModels = useAllowedModels()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useImperativeHandle(ref, () => ({
+    focusInput: () => {
+      setTab("assistant")
+      textareaRef.current?.focus()
+    },
+  }))
   const workflowRef = useRef(currentWorkflow)
   workflowRef.current = currentWorkflow
   const appliedRef = useRef<Set<string>>(new Set())
@@ -324,6 +336,7 @@ export default function WorkflowAiChatPanel({
         <div className="border-t border-gray-200 dark:border-border p-3 shrink-0 space-y-3">
           <div className="rounded-2xl border border-bg-300 dark:border-border bg-bg-100 dark:bg-background/60 focus-within:border-accent/50 transition-colors">
             <textarea
+              ref={textareaRef}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {
@@ -449,4 +462,6 @@ export default function WorkflowAiChatPanel({
       </TabsContent>
     </Tabs>
   )
-}
+})
+
+export default WorkflowAiChatPanel
