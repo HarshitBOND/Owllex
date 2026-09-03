@@ -1,80 +1,50 @@
-import os
+import gc
 from pathlib import Path
-
-os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")  # Windows blocks HF cache symlinks without Developer Mode
 
 # Docling has no plain-text format, so .txt is read directly instead of converted.
 PLAIN_TEXT_SUFFIXES = {".txt"}
-# Mirrors this pipeline's own allow-list (backend/app/rag_routes.py), not Docling's full
-# InputFormat.IMAGE support (which also covers tiff/bmp/webp) -- keep the two in sync.
+# Mirrors this pipeline's own allow-list (backend/app/rag_routes.py).
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
-_converter = None
+# A page with fewer real characters than this in its embedded text layer is
+# treated as scanned (no usable text layer) rather than as a very short page.
+MIN_TEXT_LAYER_CHARS = 20
+
+# RapidOCR's detection/recognition/classification models default to Chinese,
+# not cosmetic -- an unset lang_type silently OCRs English contracts through
+# the wrong character set.
+_RAPIDOCR_PARAMS = {"Det.lang_type": "en", "Rec.lang_type": "en"}
+
+_ocr_engine = None
 
 
-def _get_converter():
-    # Built on first use, not at import: constructing it loads the layout model
-    # and costs ~60s, which would otherwise be paid by whoever imports this.
-    global _converter
-    if _converter is None:
-        from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.object_detection_engine_options import OnnxRuntimeObjectDetectionEngineOptions
-        from docling.datamodel.pipeline_options import (
-            LayoutObjectDetectionOptions,
-            OcrMode,
-            PdfPipelineOptions,
-            RapidOcrOptions,
-        )
-        from docling.document_converter import DocumentConverter, ImageFormatOption, PdfFormatOption
+def _get_ocr_engine():
+    # Built on first use, not at import: construction loads the tiny ONNX
+    # detection + recognition + orientation-classification weights (~170MB
+    # resident, well under a second on a warm disk). This used to be a full
+    # Docling DocumentConverter -- a document-layout model, a table-structure
+    # model, and torch itself, none of which OCR actually needs -- which cost
+    # ~1.2-1.4GB peak RSS on even a lightweight document and was what got this
+    # process OOM-killed on anything below a 4GB instance. A plain OCR engine
+    # with no layout/table understanding is a real trade: multi-column pages,
+    # tables and headings no longer come back structured, just linear text --
+    # acceptable here because load_text's caller re-flows everything through
+    # its own markdown/HTML pipeline anyway, and it's what keeps this running
+    # on a small server instead of needing one sized for a research pipeline.
+    global _ocr_engine
+    if _ocr_engine is None:
+        from rapidocr import RapidOCR
 
-        layout_options = LayoutObjectDetectionOptions(engine_options=OnnxRuntimeObjectDetectionEngineOptions())
-        # Pinned to RapidOcrOptions instead of Docling's default OcrAutoOptions for the same
-        # reason the layout engine above is pinned to ONNX: auto-selection can land on EasyOCR
-        # (needs torch) or system Tesseract (not installed in this project's Docker image, not
-        # guaranteed on a dev machine either) depending on the runtime -- RapidOCR is already an
-        # installed transitive dependency of docling>=2.0 and is ONNX-based, so nothing extra is
-        # needed. lang=["en"] is required, not cosmetic: RapidOcrOptions defaults to ["chinese"].
-        # Docling's default batch size is 4: four pages' decoded images and model
-        # activations held in memory at once for layout, OCR and table extraction
-        # each. That is fine on a machine with headroom, but on a small server (or
-        # this dev container) it is the difference between a slow extraction and
-        # the process being SIGKILLed by the OOM killer mid-request -- which looks
-        # to the caller exactly like the backend being down, with no traceback to
-        # explain why. Processing one page at a time trades some wall-clock time
-        # for a peak footprint that stays flat regardless of document length.
-        _LOW_MEMORY_BATCH_SIZE = 1
-        pdf_pipeline_options = PdfPipelineOptions(
-            layout_options=layout_options,
-            ocr_options=RapidOcrOptions(lang=["en"]),
-            layout_batch_size=_LOW_MEMORY_BATCH_SIZE,
-            ocr_batch_size=_LOW_MEMORY_BATCH_SIZE,
-            table_batch_size=_LOW_MEMORY_BATCH_SIZE,
-        )
-        image_pipeline_options = PdfPipelineOptions(
-            layout_options=layout_options,
-            layout_batch_size=_LOW_MEMORY_BATCH_SIZE,
-            ocr_batch_size=_LOW_MEMORY_BATCH_SIZE,
-            table_batch_size=_LOW_MEMORY_BATCH_SIZE,
-            # A phone photo has no separate text/non-text regions the way a structured PDF page
-            # does, and the layout model may mis-detect the "text region" in a skewed or
-            # badly-lit shot -- force whole-page OCR instead of trusting region detection.
-            ocr_options=RapidOcrOptions(lang=["en"], mode=OcrMode.FULL_PAGE),
-        )
-
-        _converter = DocumentConverter(format_options={
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pdf_pipeline_options),
-            InputFormat.IMAGE: ImageFormatOption(pipeline_options=image_pipeline_options),
-        })
-    return _converter
+        _ocr_engine = RapidOCR(params=_RAPIDOCR_PARAMS)
+    return _ocr_engine
 
 
 def _normalize_image_orientation(path: Path) -> None:
-    """EXIF auto-orient a photo before Docling sees it.
+    """EXIF auto-orient a photo before OCR sees it.
 
     A phone photo can be physically rotated 90/180/270 degrees on disk while
-    displaying upright in any normal viewer -- Docling/PIL read raw pixels and
-    ignore the EXIF orientation tag, so skipping this silently OCRs sideways
-    text as garbage.
+    displaying upright in any normal viewer -- raw pixels ignore the EXIF
+    orientation tag, so skipping this silently OCRs sideways text as garbage.
     """
     from PIL import Image, ImageOps
 
@@ -84,18 +54,63 @@ def _normalize_image_orientation(path: Path) -> None:
             fixed.save(path)
 
 
+def _ocr_pil_image(pil_image) -> str:
+    result = _get_ocr_engine()(pil_image.convert("RGB"))
+    return "\n".join(result.txts) if result and result.txts else ""
+
+
+def _load_pdf_text(path: Path) -> str:
+    """Extract a PDF page by page: its embedded text layer where one exists,
+    OCR only for the pages that don't have one.
+
+    Most uploaded contracts are Word-exported PDFs with a full text layer --
+    reading it directly costs single-digit milliseconds per page and is exact,
+    character for character. OCR only runs on pages that actually need it (a
+    scan, or a signed page inserted as an image), which keeps the common case
+    fast and bounds the worst case's peak memory to roughly one rendered page
+    at a time instead of scaling with how many pages a document has.
+    """
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(str(path))
+    try:
+        pages_text = []
+        for page in pdf:
+            textpage = page.get_textpage()
+            text = textpage.get_text_range()
+            textpage.close()
+
+            if len(text.strip()) < MIN_TEXT_LAYER_CHARS:
+                bitmap = page.render(scale=200 / 72)
+                text = _ocr_pil_image(bitmap.to_pil())
+                bitmap.close()
+                # CPython's allocator doesn't reliably hand a page bitmap's
+                # memory back to the OS between iterations, so an uncollected
+                # multi-page scan climbs in peak RSS the way the old Docling
+                # pipeline did. Collecting after each OCR pass is what keeps
+                # a long scanned document's footprint flat instead of growing
+                # with page count.
+                gc.collect()
+
+            pages_text.append(text)
+            page.close()
+        return "\n\n".join(pages_text)
+    finally:
+        pdf.close()
+
+
 def load_text(path):
-    """Return the document as markdown text, whatever the input format."""
+    """Return the document as text, whatever the input format."""
     path = Path(path)
     if path.suffix.lower() in PLAIN_TEXT_SUFFIXES:
         return path.read_text(encoding="utf-8", errors="replace")
     if path.suffix.lower() in IMAGE_SUFFIXES:
         _normalize_image_orientation(path)
-    return _get_converter().convert(str(path)).document.export_to_markdown()
+        from PIL import Image
 
-
-def load_pdf(pdf_path):
-    return _get_converter().convert(str(pdf_path)).document
+        with Image.open(path) as img:
+            return _ocr_pil_image(img)
+    return _load_pdf_text(path)
 
 
 if __name__ == "__main__":

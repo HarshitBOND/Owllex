@@ -1,21 +1,25 @@
-# Render Blueprint for the Ravenslaw Python backend (Docling OCR + RAG + scraper).
+# Render Blueprint for the Ravenslaw Python backend (OCR + RAG + scraper).
 #
 # This is deliberately its own service, separate from the Vercel-hosted Next.js
-# app: Vercel's serverless functions can't run Ghostscript and can't hold the
-# multi-GB torch/OCR model weights Docling needs (see backend/Dockerfile and
-# app/api/lib/contractExtract.ts). Vercel only ever calls this over HTTPS.
+# app: Vercel's serverless functions can't run Ghostscript, and this service's
+# job is exactly what a serverless function is the wrong shape for (see
+# backend/Dockerfile and app/api/lib/contractExtract.ts). Vercel only ever
+# calls this over HTTPS.
 #
 # Deploy: Render dashboard -> New -> Blueprint -> point at this repo. Render
 # reads this file and creates the service below; you then fill in the env vars
 # marked `sync: false` from your local backend/.env (Render prompts for each
 # one in its dashboard -- nothing secret is committed here).
 #
-# Sizing: 2c-4g (4GB) is the floor, not a starting guess. `free` and any
-# 512MB-1GB tier WILL get OOM-killed mid-extraction -- Docling loads a layout
-# model and an OCR model per worker, multiple GB before a single document is
-# even processed. This is exactly what happened locally: see the loader.py
-# batch-size comment next to RapidOcrOptions for the other half of that fix.
-# Drop to 1c-2g only if budget forces it, and expect it to be tight.
+# Sizing: extraction used to run on Docling (a document-layout model + a
+# table-structure model + torch), which peaked at 1.2-1.4GB RSS on even a
+# short document and needed a 4GB instance. rag/app/ingest/loader.py now uses
+# pypdfium2 for the text layer and a bare RapidOCR pass only for pages that
+# actually need it -- measured worst case (a 15-page fully-scanned PDF, every
+# page OCR'd) peaks at ~880MB. 1c-2g (2GB) covers that with real headroom;
+# `free` (512MB) covers ordinary digital PDFs (the common case, near-zero
+# memory) but is not safe for a long fully-scanned upload -- go to 1c-2g
+# unless you're certain nobody will ever upload a multi-page scan.
 services:
   - type: web
     name: ravenslaw-backend
@@ -25,7 +29,7 @@ services:
     # to get backwards in a monorepo.
     dockerfilePath: backend/Dockerfile
     dockerContext: backend
-    plan: 2c-4g
+    plan: 1c-2g
     region: singapore
     healthCheckPath: /health
     numInstances: 1

@@ -192,30 +192,31 @@ def _sweep_stale_uploads(max_age_hours: int = 6) -> None:
 
 
 def _warm_document_converter() -> None:
-    """Build the Docling converter now instead of inside the first upload.
+    """Build the OCR engine now instead of inside the first upload.
 
-    Constructing it loads the layout and OCR models and costs ~20s on a warm
-    disk (far more when the models still have to be fetched). Built lazily, that
-    cost lands on whoever uploads first after a restart: their extraction runs
-    past the frontend's patience and the browser reports a connection failure
-    for a backend that is working fine, just slowly. Warming it in a daemon
-    thread keeps startup non-blocking -- requests arriving during the warm-up
-    simply wait on the same lazy build they would have triggered themselves.
+    Constructing it loads the small ONNX detection/recognition weights --
+    under a second on a warm disk, more the first time they have to be
+    fetched. Built lazily, that cost lands on whoever uploads first after a
+    restart: their extraction runs past the frontend's patience and the
+    browser reports a connection failure for a backend that is working fine,
+    just slow to start. Warming it in a daemon thread keeps startup
+    non-blocking -- requests arriving during the warm-up simply wait on the
+    same lazy build they would have triggered themselves.
     """
     try:
-        from rag.app.ingest.loader import _get_converter
+        from rag.app.ingest.loader import _get_ocr_engine
     except ImportError:
-        logger.info("Docling not installed; skipping converter warm-up")
+        logger.info("RapidOCR not installed; skipping OCR engine warm-up")
         return
     started = time.time()
     try:
-        _get_converter()
+        _get_ocr_engine()
     except Exception as e:
         # A failed warm-up must not take the API down -- the first real request
         # retries the same build and surfaces the error to its caller.
-        logger.warning("Document converter warm-up failed: %s", e)
+        logger.warning("OCR engine warm-up failed: %s", e)
     else:
-        logger.info("Document converter warmed in %.1fs", time.time() - started)
+        logger.info("OCR engine warmed in %.1fs", time.time() - started)
 
 
 @app.on_event("startup")

@@ -40,8 +40,8 @@ class Settings:
     CORS_ORIGINS: list = None
     TRUSTED_HOSTS: list = None
 
-    # Build the Docling converter at startup rather than on the first upload
-    # (see _warm_document_converter in app/main.py). Turn off where boot time
+    # Build the OCR engine at startup rather than on the first upload (see
+    # _warm_document_converter in app/main.py). Turn off where boot time
     # matters more than first-request latency, or on an instance that never
     # extracts documents.
     WARM_DOCUMENT_CONVERTER: bool = os.getenv("RAVENSLAW_WARM_DOCUMENT_CONVERTER", "true").lower() == "true"

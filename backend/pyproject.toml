@@ -20,43 +20,35 @@ dependencies = [
     "playwright>=1.62.0",
     "langchain-experimental>=0.4.2",
     "langchain-openai>=1.6.0",
-    "docling>=2.123.0",
 ]
 
-# Ingestion/RAG only deliberately NOT in the base dependency set. Docling
-# pulls in torch and OCR models (multi-GB); the API image must not carry them.
-#   uv sync --extra rag
+# Ingestion/RAG only deliberately NOT in the base dependency set: this extract/OCR
+# stack is still multi-hundred-MB (mostly onnxruntime), and the API image has no
+# reason to carry it. uv sync --extra rag
 [project.optional-dependencies]
 rag = [
     "boto3>=1.35",
-    "docling>=2.0",
     # O(1) content-hash dedup index see rag/hash_db.py.
     "lmdb>=1.4",
-    # Docling's layout model runs on this instead of torch see rag/extract.py.
+    # Text/layout detection + recognition for scanned pages and photos (rag/app/ingest/loader.py).
+    # ONNX-only -- no torch. Used directly, not through Docling: a full
+    # document-understanding pipeline (layout model + table-structure model +
+    # torch itself) cost ~1.2-1.4GB peak RSS just to OCR one short document,
+    # which OOM-killed this process on anything under a 4GB instance. Plain
+    # OCR does not reconstruct tables or heading structure -- load_text's
+    # caller re-flows the text through its own markdown/HTML pipeline anyway,
+    # so that trade buys running comfortably on a small instance instead.
+    "rapidocr>=3.9",
     "onnxruntime>=1.20",
+    # PDF text-layer extraction and page rasterization for the OCR fallback path.
+    "pypdfium2>=5.13",
+    # EXIF auto-orientation for photo uploads.
+    "pillow>=12.0",
     "langchain-text-splitters>=0.3",
     # Token-length function for the splitter (chunk_size/overlap are measured in tokens, not chars).
     "tiktoken>=0.8",
     "langchain-chroma>=1.1.0",
-    # Declared explicitly, though Docling would pull them in anyway: a
-    # [tool.uv.sources] pin only applies to direct dependencies, and without it
-    # these resolve to the CUDA build (see the pytorch-cpu index below).
-    "torch",
-    "torchvision",
 ]
 
 [tool.uv]
 package = false
-
-# Docling depends on torch, and the default PyPI torch wheel drags in ~43 NVIDIA
-# CUDA packages (several GB) for GPU support this app never uses -- see the note
-# above: the layout model runs on onnxruntime, and the containers are CPU-only.
-# Pinning torch to PyTorch's CPU index drops all of them.
-[tool.uv.sources]
-torch = { index = "pytorch-cpu" }
-torchvision = { index = "pytorch-cpu" }
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
