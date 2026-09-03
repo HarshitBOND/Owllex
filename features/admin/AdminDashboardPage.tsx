@@ -158,8 +158,10 @@ export default function AdminDashboardPage() {
                 usersBannedFilter={usersData.usersBannedFilter}
                 setUsersBannedFilter={usersData.setUsersBannedFilter}
                 banningId={usersData.banningId}
+                changingPlanId={usersData.changingPlanId}
                 onSearch={usersData.fetchUsers}
                 onBanToggle={usersData.handleBanToggle}
+                onPlanChange={usersData.handlePlanChange}
               />
             )}
             {activeTab === "transactions" && (

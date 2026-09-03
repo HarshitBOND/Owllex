@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Scale, UserPlus, Loader2, Users, Clock, AlertCircle,
@@ -85,16 +85,21 @@ const ClientDashboard = () => {
     fetchClients();
   }, [fetchClients]);
 
-  const handleDeleteClient = async (clientId: string) => {
+  const handleDeleteClient = useCallback(async (clientId: string) => {
     try {
       const res = await fetch(`/api/userdetails/clients?id=${clientId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
       setClients(prev => prev.filter(c => c._id !== clientId));
-      if (selectedClient?._id === clientId) setSelectedClient(null);
+      setSelectedClient((sc) => (sc?._id === clientId ? null : sc));
     } catch (error) {
       console.error(error);
     }
-  };
+  }, []);
+
+  const handleViewClient = useCallback((id: string) => router.push(`/my-clients/view/${id}`), [router]);
+  const handleEditClient = useCallback((id: string) => router.push(`/my-clients/edit/${id}`), [router]);
+  const handleGoInvoices = useCallback(() => router.push(`/invoices`), [router]);
+  const handleGoTasks = useCallback(() => router.push(`/tasks`), [router]);
 
   const handleExport = () => {
     const csv = [
@@ -408,12 +413,12 @@ const ClientDashboard = () => {
                     client={client}
                     index={i}
                     isSelected={selectedClient?._id === client._id}
-                    onClick={() => setSelectedClient(client)}
-                    onView={() => router.push(`/my-clients/view/${client._id}`)}
-                    onEdit={() => router.push(`/my-clients/edit/${client._id}`)}
-                    onDelete={() => handleDeleteClient(client._id)}
-                    onInvoice={() => router.push(`/invoices`)}
-                    onTask={() => router.push(`/tasks`)}
+                    onClick={setSelectedClient}
+                    onView={handleViewClient}
+                    onEdit={handleEditClient}
+                    onDelete={handleDeleteClient}
+                    onInvoice={handleGoInvoices}
+                    onTask={handleGoTasks}
                   />
                 ))}
               </div>
@@ -432,10 +437,10 @@ const ClientDashboard = () => {
                     client={client}
                     index={i}
                     isSelected={selectedClient?._id === client._id}
-                    onClick={() => setSelectedClient(client)}
-                    onView={() => router.push(`/my-clients/view/${client._id}`)}
-                    onEdit={() => router.push(`/my-clients/edit/${client._id}`)}
-                    onDelete={() => handleDeleteClient(client._id)}
+                    onClick={setSelectedClient}
+                    onView={handleViewClient}
+                    onEdit={handleEditClient}
+                    onDelete={handleDeleteClient}
                   />
                 ))}
               </div>
@@ -461,15 +466,15 @@ interface CardProps {
   client: Client;
   index: number;
   isSelected: boolean;
-  onClick: () => void;
-  onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onClick: (client: Client) => void;
+  onView: (id: string) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
   onInvoice: () => void;
   onTask: () => void;
 }
 
-const ClientCardEnhanced = ({ client, index, isSelected, onClick, onView, onEdit, onDelete }: CardProps) => {
+const ClientCardEnhanced = memo(function ClientCardEnhanced({ client, index, isSelected, onClick, onView, onEdit, onDelete }: CardProps) {
   const initials = (client.name || "U").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const caseCount = client.cases?.length || 0;
   const noteCount = client.notes?.length || 0;
@@ -483,8 +488,8 @@ const ClientCardEnhanced = ({ client, index, isSelected, onClick, onView, onEdit
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.03, duration: 0.3 }}
-      onClick={onClick}
+      transition={{ delay: Math.min(index * 0.03, 0.3), duration: 0.3 }}
+      onClick={() => onClick(client)}
       className={`group relative bg-card rounded-xl border cursor-pointer transition-all duration-200 ${
         isSelected
           ? "border-primary shadow-lg ring-1 ring-primary/30"
@@ -534,14 +539,14 @@ const ClientCardEnhanced = ({ client, index, isSelected, onClick, onView, onEdit
                     className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg py-1 z-20 min-w-[140px]"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <button onClick={() => { onView(); setShowActions(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                    <button onClick={() => { onView(client._id); setShowActions(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
                       <Eye className="h-3.5 w-3.5" /> View Details
                     </button>
-                    <button onClick={() => { onEdit(); setShowActions(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                    <button onClick={() => { onEdit(client._id); setShowActions(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
                       <Pencil className="h-3.5 w-3.5" /> {needsDetails ? "Add Client Details" : "Edit Client"}
                     </button>
                     <hr className="my-1 border-border" />
-                    <AlertPopup type="delete" handleFunction={onDelete}>
+                    <AlertPopup type="delete" handleFunction={() => onDelete(client._id)}>
                       <button className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
                         <Trash2 className="h-3.5 w-3.5" /> Delete
                       </button>
@@ -590,20 +595,20 @@ const ClientCardEnhanced = ({ client, index, isSelected, onClick, onView, onEdit
       </div>
     </motion.div>
   );
-};
+});
 
 /* ============ Client List Row ============ */
 interface ListRowProps {
   client: Client;
   index: number;
   isSelected: boolean;
-  onClick: () => void;
-  onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onClick: (client: Client) => void;
+  onView: (id: string) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
-const ClientListRow = ({ client, index, isSelected, onClick, onView, onEdit, onDelete }: ListRowProps) => {
+const ClientListRow = memo(function ClientListRow({ client, index, isSelected, onClick, onView, onEdit, onDelete }: ListRowProps) {
   const initials = (client.name || "U").split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const caseCount = client.cases?.length || 0;
 
@@ -611,8 +616,8 @@ const ClientListRow = ({ client, index, isSelected, onClick, onView, onEdit, onD
     <motion.div
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.02 }}
-      onClick={onClick}
+      transition={{ delay: Math.min(index * 0.02, 0.3) }}
+      onClick={() => onClick(client)}
       className={`grid grid-cols-[1fr_1fr_100px_80px_60px] gap-4 items-center px-4 py-3 cursor-pointer transition-all border-b border-border last:border-b-0 ${
         isSelected ? "bg-primary/5" : "hover:bg-muted/50"
       }`}
@@ -641,16 +646,16 @@ const ClientListRow = ({ client, index, isSelected, onClick, onView, onEdit, onD
         {client.createdAt ? new Date(client.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "-"}
       </div>
       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onView} className="p-1.5 rounded hover:bg-muted transition-colors" title="View">
+        <button onClick={() => onView(client._id)} className="p-1.5 rounded hover:bg-muted transition-colors" title="View">
           <Eye className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
-        <button onClick={onEdit} className="p-1.5 rounded hover:bg-muted transition-colors" title="Edit">
+        <button onClick={() => onEdit(client._id)} className="p-1.5 rounded hover:bg-muted transition-colors" title="Edit">
           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
       </div>
     </motion.div>
   );
-};
+});
 
 /* ============ Client Detail Panel ============ */
 interface DetailPanelProps {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -75,6 +75,11 @@ export function MyCases() {
 
     return result;
   }, [search, statusFilter, cases]);
+
+  const handleCaseClick = useCallback(
+    (id: string) => router.push(`/case-tracking/view/${id}`),
+    [router]
+  );
 
   if (loading) {
     return (
@@ -192,7 +197,7 @@ export function MyCases() {
         </p>
 
         {/* Cases */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={view}
             initial={{ opacity: 0 }}
@@ -210,7 +215,7 @@ export function MyCases() {
                 caseData={c}
                 view={view}
                 index={i}
-                onClick={() => router.push(`/case-tracking/view/${c._id}`)}
+                onClick={handleCaseClick}
               />
             ))}
           </motion.div>

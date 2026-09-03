@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import type { UserRecord } from "../types"
+import type { SubscriptionPlan, UserRecord } from "../types"
 
 export function useUsersData() {
   const [users, setUsers] = useState<UserRecord[]>([])
@@ -10,6 +10,7 @@ export function useUsersData() {
   const [usersRoleFilter, setUsersRoleFilter] = useState("")
   const [usersBannedFilter, setUsersBannedFilter] = useState("")
   const [banningId, setBanningId] = useState<string | null>(null)
+  const [changingPlanId, setChangingPlanId] = useState<string | null>(null)
 
   const fetchUsers = useCallback(async (page = 1) => {
     try {
@@ -55,6 +56,31 @@ export function useUsersData() {
     }
   }
 
+  const handlePlanChange = async (userId: string, plan: SubscriptionPlan) => {
+    setChangingPlanId(userId)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/plan`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setUsers((prev) =>
+          prev.map((u) =>
+            u._id === userId ? { ...u, subscription: { ...u.subscription, plan } } : u
+          )
+        )
+      } else {
+        alert(data.error || "Failed to update plan")
+      }
+    } catch {
+      alert("Network error")
+    } finally {
+      setChangingPlanId(null)
+    }
+  }
+
   return {
     users,
     usersTotal,
@@ -67,7 +93,9 @@ export function useUsersData() {
     usersBannedFilter,
     setUsersBannedFilter,
     banningId,
+    changingPlanId,
     fetchUsers,
     handleBanToggle,
+    handlePlanChange,
   }
 }

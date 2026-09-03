@@ -34,12 +34,27 @@ def _get_converter():
         # guaranteed on a dev machine either) depending on the runtime -- RapidOCR is already an
         # installed transitive dependency of docling>=2.0 and is ONNX-based, so nothing extra is
         # needed. lang=["en"] is required, not cosmetic: RapidOcrOptions defaults to ["chinese"].
+        # Docling's default batch size is 4: four pages' decoded images and model
+        # activations held in memory at once for layout, OCR and table extraction
+        # each. That is fine on a machine with headroom, but on a small server (or
+        # this dev container) it is the difference between a slow extraction and
+        # the process being SIGKILLed by the OOM killer mid-request -- which looks
+        # to the caller exactly like the backend being down, with no traceback to
+        # explain why. Processing one page at a time trades some wall-clock time
+        # for a peak footprint that stays flat regardless of document length.
+        _LOW_MEMORY_BATCH_SIZE = 1
         pdf_pipeline_options = PdfPipelineOptions(
             layout_options=layout_options,
             ocr_options=RapidOcrOptions(lang=["en"]),
+            layout_batch_size=_LOW_MEMORY_BATCH_SIZE,
+            ocr_batch_size=_LOW_MEMORY_BATCH_SIZE,
+            table_batch_size=_LOW_MEMORY_BATCH_SIZE,
         )
         image_pipeline_options = PdfPipelineOptions(
             layout_options=layout_options,
+            layout_batch_size=_LOW_MEMORY_BATCH_SIZE,
+            ocr_batch_size=_LOW_MEMORY_BATCH_SIZE,
+            table_batch_size=_LOW_MEMORY_BATCH_SIZE,
             # A phone photo has no separate text/non-text regions the way a structured PDF page
             # does, and the layout model may mis-detect the "text region" in a skewed or
             # badly-lit shot -- force whole-page OCR instead of trusting region detection.

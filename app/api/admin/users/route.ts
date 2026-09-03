@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .select("firstName lastName email role isBanned signupDate lastLogin createdAt")
+      .select("firstName lastName email role isBanned signupDate lastLogin createdAt subscription.plan")
       .lean(),
     User.countDocuments(query),
   ]);

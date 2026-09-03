@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Invoice, InvoiceStatus } from '@/features/invoices/types';
 import { StatusBadge } from '@/features/invoices/components/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  Vault,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +49,7 @@ interface InvoiceListProps {
   onDeleteInvoice: (invoice: Invoice) => void;
   onSendInvoice: (invoice: Invoice) => void;
   onDownloadInvoice: (invoice: Invoice) => void;
+  onSaveToVault: (invoice: Invoice) => void;
 }
 
 type SortField = 'invoiceNumber' | 'client' | 'total' | 'dueDate' | 'status';
@@ -60,6 +62,7 @@ export function InvoiceList({
   onDeleteInvoice,
   onSendInvoice,
   onDownloadInvoice,
+  onSaveToVault,
 }: InvoiceListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all');
@@ -69,43 +72,48 @@ export function InvoiceList({
   const itemsPerPage = 5;
 
   // Filter invoices
-  const filteredInvoices = invoices.filter((invoice) => {
-    const matchesSearch =
-      invoice.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.client.company.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredInvoices = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return invoices.filter((invoice) => {
+      const matchesSearch =
+        invoice.invoiceNumber.toLowerCase().includes(query) ||
+        invoice.client.name.toLowerCase().includes(query) ||
+        invoice.client.company.toLowerCase().includes(query);
+      const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [invoices, searchQuery, statusFilter]);
 
   // Sort invoices
-  const sortedInvoices = [...filteredInvoices].sort((a, b) => {
-    let comparison = 0;
-    switch (sortField) {
-      case 'invoiceNumber':
-        comparison = a.invoiceNumber.localeCompare(b.invoiceNumber);
-        break;
-      case 'client':
-        comparison = a.client.name.localeCompare(b.client.name);
-        break;
-      case 'total':
-        comparison = a.total - b.total;
-        break;
-      case 'dueDate':
-        comparison = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-        break;
-      case 'status':
-        comparison = a.status.localeCompare(b.status);
-        break;
-    }
-    return sortDirection === 'asc' ? comparison : -comparison;
-  });
+  const sortedInvoices = useMemo(() => {
+    return [...filteredInvoices].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'invoiceNumber':
+          comparison = a.invoiceNumber.localeCompare(b.invoiceNumber);
+          break;
+        case 'client':
+          comparison = a.client.name.localeCompare(b.client.name);
+          break;
+        case 'total':
+          comparison = a.total - b.total;
+          break;
+        case 'dueDate':
+          comparison = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredInvoices, sortField, sortDirection]);
 
   // Paginate
   const totalPages = Math.ceil(sortedInvoices.length / itemsPerPage);
-  const paginatedInvoices = sortedInvoices.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+  const paginatedInvoices = useMemo(
+    () => sortedInvoices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
+    [sortedInvoices, currentPage]
   );
 
   const handleSort = (field: SortField) => {
@@ -325,6 +333,10 @@ export function InvoiceList({
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownloadInvoice(invoice); }}>
                           <Download className="mr-2 h-4 w-4" />
                           Download PDF
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSaveToVault(invoice); }}>
+                          <Vault className="mr-2 h-4 w-4" />
+                          Save to Vault
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

@@ -49,7 +49,7 @@ export const TaskList: React.FC<TaskListProps> = ({
 
   return (
     <motion.div className={cn('space-y-3', settings.compactMode && 'space-y-2')}>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {tasks.map((task: Task) => (
           <TaskItem
             key={task.id}

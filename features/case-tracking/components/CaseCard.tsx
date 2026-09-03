@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Calendar, User, ChevronRight, AlertTriangle, MapPin, Gavel } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,7 @@ interface CaseCardProps {
   caseData: CaseData;
   view: "grid" | "list";
   index: number;
-  onClick: () => void;
+  onClick: (id: string) => void;
 }
 
 function getDaysUntil(date?: string): number | null {
@@ -29,7 +30,7 @@ function formatDate(date?: string): string {
   });
 }
 
-export function CaseCard({ caseData, view, index, onClick }: CaseCardProps) {
+export const CaseCard = memo(function CaseCard({ caseData, view, index, onClick }: CaseCardProps) {
   const daysUntil = getDaysUntil(caseData.courtDate);
   const caseStatus = getCaseStatus(caseData);
   const status = statusConfig[caseStatus] || statusConfig.active;
@@ -39,8 +40,8 @@ export function CaseCard({ caseData, view, index, onClick }: CaseCardProps) {
       <motion.div
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: index * 0.03 }}
-        onClick={onClick}
+        transition={{ delay: Math.min(index * 0.03, 0.3) }}
+        onClick={() => onClick(caseData._id)}
         className="bg-card border-2 border-border rounded-lg px-4 py-3 hover:border-primary/30 hover:shadow-lg hover:scale-[1.005] transition-all cursor-pointer group flex flex-col sm:flex-row sm:items-center gap-3"
       >
         <div className="flex-1 min-w-0">
@@ -94,8 +95,8 @@ export function CaseCard({ caseData, view, index, onClick }: CaseCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-      onClick={onClick}
+      transition={{ delay: Math.min(index * 0.05, 0.3) }}
+      onClick={() => onClick(caseData._id)}
       className="bg-card border-2 border-border rounded-xl overflow-hidden hover:border-primary/30 hover:shadow-lg hover:scale-[1.01] transition-all cursor-pointer group"
     >
       <div className="p-4">
@@ -164,4 +165,4 @@ export function CaseCard({ caseData, view, index, onClick }: CaseCardProps) {
       </div>
     </motion.div>
   );
-}
+});

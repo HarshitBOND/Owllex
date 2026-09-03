@@ -11,6 +11,10 @@ export interface DashboardStats {
   pendingTransactions: number
 }
 
+export type SubscriptionPlan = "free" | "starter" | "professional" | "enterprise"
+
+export const SUBSCRIPTION_PLAN_OPTIONS: SubscriptionPlan[] = ["free", "starter", "professional", "enterprise"]
+
 export interface UserRecord {
   _id: string
   firstName: string
@@ -21,6 +25,7 @@ export interface UserRecord {
   signupDate: string
   lastLogin: string | null
   createdAt: string
+  subscription?: { plan?: SubscriptionPlan }
 }
 
 export interface TransactionRecord {

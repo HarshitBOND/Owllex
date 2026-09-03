@@ -92,7 +92,7 @@ import DashboardPage from "@/app/dashboard/page"
 import DashboardOverviewPage from "@/app/dashboard/overview/page"
 import MyClientsPage from "@/app/my-clients/page"
 import TasksPage from "@/app/tasks/page"
-import SettingsPage from "@/app/settings/page"
+import { SettingsModal, resolveSection } from "@/features/settings/SettingsModal"
 import ReportFraudPage from "@/app/report-fraud/page"
 import ContactUsPage from "@/app/contact-us/page"
 import TermsOfUsePage from "@/app/terms-of-use/page"
@@ -171,10 +171,27 @@ describe("major page smoke tests", () => {
     expect(markup).toContain("merged-task-workspace-mock")
   })
 
-  it("renders settings page shell", () => {
-    const markup = renderToString(React.createElement(SettingsPage))
+  it("renders settings modal shell", () => {
+    const markup = renderToString(
+      React.createElement(SettingsModal, {
+        section: "general",
+        onSectionChange: vi.fn(),
+        onClose: vi.fn(),
+      }),
+    )
 
-    expect(markup).toContain("Manage account, notifications, and billing preferences")
+    // Both nav groups, and the close affordance that dismisses the overlay.
+    expect(markup).toContain("General")
+    expect(markup).toContain("Billing")
+    expect(markup).toContain("Usage")
+    expect(markup).toContain("Behaviour")
+    expect(markup).toContain("Close settings")
+  })
+
+  it("resolves settings deep links, falling back to General when unknown", () => {
+    expect(resolveSection("billing")).toBe("billing")
+    expect(resolveSection("model")).toBe("model")
+    expect(resolveSection("does-not-exist")).toBe("general")
   })
 
   it("renders report-fraud page shell", () => {

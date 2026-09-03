@@ -10,7 +10,20 @@ import { resolveModel } from "@/lib/ai/models"
 import { CONTRACT_REVIEW_SYSTEM_PROMPT } from "@/lib/ai/prompts"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
-export const maxDuration = 60
+export const maxDuration = 300
+
+/**
+ * Kept under maxDuration so a slow model is reported as a timeout rather than
+ * being killed mid-flight by the platform.
+ *
+ * A full-length contract on the "capable" tier measures past 80s, and the route
+ * used to allow 60s in total: the function was terminated before generateObject
+ * returned, the browser got the platform's HTML error page instead of JSON, and
+ * the page could only report it as "couldn't reach the server" -- for a backend
+ * that was working, just slow. Aborting here leaves room to persist the failure
+ * and answer with a real message.
+ */
+const ANALYSIS_TIMEOUT_MS = 240_000
 
 const bodySchema = z.object({ model: z.string().optional() })
 
@@ -82,6 +95,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       system: CONTRACT_REVIEW_SYSTEM_PROMPT,
       schema: analysisSchema,
       prompt: `Review this contract and return every issue you find, plus an overall summary.\n\n<document>\n${trimDocumentForPrompt(review.extractedText)}\n</document>`,
+      abortSignal: AbortSignal.timeout(ANALYSIS_TIMEOUT_MS),
     })
 
     await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-analyze", modelKey, usage })
@@ -93,9 +107,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({ success: true, issues: review.issues, summary: review.summary })
   } catch (error) {
+    const timedOut =
+      error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
     review.status = "error"
-    review.errorMessage = error instanceof Error ? error.message : "Analysis failed"
+    review.errorMessage = timedOut
+      ? `The reviewer took longer than ${Math.round(ANALYSIS_TIMEOUT_MS / 1000)}s on this document. ` +
+        "Try the Fast model, or split a very long contract into sections."
+      : error instanceof Error
+        ? error.message
+        : "Analysis failed"
     await review.save()
-    return NextResponse.json({ success: false, error: review.errorMessage }, { status: 502 })
+    return NextResponse.json(
+      { success: false, error: review.errorMessage, id: String(review._id) },
+      { status: timedOut ? 504 : 502 },
+    )
   }
 }

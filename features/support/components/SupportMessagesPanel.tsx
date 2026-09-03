@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock3, Loader2, RefreshCw, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import type { SupportCounts, SupportMessageItem, SupportStatus } from "../types"
 import { formatDateTime, statusStyles } from "../utils"
@@ -80,8 +81,23 @@ export function SupportMessagesPanel({
         </div>
 
         {loading ? (
-          <div className="p-8 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-sidebar-primary" />
+          <div className="divide-y divide-gray-100">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-3 w-64" />
+                  </div>
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-9 w-28 rounded-md" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : messages.length === 0 ? (
           <div className="p-8 text-center">

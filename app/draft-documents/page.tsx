@@ -1,5 +1,3 @@
-"use client"
-
 import Navbar from "@/components/layout/navbar"
 import { cn } from "@/lib/utils"
 import DraftDocumentsHome from "@/features/draft-documents/components/DraftDocumentsHome"

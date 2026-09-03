@@ -221,6 +221,23 @@ export function InvoiceDashboard() {
     }
   };
 
+  const handleSaveInvoiceToVault = async (invoice: Invoice) => {
+    try {
+      const response = await fetch(`/api/userdetails/invoices/save-to-vault?id=${invoice.id}`, { method: 'POST' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result?.error || 'Failed to save invoice to Vault');
+      }
+      toast({
+        title: result.alreadyInVault ? 'Already in your Vault' : 'Saved to Vault',
+        description: invoice.invoiceNumber,
+        action: { label: 'View in Vault', onClick: () => window.open('/vault', '_blank', 'noreferrer') },
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to save invoice to Vault', variant: 'destructive' });
+    }
+  };
+
   const handleSendInvoice = async (invoice: Invoice) => {
     try {
       const response = await fetch(`/api/userdetails/invoices?id=${invoice.id}`, {
@@ -577,7 +594,7 @@ export function InvoiceDashboard() {
 
           <div className="p-4 md:p-5">
             <TabsContent value="invoices" className="space-y-4 mt-0">
-              <InvoiceList invoices={invoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} onDownloadInvoice={handleDownloadInvoice} />
+              <InvoiceList invoices={invoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} onDownloadInvoice={handleDownloadInvoice} onSaveToVault={handleSaveInvoiceToVault} />
             </TabsContent>
 
             <TabsContent value="clients" className="space-y-4 mt-0">
@@ -596,7 +613,7 @@ export function InvoiceDashboard() {
                           {selectedClient.name}'s Invoices
                         </h3>
                         {clientInvoices.length > 0 ? (
-                          <InvoiceList invoices={clientInvoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} onDownloadInvoice={handleDownloadInvoice} />
+                          <InvoiceList invoices={clientInvoices} onViewInvoice={handleViewInvoice} onEditInvoice={handleEditInvoice} onDeleteInvoice={handleDeleteInvoice} onSendInvoice={handleSendInvoice} onDownloadInvoice={handleDownloadInvoice} onSaveToVault={handleSaveInvoiceToVault} />
                         ) : (
                           <p className="text-muted-foreground text-center py-8">
                             No invoices found for this client
@@ -672,7 +689,7 @@ export function InvoiceDashboard() {
       </div>
 
       {/* Modals */}
-      <InvoiceDetailModal invoice={selectedInvoice} open={isDetailOpen} onOpenChange={setIsDetailOpen} onEdit={handleEditInvoice} onSend={handleSendInvoice} onDownload={handleDownloadInvoice} onMarkAsPaid={handleMarkAsPaid} onRecordPayment={handleRecordPayment} />
+      <InvoiceDetailModal invoice={selectedInvoice} open={isDetailOpen} onOpenChange={setIsDetailOpen} onEdit={handleEditInvoice} onSend={handleSendInvoice} onDownload={handleDownloadInvoice} onSaveToVault={handleSaveInvoiceToVault} onMarkAsPaid={handleMarkAsPaid} onRecordPayment={handleRecordPayment} />
       <CreateInvoiceModal open={isCreateOpen} onOpenChange={handleCreateModalClose} clients={clientsWithStats} onSave={handleSaveInvoice} onSaveAndSend={handleSaveAndSend} editInvoice={editInvoice} />
       <AddPaymentModal invoice={paymentInvoice} open={isPaymentOpen} onOpenChange={setIsPaymentOpen} onPaymentAdded={handleAddPayment} />
     </>

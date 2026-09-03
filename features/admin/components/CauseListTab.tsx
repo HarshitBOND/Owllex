@@ -1,5 +1,9 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Activity, CheckCircle2, Clock, FileSearch, Loader2, Play, Terminal, Trash2, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import type { CauselistProgressEntry, CauselistStatus, CauselistSummary } from "../types"
 import { formatDateTime, statusBadge } from "../utils"
@@ -44,6 +48,32 @@ export function CauseListTab({
   onRetryConnection,
   onStartImport,
 }: CauseListTabProps) {
+  const [hasLoaded, setHasLoaded] = useState(false)
+
+  useEffect(() => {
+    if (clStatus !== null || clBackendError !== null) setHasLoaded(true)
+  }, [clStatus, clBackendError])
+
+  if (!hasLoaded) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border-2 border-gray-200 dark:border-gray-800 p-5 shadow-sm space-y-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+            </div>
+          ))}
+        </div>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border-2 border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+          <Skeleton className="h-4 w-32 mb-4" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {clBackendError && (

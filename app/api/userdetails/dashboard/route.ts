@@ -330,7 +330,7 @@ export async function GET(_req: NextRequest) {
           title: transaction.description || "Billing transaction",
           subtitle: `${transaction.currency || "INR"} ${Number(transaction.amount || 0).toFixed(2)} • ${transaction.status}`,
           at: new Date(transaction.createdAt),
-          href: "/settings?tab=billing",
+          href: "/dashboard/overview?settings=billing",
           status: transaction.status === "failed" ? "error" : transaction.status === "completed" ? "success" : "info",
         }),
       ),

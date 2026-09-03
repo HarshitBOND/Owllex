@@ -72,8 +72,6 @@ export default function ReportFraudPage() {
               </div>
             </div>
 
-            <FraudReportNotice status={status} errorMessage={errorMessage} />
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <FraudReportFields
                 formData={formData}
@@ -105,6 +103,8 @@ export default function ReportFraudPage() {
                   )}
                 </Button>
               </div>
+
+              <FraudReportNotice status={status} errorMessage={errorMessage} />
             </form>
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { Fragment, useRef, useState } from "react"
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Database, FileText, Layers, Loader2, RefreshCw, Search, Trash2, UploadCloud, X, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { RagIngestItem, RagSearchResult, RagStatus } from "../types"
 import { cn } from "@/lib/utils"
 
@@ -158,6 +159,17 @@ export function RagIngestTab({
           <div className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <span>{statusError}</span>
+          </div>
+        )}
+
+        {statusLoading && !status && !statusError && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                <Skeleton className="h-6 w-10 mb-1" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            ))}
           </div>
         )}
 

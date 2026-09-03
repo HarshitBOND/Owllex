@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { List, type RowComponentProps } from "react-window"
 import {
   AlertTriangle,
   Check,
@@ -12,9 +13,12 @@ import {
   Loader2,
   Lock,
   RefreshCw,
+  Search,
   ShieldCheck,
+  Star,
   Trash2,
   Upload,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatDate, formatSize, verifyStatusStyles } from "../vault-data"
@@ -27,10 +31,159 @@ type VaultDoc = {
   sha256: string
   verifyStatus: "unverified" | "present" | "verified" | "missing" | "corrupted"
   lastVerifiedAt: number
+  important: boolean
   createdAt: number
 }
 
 const ALLOWED_ACCEPT = ".pdf,.docx,.txt,.md,.jpg,.jpeg,.png,.gif,.webp"
+const VAULT_ROW_HEIGHT = 68
+const VAULT_LIST_MAX_HEIGHT = 600
+
+type VaultRowProps = {
+  documents: VaultDoc[]
+  verifying: Record<string, boolean>
+  verifyMessage: Record<string, string>
+  copiedId: string | null
+  onOpen: (id: string) => void
+  onToggleImportant: (id: string, next: boolean) => void
+  onVerify: (id: string) => void
+  onCopyHash: (id: string, hash: string) => void
+  onRemove: (id: string) => void
+}
+
+const VaultDocumentRow = memo(function VaultDocumentRow({
+  index,
+  style,
+  documents,
+  verifying,
+  verifyMessage,
+  copiedId,
+  onOpen,
+  onToggleImportant,
+  onVerify,
+  onCopyHash,
+  onRemove,
+}: RowComponentProps<VaultRowProps>) {
+  const d = documents[index]
+  const status = verifyStatusStyles[d.verifyStatus] ?? verifyStatusStyles.unverified
+  const isVerifying = !!verifying[d.id]
+  const message = verifyMessage[d.id]
+  const isCopied = copiedId === d.id
+
+  return (
+    <div
+      style={style}
+      className={cn(
+        "grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_90px_150px_190px_150px_124px] gap-2 sm:gap-4 items-center px-5 hover:bg-gray-50 dark:hover:bg-secondary/50 transition-colors",
+        index !== documents.length - 1 && "border-b border-gray-100 dark:border-border"
+      )}
+    >
+      <button type="button" onClick={() => onOpen(d.id)} className="flex items-center gap-3 min-w-0 text-left">
+        <span className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center shrink-0">
+          <FileText className="w-4 h-4 text-blue-700 dark:text-blue-400" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-gray-900 dark:text-foreground truncate">
+            {d.filename}
+          </span>
+          <span
+            className={cn(
+              "block text-xs truncate",
+              message
+                ? d.verifyStatus === "verified"
+                  ? "text-brand-600 dark:text-brand-400"
+                  : d.verifyStatus === "present"
+                  ? "text-sky-600 dark:text-sky-400"
+                  : d.verifyStatus === "unverified"
+                  ? "text-gray-500"
+                  : "text-rose-600 dark:text-rose-400"
+                : "text-gray-400"
+            )}
+          >
+            {message || (d.lastVerifiedAt ? `Last checked ${formatDate(d.lastVerifiedAt)}` : "Not yet checked")}
+          </span>
+        </span>
+      </button>
+      <span className="hidden sm:block text-xs text-gray-500 dark:text-muted-foreground">
+        {formatSize(d.size)}
+      </span>
+      <span className="hidden sm:block">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full text-[11px] font-medium px-2 py-0.5",
+            status.bgColor,
+            status.color
+          )}
+        >
+          {status.label}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={() => onCopyHash(d.id, d.sha256)}
+        className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground transition-colors"
+        title={d.sha256}
+      >
+        <span className="truncate">{d.sha256.slice(0, 12)}…</span>
+        {isCopied ? (
+          <Check className="w-3 h-3 text-brand-600 shrink-0" />
+        ) : (
+          <Copy className="w-3 h-3 shrink-0" />
+        )}
+      </button>
+      <span className="hidden sm:block text-xs text-gray-500 dark:text-muted-foreground">
+        {formatDate(d.createdAt)}
+      </span>
+      <span className="flex items-center gap-1 justify-self-end">
+        <button
+          type="button"
+          onClick={() => onToggleImportant(d.id, !d.important)}
+          className={cn(
+            "w-7 h-7 rounded-md flex items-center justify-center transition-colors",
+            d.important
+              ? "text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+              : "text-gray-300 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+          )}
+          aria-label={d.important ? `Unmark ${d.filename} as important` : `Mark ${d.filename} as important`}
+          aria-pressed={d.important}
+          title={d.important ? "Marked as important" : "Mark as important"}
+        >
+          <Star className={cn("w-3.5 h-3.5", d.important && "fill-current")} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onVerify(d.id)}
+          disabled={isVerifying}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+          aria-label={`Run hashing test on ${d.filename}`}
+          title="Run hashing integrity test"
+        >
+          {isVerifying ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpen(d.id)}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:text-accent hover:bg-accent/10 transition-colors"
+          aria-label={`Download ${d.filename}`}
+        >
+          <Download className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemove(d.id)}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+          aria-label={`Remove ${d.filename}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </span>
+    </div>
+  )
+})
 
 export default function VaultHome() {
   const [documents, setDocuments] = useState<VaultDoc[]>([])
@@ -42,7 +195,17 @@ export default function VaultHome() {
   const [verifyMessage, setVerifyMessage] = useState<Record<string, string>>({})
   const [verifyingAll, setVerifyingAll] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+  const [importantOnly, setImportantOnly] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const filteredDocuments = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return documents
+      .filter((d) => d.filename.toLowerCase().includes(q))
+      .filter((d) => !importantOnly || d.important)
+      .sort((a, b) => Number(b.important) - Number(a.important) || b.createdAt - a.createdAt)
+  }, [documents, search, importantOnly])
 
   const load = useCallback(async () => {
     const res = await fetch("/api/vault/documents")
@@ -59,7 +222,7 @@ export default function VaultHome() {
     load()
   }, [load])
 
-  const upload = async (files: File[]) => {
+  const upload = useCallback(async (files: File[]) => {
     setUploadError("")
     for (const file of files) {
       setUploading((prev) => [...prev, file.name])
@@ -76,21 +239,33 @@ export default function VaultHome() {
       }
       await load()
     }
-  }
+  }, [load])
 
-  const openDocument = async (docId: string) => {
+  const openDocument = useCallback(async (docId: string) => {
     const res = await fetch(`/api/vault/documents/${docId}`)
     if (!res.ok) return
     const data = await res.json()
     window.open(data.url, "_blank", "noreferrer")
-  }
+  }, [])
 
-  const removeDocument = async (docId: string) => {
+  const removeDocument = useCallback(async (docId: string) => {
     await fetch(`/api/vault/documents/${docId}`, { method: "DELETE" })
     await load()
-  }
+  }, [load])
 
-  const verifyDocument = async (docId: string, deep = true) => {
+  const toggleImportant = useCallback(async (docId: string, next: boolean) => {
+    setDocuments((prev) => prev.map((d) => (d.id === docId ? { ...d, important: next } : d)))
+    const res = await fetch(`/api/vault/documents/${docId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ important: next }),
+    })
+    if (!res.ok) {
+      setDocuments((prev) => prev.map((d) => (d.id === docId ? { ...d, important: !next } : d)))
+    }
+  }, [])
+
+  const verifyDocument = useCallback(async (docId: string, deep = true) => {
     setVerifying((prev) => ({ ...prev, [docId]: true }))
     setVerifyMessage((prev) => ({ ...prev, [docId]: "" }))
     try {
@@ -114,17 +289,17 @@ export default function VaultHome() {
     } finally {
       setVerifying((prev) => ({ ...prev, [docId]: false }))
     }
-  }
+  }, [])
 
-  const verifyAll = async () => {
+  const verifyAll = useCallback(async () => {
     setVerifyingAll(true)
     for (const doc of documents) {
       await verifyDocument(doc.id, false)
     }
     setVerifyingAll(false)
-  }
+  }, [documents, verifyDocument])
 
-  const copyHash = (docId: string, hash: string) => {
+  const copyHash = useCallback((docId: string, hash: string) => {
     navigator.clipboard
       ?.writeText(hash)
       .then(() => {
@@ -132,7 +307,22 @@ export default function VaultHome() {
         setTimeout(() => setCopiedId(null), 1500)
       })
       .catch(() => {})
-  }
+  }, [])
+
+  const vaultRowProps = useMemo<VaultRowProps>(
+    () => ({
+      documents: filteredDocuments,
+      verifying,
+      verifyMessage,
+      copiedId,
+      onOpen: openDocument,
+      onToggleImportant: toggleImportant,
+      onVerify: verifyDocument,
+      onCopyHash: copyHash,
+      onRemove: removeDocument,
+    }),
+    [filteredDocuments, verifying, verifyMessage, copiedId, openDocument, toggleImportant, verifyDocument, copyHash, removeDocument]
+  )
 
   return (
     <div className="flex flex-col gap-5">
@@ -238,28 +428,67 @@ export default function VaultHome() {
         </div>
       ) : (
         <div className="rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-100 dark:border-border">
-            <span className="text-xs font-medium text-gray-400">
-              {documents.length} document{documents.length === 1 ? "" : "s"} in your vault
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-2.5 border-b border-gray-100 dark:border-border">
+            <span className="text-xs font-medium text-gray-400 shrink-0">
+              {search
+                ? `${filteredDocuments.length} of ${documents.length} document${documents.length === 1 ? "" : "s"}`
+                : `${documents.length} document${documents.length === 1 ? "" : "s"} in your vault`}
             </span>
-            {documents.length > 0 && (
+            <div className="flex items-center gap-3">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search documents…"
+                  aria-label="Search documents"
+                  className="w-full h-8 rounded-md border border-gray-200 dark:border-border bg-gray-50 dark:bg-secondary/40 pl-8 pr-7 text-xs text-gray-900 dark:text-foreground placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={verifyAll}
-                disabled={verifyingAll}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline disabled:opacity-50 disabled:no-underline"
-              >
-                {verifyingAll ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-3.5 h-3.5" />
+                onClick={() => setImportantOnly((v) => !v)}
+                aria-pressed={importantOnly}
+                className={cn(
+                  "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs font-medium transition-colors shrink-0",
+                  importantOnly
+                    ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400"
+                    : "border-gray-200 dark:border-border text-gray-500 dark:text-muted-foreground hover:bg-gray-50 dark:hover:bg-secondary"
                 )}
-                Run hashing test on all
+              >
+                <Star className={cn("w-3.5 h-3.5", importantOnly && "fill-current")} />
+                Important
               </button>
-            )}
+              {documents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={verifyAll}
+                  disabled={verifyingAll}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline disabled:opacity-50 disabled:no-underline shrink-0"
+                >
+                  {verifyingAll ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  Run hashing test on all
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="hidden sm:grid grid-cols-[1fr_90px_150px_190px_150px_88px] gap-4 px-5 py-2.5 border-b border-gray-100 dark:border-border text-xs font-medium text-gray-400">
+          <div className="hidden sm:grid grid-cols-[1fr_90px_150px_190px_150px_124px] gap-4 px-5 py-2.5 border-b border-gray-100 dark:border-border text-xs font-medium text-gray-400">
             <span>Document</span>
             <span>Size</span>
             <span>Integrity</span>
@@ -268,30 +497,33 @@ export default function VaultHome() {
             <span />
           </div>
 
-          {uploading.map((filename) => (
-            <div
-              key={filename}
-              className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_90px_150px_190px_150px_88px] gap-2 sm:gap-4 items-center px-5 py-3 border-b border-gray-100 dark:border-border"
-            >
-              <span className="flex items-center gap-3 min-w-0">
-                <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-secondary/60 flex items-center justify-center shrink-0">
-                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-                </span>
-                <span className="text-sm font-medium text-gray-900 dark:text-foreground truncate">
-                  {filename}
-                </span>
-              </span>
-              <span className="hidden sm:block text-xs text-gray-400">—</span>
-              <span className="hidden sm:block text-xs text-gray-500 dark:text-muted-foreground">
-                Encrypting &amp; hashing…
-              </span>
-              <span className="hidden sm:block" />
-              <span className="hidden sm:block" />
-              <span className="hidden sm:block" />
+          {uploading.length === 0 && documents.length > 0 && filteredDocuments.length === 0 && (
+            <div className="flex flex-col items-center justify-center text-center gap-1 py-14">
+              {search ? (
+                <>
+                  <Search className="w-5 h-5 text-gray-300 dark:text-gray-600 mb-1" />
+                  <p className="text-sm font-semibold text-gray-900 dark:text-foreground">
+                    No documents match &quot;{search}&quot;
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-muted-foreground">
+                    Try a different filename.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Star className="w-5 h-5 text-gray-300 dark:text-gray-600 mb-1" />
+                  <p className="text-sm font-semibold text-gray-900 dark:text-foreground">
+                    No important documents yet
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-muted-foreground">
+                    Star a document to pin it here.
+                  </p>
+                </>
+              )}
             </div>
-          ))}
+          )}
 
-          {documents.map((d, i) => {
+          {filteredDocuments.map((d, i) => {
             const status = verifyStatusStyles[d.verifyStatus] ?? verifyStatusStyles.unverified
             const isVerifying = !!verifying[d.id]
             const message = verifyMessage[d.id]
@@ -300,10 +532,10 @@ export default function VaultHome() {
                 key={d.id}
                 className={cn(
                   "flex flex-col",
-                  i !== documents.length - 1 && "border-b border-gray-100 dark:border-border"
+                  i !== filteredDocuments.length - 1 && "border-b border-gray-100 dark:border-border"
                 )}
               >
-                <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_90px_150px_190px_150px_88px] gap-2 sm:gap-4 items-center px-5 py-3 hover:bg-gray-50 dark:hover:bg-secondary/50 transition-colors">
+                <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_90px_150px_190px_150px_124px] gap-2 sm:gap-4 items-center px-5 py-3 hover:bg-gray-50 dark:hover:bg-secondary/50 transition-colors">
                   <button
                     type="button"
                     onClick={() => openDocument(d.id)}
@@ -352,6 +584,21 @@ export default function VaultHome() {
                     {formatDate(d.createdAt)}
                   </span>
                   <span className="flex items-center gap-1 justify-self-end">
+                    <button
+                      type="button"
+                      onClick={() => toggleImportant(d.id, !d.important)}
+                      className={cn(
+                        "w-7 h-7 rounded-md flex items-center justify-center transition-colors",
+                        d.important
+                          ? "text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                          : "text-gray-300 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                      )}
+                      aria-label={d.important ? `Unmark ${d.filename} as important` : `Mark ${d.filename} as important`}
+                      aria-pressed={d.important}
+                      title={d.important ? "Marked as important" : "Mark as important"}
+                    >
+                      <Star className={cn("w-3.5 h-3.5", d.important && "fill-current")} />
+                    </button>
                     <button
                       type="button"
                       onClick={() => verifyDocument(d.id)}
@@ -405,6 +652,29 @@ export default function VaultHome() {
               </div>
             )
           })}
+
+          {uploading.map((filename) => (
+            <div
+              key={filename}
+              className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_90px_150px_190px_150px_124px] gap-2 sm:gap-4 items-center px-5 py-3 border-b border-gray-100 dark:border-border"
+            >
+              <span className="flex items-center gap-3 min-w-0">
+                <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-secondary/60 flex items-center justify-center shrink-0">
+                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                </span>
+                <span className="text-sm font-medium text-gray-900 dark:text-foreground truncate">
+                  {filename}
+                </span>
+              </span>
+              <span className="hidden sm:block text-xs text-gray-400">—</span>
+              <span className="hidden sm:block text-xs text-gray-500 dark:text-muted-foreground">
+                Encrypting &amp; hashing…
+              </span>
+              <span className="hidden sm:block" />
+              <span className="hidden sm:block" />
+              <span className="hidden sm:block" />
+            </div>
+          ))}
         </div>
       )}
     </div>

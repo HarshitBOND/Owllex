@@ -27,6 +27,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // Drops the `X-Powered-By: Next.js` response header -- a few bytes saved
+  // on every single response, and one less thing that fingerprints the stack.
+  poweredByHeader: false,
   images: {
     unoptimized: false,
     formats: ['image/avif', 'image/webp'],
@@ -45,7 +48,17 @@ const nextConfig = {
   // ever reach R2 (app/api/upload/image/route.ts).
   serverExternalPackages: ['sharp'],
   experimental: {
-    optimizePackageImports: ['lucide-react', '@radix-ui', '@tiptap'],
+    // Rewrites barrel imports (`import { X } from "recharts"`) into direct
+    // module paths at build time, so a page that uses one chart or one date
+    // helper doesn't pull the whole package into its JS chunk.
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui',
+      '@tiptap',
+      'recharts',
+      'date-fns',
+      'framer-motion',
+    ],
     serverActions: {
       allowedOrigins: [
         'localhost:3000',
@@ -72,6 +85,20 @@ const nextConfig = {
           {
             key: 'Content-Security-Policy',
             value: contentSecurityPolicy,
+          },
+        ],
+      },
+      {
+        // Long-lived immutable caching for public/ assets (logo, hero image,
+        // favicon, self-hosted font files). This has to live here rather than
+        // in middleware.ts: middleware's matcher explicitly excludes these
+        // extensions so it never runs for them -- the equivalent block that
+        // used to sit in middleware.ts was dead code.
+        source: '/:path*.(jpg|jpeg|png|gif|svg|webp|avif|ico|woff|woff2|ttf|eot)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },

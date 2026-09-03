@@ -14,14 +14,36 @@ import {
   Trash2,
   Upload,
   UsersRound,
+  Vault,
   Workflow,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAiChat } from "@/contexts/AiChatContext"
+import { useSaveToVault } from "@/features/vault/useSaveToVault"
 import { accentFor, formatDate, formatSize, statusStyles } from "../corpus-data"
 import type { CorpusDetail as Detail } from "../types"
 
 const TABS = ["Overview", "Knowledge", "Chats", "Workflow"] as const
+
+function SaveDocumentToVaultButton({ corpusId, docId, filename }: { corpusId: string; docId: string; filename: string }) {
+  const saveToVault = useSaveToVault(`/api/corpus/${corpusId}/documents/${docId}/save-to-vault`)
+  return (
+    <button
+      type="button"
+      onClick={() => saveToVault.save()}
+      disabled={saveToVault.state === "saving"}
+      className="w-7 h-7 rounded-md flex items-center justify-center text-gray-300 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+      aria-label={`Save ${filename} to Vault`}
+      title="Save to Vault"
+    >
+      {saveToVault.state === "saving" ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : (
+        <Vault className="w-3.5 h-3.5" />
+      )}
+    </button>
+  )
+}
 
 export default function CorpusDetail({ corpusId }: { corpusId: string }) {
   const router = useRouter()
@@ -359,7 +381,7 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
 
           {(uploading.length > 0 || corpus.documents.length > 0) && (
             <div className="rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
-              <div className="hidden sm:grid grid-cols-[1fr_120px_120px_140px_28px] gap-4 px-5 py-2.5 border-b border-gray-100 dark:border-border text-xs font-medium text-gray-400">
+              <div className="hidden sm:grid grid-cols-[1fr_120px_120px_140px_64px] gap-4 px-5 py-2.5 border-b border-gray-100 dark:border-border text-xs font-medium text-gray-400">
                 <span>Document</span>
                 <span>Size</span>
                 <span>Status</span>
@@ -370,7 +392,7 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
               {uploading.map((filename) => (
                 <div
                   key={filename}
-                  className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_120px_140px_28px] gap-2 sm:gap-4 items-center px-5 py-3 border-b border-gray-100 dark:border-border"
+                  className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_120px_140px_64px] gap-2 sm:gap-4 items-center px-5 py-3 border-b border-gray-100 dark:border-border"
                 >
                   <span className="flex items-center gap-3 min-w-0">
                     <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-secondary/60 flex items-center justify-center shrink-0">
@@ -391,7 +413,7 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
                   <div
                     key={d.id}
                     className={cn(
-                      "grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_120px_140px_28px] gap-2 sm:gap-4 items-center px-5 py-3 hover:bg-gray-50 dark:hover:bg-secondary/50 transition-colors",
+                      "grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_120px_140px_64px] gap-2 sm:gap-4 items-center px-5 py-3 hover:bg-gray-50 dark:hover:bg-secondary/50 transition-colors",
                       i !== corpus.documents.length - 1 && "border-b border-gray-100 dark:border-border"
                     )}
                   >
@@ -431,14 +453,17 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
                     <span className="hidden sm:block text-xs text-gray-500 dark:text-muted-foreground">
                       {formatDate(d.createdAt)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => removeDocument(d.id)}
-                      className="w-7 h-7 rounded-md flex items-center justify-center text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors justify-self-end"
-                      aria-label={`Remove ${d.filename}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <span className="flex items-center gap-1 justify-self-end">
+                      <SaveDocumentToVaultButton corpusId={corpusId} docId={d.id} filename={d.filename} />
+                      <button
+                        type="button"
+                        onClick={() => removeDocument(d.id)}
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                        aria-label={`Remove ${d.filename}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
                   </div>
                 )
               })}

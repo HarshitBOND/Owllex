@@ -31,6 +31,7 @@ import {
   Underline as UnderlineIcon,
   Undo2,
   Upload,
+  Vault,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -38,6 +39,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useSaveToVault } from "@/features/vault/useSaveToVault"
 import type { SaveStatus } from "@/features/draft-documents/hooks/useDraftAutosave"
 import { IssueHighlight, issueHighlightKey } from "./issueHighlightExtension"
 import { fontFamilies, fontSizes, type ContractFileMeta, type ContractIssue } from "../data"
@@ -123,6 +125,7 @@ export default function ContractDocumentPanel({
   const [wordCount, setWordCount] = useState(0)
   const [zoom, setZoom] = useState(100)
   const [viewingOriginal, setViewingOriginal] = useState(false)
+  const saveToVault = useSaveToVault(`/api/contract-review/${reviewId}/save-to-vault`)
 
   const issuesRef = useRef(issues)
   const selectedRef = useRef(selectedIssueId)
@@ -271,6 +274,21 @@ export default function ContractDocumentPanel({
             >
               <ExternalLink className="w-3.5 h-3.5" />
               View original
+            </button>
+          )}
+          {reviewId && (
+            <button
+              type="button"
+              onClick={() => saveToVault.save()}
+              disabled={saveToVault.state === "saving"}
+              className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors disabled:opacity-50"
+            >
+              {saveToVault.state === "saving" ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Vault className="w-3.5 h-3.5" />
+              )}
+              Save to Vault
             </button>
           )}
           <button

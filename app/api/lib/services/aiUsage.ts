@@ -163,7 +163,7 @@ export async function checkAiAllowance(clerkUid: string): Promise<AiAllowance> {
     return {
       allowed: false,
       reason: "window_5h",
-      message: "You've reached your 5-hour AI usage limit.",
+      message: "You've used all the AI credits in your current 5-hour session.",
       resetAt: snapshot.window5h.resetAt,
     }
   }
@@ -171,7 +171,7 @@ export async function checkAiAllowance(clerkUid: string): Promise<AiAllowance> {
     return {
       allowed: false,
       reason: "daily",
-      message: "You've reached your daily AI usage limit.",
+      message: "You've used all your AI credits for today.",
       resetAt: snapshot.daily.resetAt,
     }
   }
@@ -179,7 +179,7 @@ export async function checkAiAllowance(clerkUid: string): Promise<AiAllowance> {
     return {
       allowed: false,
       reason: "weekly",
-      message: "You've reached your weekly AI usage limit.",
+      message: "You've used all your AI credits for this week.",
       resetAt: snapshot.weekly.resetAt,
     }
   }
@@ -187,7 +187,7 @@ export async function checkAiAllowance(clerkUid: string): Promise<AiAllowance> {
     return {
       allowed: false,
       reason: "monthly",
-      message: "You've reached your monthly AI usage limit. Upgrade your plan for more.",
+      message: "You've used all your AI credits for this month. Upgrade your plan for more.",
       resetAt: snapshot.monthly.resetAt,
     }
   }

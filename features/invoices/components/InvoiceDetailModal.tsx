@@ -26,6 +26,7 @@ import {
   Banknote,
   Wallet,
   Receipt,
+  Vault,
 } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
@@ -35,6 +36,7 @@ interface InvoiceDetailModalProps {
   onEdit: (invoice: Invoice) => void;
   onSend: (invoice: Invoice) => void;
   onDownload: (invoice: Invoice) => void;
+  onSaveToVault: (invoice: Invoice) => void;
   onMarkAsPaid: (invoice: Invoice) => void;
   onRecordPayment: (invoice: Invoice) => void;
 }
@@ -56,6 +58,7 @@ export function InvoiceDetailModal({
   onEdit,
   onSend,
   onDownload,
+  onSaveToVault,
   onMarkAsPaid,
   onRecordPayment,
 }: InvoiceDetailModalProps) {
@@ -101,6 +104,10 @@ export function InvoiceDetailModal({
             <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm shrink-0" onClick={() => onDownload(invoice)}>
               <Download className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               PDF
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm shrink-0" onClick={() => onSaveToVault(invoice)}>
+              <Vault className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              Save to Vault
             </Button>
             <Button variant="outline" size="sm" className="h-8 sm:h-9 text-xs sm:text-sm shrink-0" onClick={() => window.print()}>
               <Printer className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />

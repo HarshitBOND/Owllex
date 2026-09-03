@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { AiUsageMeter } from "@/components/ui/ai-usage-meter"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useUser } from "@clerk/nextjs"
 
 // Mobile Dashboard Section tabs
@@ -336,8 +336,10 @@ const Dashboard = () => {
                 {expandedCards.hearings && (
                   <div className="px-3 pb-3 space-y-2">
                     {loading ? (
-                      <div className="flex items-center justify-center py-4">
-                        <LoaderCircle className="animate-spin text-gray-400 dark:text-muted-foreground" size={20} />
+                      <div className="space-y-2">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <Skeleton key={i} className="h-[52px] w-full rounded-md" />
+                        ))}
                       </div>
                     ) : data?.upcomingHearings && data.upcomingHearings.length > 0 ? (
                       data.upcomingHearings.slice(0, 3).map((hearing: any, i: number) => (
@@ -447,8 +449,10 @@ const Dashboard = () => {
                 </div>
                 <div className="p-3 space-y-2">
                   {loading ? (
-                    <div className="flex items-center justify-center py-6">
-                      <LoaderCircle className="animate-spin text-gray-400 dark:text-muted-foreground" size={20} />
+                    <div className="space-y-2">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[44px] w-full rounded-md" />
+                      ))}
                     </div>
                   ) : data?.recentTasks && data.recentTasks.length > 0 ? (
                     data.recentTasks.slice(0, 6).map((task: any, i: number) => (
@@ -595,8 +599,10 @@ const Dashboard = () => {
               </div>
               <div className="p-4">
                 {loading ? (
-                  <div className="flex items-center justify-center py-6">
-                    <LoaderCircle className="animate-spin text-gray-400 dark:text-muted-foreground" size={24} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-[74px] w-full rounded-lg" />
+                    ))}
                   </div>
                 ) : data?.upcomingHearings && data.upcomingHearings.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
@@ -716,8 +722,6 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
-
-            <AiUsageMeter />
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
               <button
@@ -879,8 +883,25 @@ const Dashboard = () => {
                 </div>
                 <div className="p-2 md:p-4">
                   <Suspense fallback={
-                    <div className="flex items-center justify-center h-80">
-                      <LoaderCircle className="animate-spin text-sidebar-primary" size={32} />
+                    <div>
+                      <div className="flex items-center justify-between mb-4 sm:mb-6">
+                        <Skeleton className="h-7 w-36" />
+                        <div className="flex items-center gap-1.5">
+                          <Skeleton className="h-8 w-16" />
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-7 gap-1.5 mb-2">
+                        {Array.from({ length: 7 }).map((_, i) => (
+                          <Skeleton key={i} className="h-4 w-full" />
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1.5">
+                        {Array.from({ length: 35 }).map((_, i) => (
+                          <Skeleton key={i} className="aspect-square sm:aspect-auto sm:h-[6.5rem] md:h-[7.5rem] w-full rounded-lg" />
+                        ))}
+                      </div>
                     </div>
                   }>
                     <Calendar embedded />
@@ -932,8 +953,10 @@ const Dashboard = () => {
                 </div>
                 <div className="p-4">
                   {loading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <LoaderCircle className="animate-spin text-gray-400 dark:text-muted-foreground" size={24} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[58px] w-full rounded-lg" />
+                      ))}
                     </div>
                   ) : data?.recentTasks && data.recentTasks.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

@@ -448,7 +448,7 @@ const AddCaseForm = () => {
               </div>
 
               <div className="flex justify-center pt-2">
-                <Button onClick={handleByCaseNumberSearch} size="lg" className="px-8 h-11 text-base shadow-md" disabled={loading || !caseNumber || !caseType || !caseYear}>
+                <Button onClick={handleByCaseNumberSearch} size="lg" className="px-8 h-11 text-base shadow-md min-w-[168px]" disabled={loading || !caseNumber || !caseType || !caseYear}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
                   {loading ? "Searching..." : "Search Case"}
                 </Button>
@@ -472,7 +472,7 @@ const AddCaseForm = () => {
               </div>
 
               <div className="flex justify-center pt-2">
-                <Button onClick={handleByAdvocateNameSearch} size="lg" className="px-8 h-11 text-base shadow-md" disabled={loading || !advocateName || !caseYear}>
+                <Button onClick={handleByAdvocateNameSearch} size="lg" className="px-8 h-11 text-base shadow-md min-w-[168px]" disabled={loading || !advocateName || !caseYear}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
                   {loading ? "Searching..." : "Search Cases"}
                 </Button>
@@ -523,7 +523,7 @@ const AddCaseForm = () => {
                       e.stopPropagation();
                       setAddingCase(true);
                       router.push(`/case-tracking/add/${c._id}`);
-                    }} className="shrink-0 shadow-md h-10 px-5">
+                    }} className="shrink-0 shadow-md h-10 px-5 min-w-[118px]">
                       {addingCase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
                       {addingCase ? "Adding..." : "Add Case"}
                     </Button>

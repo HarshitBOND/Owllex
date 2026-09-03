@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { headers } from "next/headers"
-import { Outfit, Amethysta, Averia_Serif_Libre, Inter } from "next/font/google"
+import { Averia_Serif_Libre, Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Toaster } from "sonner"
@@ -9,21 +9,8 @@ import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
 import { SidebarProvider } from "@/contexts/SidebarContext"
 import { AiChatProvider } from "@/contexts/AiChatContext"
+import { SettingsProvider } from "@/contexts/SettingsContext"
 import { ThemeProvider } from "@/components/theme-provider"
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-outfit",
-  weight: ["400", "500", "600", "700"],
-})
-
-const amethysta = Amethysta({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-amethysta",
-  weight: ["400"],
-})
 
 const averiaSerifLibre = Averia_Serif_Libre({
   subsets: ["latin"],
@@ -65,7 +52,7 @@ export default async function RootLayout({
   const nonce = requestHeaders.get("x-nonce") || undefined
 
   return (
-    <html lang="en" className={`${outfit.variable} ${amethysta.variable} ${averiaSerifLibre.variable} ${inter.variable} antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${averiaSerifLibre.variable} ${inter.variable} antialiased`} suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem nonce={nonce}>
           <ClerkProvider
@@ -77,7 +64,9 @@ export default async function RootLayout({
           >
             <SidebarProvider>
               <AiChatProvider>
-                {children}
+                <SettingsProvider>
+                  {children}
+                </SettingsProvider>
               </AiChatProvider>
             </SidebarProvider>
             <Toaster position="bottom-right" richColors closeButton />

@@ -29,13 +29,16 @@ import {
   Table as TableIcon,
   Underline as UnderlineIcon,
   Undo2,
+  Vault,
 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useSaveToVault } from "@/features/vault/useSaveToVault"
 import type { SaveStatus } from "../hooks/useDraftAutosave"
 
 interface DocumentEditorPanelProps {
@@ -117,6 +120,7 @@ export default function DocumentEditorPanel({
   const [zoom, setZoom] = useState(100)
   const [shareLabel, setShareLabel] = useState("Copy link")
   const [exporting, setExporting] = useState<"pdf" | "docx" | null>(null)
+  const saveToVault = useSaveToVault()
 
   const editor = useEditor({
     extensions: [
@@ -184,6 +188,11 @@ export default function DocumentEditorPanel({
     } finally {
       setTimeout(() => setExporting(null), 1200)
     }
+  }
+
+  const saveToVaultAs = async (format: "pdf" | "docx") => {
+    await beforeExport()
+    await saveToVault.save(`/api/draft-documents/${draftId}/save-to-vault?format=${format}`)
   }
 
   const copyLink = async () => {
@@ -275,7 +284,11 @@ export default function DocumentEditorPanel({
                 type="button"
                 className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[13px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
               >
-                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {exporting || saveToVault.state === "saving" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
                 Download
                 <ChevronDown className="w-3 h-3" />
               </button>
@@ -283,6 +296,15 @@ export default function DocumentEditorPanel({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => exportAs("pdf")}>PDF (.pdf)</DropdownMenuItem>
               <DropdownMenuItem onClick={() => exportAs("docx")}>Word (.docx)</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => saveToVaultAs("pdf")}>
+                <Vault className="mr-2 h-3.5 w-3.5" />
+                Save PDF to Vault
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => saveToVaultAs("docx")}>
+                <Vault className="mr-2 h-3.5 w-3.5" />
+                Save Word to Vault
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 

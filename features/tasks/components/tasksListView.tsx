@@ -8,7 +8,8 @@ import {
 } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { ChevronDown,  LoaderCircle } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ChevronDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { AlertPopup } from "@/components/common/AlertPopup"
 import { Task } from "@/app/tasks/page"
@@ -113,14 +114,21 @@ const TasksListView = ({status, tasks, loading, caseDetails, setTrigger}: {statu
                     </TableCell>
                 </TableRow>
                 )) : loading ? (
-                <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                    <div className="h-100 flex items-center justify-center gap-x-1">
-                        <LoaderCircle className="text-gray-500 animate-spin" size={18} />
-                        <p className="text-center text-gray-500">Loading...</p>
+                Array.from({ length: 3 }).map((_, i) => (
+                <TableRow key={i}>
+                    <TableCell colSpan={4}>
+                    <div className="flex flex-col mb-2 gap-y-2">
+                        <div className="flex items-center justify-between">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-9 w-24" />
+                        </div>
+                        <Skeleton className="h-6 w-2/3" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-4 w-1/3" />
                     </div>
                     </TableCell>
                 </TableRow>
+                ))
                 ) : (
                 <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">

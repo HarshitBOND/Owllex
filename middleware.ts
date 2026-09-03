@@ -100,23 +100,16 @@ export default clerkMiddleware(async (auth, req) => {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
 
-  // Add cache headers for static assets
   const response = NextResponse.next({
     request: {
       headers: requestHeaders,
     },
   });
-  
-  // Cache static assets for 1 year
-  if (
-    req.nextUrl.pathname.match(/\.(jpg|jpeg|png|gif|svg|webp|woff|woff2|ttf|eot)$/i)
-  ) {
-    response.headers.set(
-      "Cache-Control",
-      "public, max-age=31536000, immutable"
-    );
-  }
-  
+
+  // Static assets (images/fonts) never reach this middleware -- the matcher
+  // below excludes those extensions -- so their Cache-Control is set in
+  // next.config.mjs's headers() instead, which runs for every path.
+
   // Disable caching for API responses (user-specific authenticated data)
   if (req.nextUrl.pathname.startsWith("/api/")) {
     response.headers.set(

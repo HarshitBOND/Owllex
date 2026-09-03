@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import type { FraudReportItem, FraudStatus } from "../types"
 import { formatAmount, formatDateTime, fraudStatusStyles } from "../utils"
@@ -69,8 +70,28 @@ export function FraudReportsPanel({
         </div>
 
         {fraudLoading ? (
-          <div className="p-8 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-sidebar-primary" />
+          <div className="divide-y divide-gray-100">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-56" />
+                    <Skeleton className="h-3 w-72" />
+                  </div>
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <div className="grid md:grid-cols-3 gap-2">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <div className="grid md:grid-cols-4 gap-2">
+                  <Skeleton className="h-9 w-full rounded-md" />
+                  <Skeleton className="h-9 w-full rounded-md md:col-span-3" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : fraudReports.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-500">No fraud reports found.</div>

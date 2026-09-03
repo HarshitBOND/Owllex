@@ -3,6 +3,7 @@
 import { UserButton } from "@clerk/nextjs"
 import { ArrowLeft, Bell, CheckCircle, Loader2, Menu } from "lucide-react"
 import { Button } from "../ui/button"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useSidebar } from "@/contexts/SidebarContext"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -217,7 +218,7 @@ const Navbar = ({withBack, location, subtitle, badge, actions}: {withBack?: bool
                     </h1>
                     {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
                 </div>
-                <img src="/logo.png" className="w-9 h-9 lg:hidden" alt="Ravenslaw" />
+                <Image src="/logo.png" width={36} height={36} className="w-9 h-9 lg:hidden" alt="Ravenslaw" />
                 <div className="flex items-center md:gap-x-3 gap-x-2">
                     {actions}
                     {/* Notification Bell */}

@@ -5,11 +5,12 @@ export type Toast = {
   title?: ReactNode
   description?: ReactNode
   variant?: "default" | "destructive"
+  action?: { label: string; onClick: () => void }
 }
 
-function toast({ title, description, variant }: Toast) {
+function toast({ title, description, variant, action }: Toast) {
   const show = variant === "destructive" ? sonner.error : sonner
-  const id = show(title as string, { description: description as string })
+  const id = show(title as string, { description: description as string, action })
   return { id, dismiss: () => sonner.dismiss(id) }
 }
 

@@ -5,12 +5,14 @@ import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, 
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
+import { useSettingsModal } from "@/contexts/SettingsContext"
 
 const MobileBottomNav = () => {
     const pathname = usePathname()
     const router = useRouter()
     const [showMore, setShowMore] = useState(false)
     const { theme, setTheme } = useTheme()
+    const { openSettings } = useSettingsModal()
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
@@ -30,7 +32,6 @@ const MobileBottomNav = () => {
         { name: "Corpus", icon: Library, href: "/corpus" },
         { name: "AI Workflow", icon: Workflow, href: "/ai-workflow" },
         { name: "Calendar", icon: CalendarDays, href: "/calendar" },
-        { name: "Settings", icon: Settings, href: "/settings" },
         { name: "Help & Support", icon: HelpCircle, href: "/contact-us" },
     ]
 
@@ -84,6 +85,14 @@ const MobileBottomNav = () => {
                                     <span className="text-[10px] font-medium text-center leading-tight">{item.name}</span>
                                 </button>
                             ))}
+                            {/* Settings opens the panel over the current page */}
+                            <button
+                                onClick={() => { setShowMore(false); openSettings("general") }}
+                                className="flex flex-col items-center gap-1.5 p-3 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                            >
+                                <Settings size={20} />
+                                <span className="text-[10px] font-medium text-center leading-tight">Settings</span>
+                            </button>
                             {/* Theme Toggle */}
                             <button
                                 onClick={toggleTheme}

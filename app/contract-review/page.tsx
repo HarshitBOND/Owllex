@@ -4,11 +4,23 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { Download, HelpCircle, Share2 } from "lucide-react"
+import dynamic from "next/dynamic"
 import Sidebar from "@/components/layout/sidebar"
 import Navbar from "@/components/layout/navbar"
 import { cn } from "@/lib/utils"
-import ContractReviewWorkspace from "@/features/contract-review/components/ContractReviewWorkspace"
 import type { ContractFileMeta, ContractIssue } from "@/features/contract-review/data"
+
+const ContractReviewWorkspace = dynamic(
+  () => import("@/features/contract-review/components/ContractReviewWorkspace"),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-10 h-10 border-4 border-t-transparent border-sidebar-primary rounded-full animate-spin" />
+      </div>
+    ),
+    ssr: false,
+  },
+)
 
 export default function Page() {
   const router = useRouter()
@@ -94,17 +106,17 @@ export default function Page() {
                   <button
                     type="button"
                     onClick={handleDownloadReport}
-                    className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
+                    className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors min-w-[150px]"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-3.5 h-3.5 shrink-0" />
                     {downloadLabel}
                   </button>
                   <button
                     type="button"
                     onClick={handleShareReport}
-                    className="h-8 px-3 rounded-lg bg-gray-900 dark:bg-accent text-white flex items-center gap-1.5 text-[12.5px] font-medium hover:opacity-90 transition-opacity"
+                    className="h-8 px-3 rounded-lg bg-gray-900 dark:bg-accent text-white flex items-center justify-center gap-1.5 text-[12.5px] font-medium hover:opacity-90 transition-opacity min-w-[126px]"
                   >
-                    <Share2 className="w-3.5 h-3.5" />
+                    <Share2 className="w-3.5 h-3.5 shrink-0" />
                     {shareLabel}
                   </button>
                 </div>

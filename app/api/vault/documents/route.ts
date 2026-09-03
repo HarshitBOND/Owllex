@@ -4,8 +4,8 @@ import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation"
 import { logSecurityEvent } from "@/app/api/lib/securityLogger"
 import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage"
-import { compressAndStore } from "@/app/api/lib/storage/compressAndStore"
-import { headPrivateObject, putPrivateObject } from "@/app/api/lib/storage/r2"
+import { compressPdf } from "@/app/api/lib/storage/compressPdf"
+import { putPrivateObject } from "@/app/api/lib/storage/r2"
 import { contentAddressedKey } from "@/app/api/lib/storage/dedupe"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import VaultDocument from "@/app/api/lib/models/vault-document"
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       sha256: d.sha256,
       verifyStatus: d.verifyStatus,
       lastVerifiedAt: d.lastVerifiedAt ? new Date(d.lastVerifiedAt).getTime() : 0,
+      important: !!d.important,
       createdAt: new Date(d.createdAt).getTime(),
     })),
   })
@@ -89,9 +90,20 @@ export async function POST(request: NextRequest) {
   const mimeType = file.type || "application/octet-stream"
   const originalSha256 = createHash("sha256").update(buffer).digest("hex")
 
-  // Images are downscaled here; PDFs go to the backend for a Ghostscript pass.
+  // Both passes run in this process: sharp downscales images, compressPdf
+  // rewrites PDFs. Neither depends on the Python backend being reachable, which
+  // is what made compression a silent no-op whenever that service was down.
   const isImage = validation.resourceType === "image"
   const optimized = isImage ? await optimizeImage(Buffer.from(buffer), mimeType) : null
+  const compressed = isImage ? null : await compressPdf(Buffer.from(buffer))
+
+  if (extension === "pdf" && compressed && !compressed.compressed) {
+    // Not fatal -- the original is stored below -- but it is the thing that was
+    // impossible to see before, so it gets said out loud.
+    console.warn(
+      `[vault] stored PDF uncompressed (${compressed.reason}): ${buffer.byteLength} bytes, user ${userContext.clerkUid}`
+    )
+  }
 
   const filename = optimized
     ? withExtension(validation.sanitizedFileName!, optimized.extension)
@@ -102,42 +114,45 @@ export async function POST(request: NextRequest) {
     filename,
   })
 
-  let storedBytes = buffer.byteLength
-  let storedMime = mimeType
+  const payload = optimized?.buffer ?? compressed?.buffer ?? Buffer.from(buffer)
+  const payloadMime = optimized?.contentType ?? mimeType
+
+  let storedBytes = payload.length
+  let storedMime = payloadMime
   // sha256 must describe the bytes that end up in R2, not the upload -- it is
   // what the verify endpoint re-checks, and compression changes them.
-  let sha256 = originalSha256
+  let sha256 = createHash("sha256").update(payload).digest("hex")
 
   if (exists) {
-    // Same user, same bytes, key already populated -- reuse the stored object.
-    // The hash is recomputed from what is actually in R2 so verify still works.
-    const head = await headPrivateObject(r2Key)
-    storedBytes = head.contentLength ?? storedBytes
-    if (optimized) {
-      storedMime = optimized.contentType
-      sha256 = createHash("sha256").update(optimized.buffer).digest("hex")
-    }
-  } else if (optimized) {
-    await putPrivateObject(r2Key, optimized.buffer, optimized.contentType)
-    storedBytes = optimized.storedBytes
-    storedMime = optimized.contentType
-    sha256 = createHash("sha256").update(optimized.buffer).digest("hex")
-  } else {
-    const result = await compressAndStore({
-      filename: validation.sanitizedFileName!,
-      bytes: Buffer.from(buffer),
-      mimeType,
-      r2Key,
-    })
-    if (result.stored && result.sha256) {
-      storedBytes = result.stored_bytes ?? storedBytes
-      sha256 = result.sha256
+    // Same user, same upload bytes, key already populated. The stored object was
+    // written by an earlier upload, possibly under different compression
+    // settings, so its hash cannot be assumed to match what this request would
+    // produce -- it has to come off the row that wrote it. Getting this wrong is
+    // what made a re-uploaded PDF verify as "corrupted".
+    const sibling = await VaultDocument.findOne({ clerkUid: userContext.clerkUid, r2Key })
+      .select("sha256 size mimeType")
+      .lean<any>()
+
+    if (sibling?.sha256) {
+      sha256 = sibling.sha256
+      storedBytes = sibling.size ?? storedBytes
+      storedMime = sibling.mimeType ?? storedMime
     } else {
-      // Backend unavailable or declined -- store the original from here so an
-      // upload never depends on the compression service being up.
-      await putPrivateObject(r2Key, Buffer.from(buffer), mimeType)
+      // The object is there but no row describes it. Overwriting with what this
+      // request produced is what makes the hash below true again.
+      await putPrivateObject(r2Key, payload, payloadMime)
     }
+  } else {
+    await putPrivateObject(r2Key, payload, payloadMime)
   }
+
+  const compressionStatus = optimized
+    ? optimized.storedBytes < optimized.originalBytes
+      ? "compressed"
+      : "unchanged"
+    : compressed?.compressed
+      ? "compressed"
+      : "unchanged"
 
   const doc = await VaultDocument.create({
     clerkUid: userContext.clerkUid,
@@ -150,6 +165,8 @@ export async function POST(request: NextRequest) {
     originalSize: buffer.byteLength,
     verifyStatus: "verified",
     lastVerifiedAt: new Date(),
+    compressionStatus,
+    compressionReason: compressed && !compressed.compressed ? compressed.reason : "",
   })
 
   return NextResponse.json({

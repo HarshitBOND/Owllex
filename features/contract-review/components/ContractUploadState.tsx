@@ -12,7 +12,33 @@ import {
   ShieldAlert,
   UploadCloud,
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { SAMPLE_CONTRACT_MARKDOWN } from "../data"
+
+const securityPoints = [
+  {
+    title: "Encryption everywhere",
+    description: "Documents are encrypted in transit and at rest, both while uploading and in storage.",
+  },
+  {
+    title: "Never used for training",
+    description: "Your contracts are never used to train our AI models or shared with third parties.",
+  },
+  {
+    title: "Access controls",
+    description: "Only you can access your uploaded documents and review results.",
+  },
+  {
+    title: "Deletion on request",
+    description: "You can request permanent deletion of your documents and review history at any time.",
+  },
+]
 
 interface ContractUploadStateProps {
   onUpload: (file: File) => void
@@ -52,6 +78,7 @@ const whatYouGet = [
 
 export default function ContractUploadState({ onUpload, error }: ContractUploadStateProps) {
   const [isDragging, setIsDragging] = useState(false)
+  const [isSecurityDialogOpen, setIsSecurityDialogOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleSample = () => {
@@ -193,6 +220,7 @@ export default function ContractUploadState({ onUpload, error }: ContractUploadS
               </p>
               <button
                 type="button"
+                onClick={() => setIsSecurityDialogOpen(true)}
                 className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 mt-2"
               >
                 Learn more about security
@@ -202,6 +230,28 @@ export default function ContractUploadState({ onUpload, error }: ContractUploadS
           </div>
         </div>
       </div>
+
+      <Dialog open={isSecurityDialogOpen} onOpenChange={setIsSecurityDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              Your data is secure
+            </DialogTitle>
+            <DialogDescription>
+              Here&apos;s how we protect the documents you upload for review.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            {securityPoints.map((point) => (
+              <div key={point.title}>
+                <p className="text-[13px] font-semibold text-gray-900 dark:text-foreground">{point.title}</p>
+                <p className="text-[12.5px] text-muted-foreground leading-snug mt-0.5">{point.description}</p>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

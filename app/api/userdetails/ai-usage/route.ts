@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireUserContext } from "@/app/api/lib/routeGuards"
 import { getAiUsage } from "@/app/api/lib/services/aiUsage"
 import { PLAN_MODELS } from "@/lib/ai/models"
+import { creditsAllowed, creditsUsed, percentUsed } from "@/lib/ai/credits"
 
 export async function GET(request: NextRequest) {
   const userContext = await requireUserContext(request)
@@ -12,12 +13,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Subscription not found" }, { status: 404 })
   }
 
-  const window = (used: number, cap: number, resetAt: Date | null) => ({
-    usedPaise: used,
-    capPaise: cap,
-    percent: cap > 0 ? Math.min(Math.round((used / cap) * 100), 100) : 100,
-    resetAt: resetAt ? resetAt.toISOString() : null,
-  })
+  // Paise stay server-side: the client only ever sees credits.
+  const window = (usedPaise: number, capPaise: number, resetAt: Date | null) => {
+    const used = creditsUsed(usedPaise)
+    const cap = creditsAllowed(capPaise)
+    return {
+      used,
+      cap,
+      remaining: Math.max(cap - used, 0),
+      percent: percentUsed(usedPaise, capPaise),
+      resetAt: resetAt ? resetAt.toISOString() : null,
+    }
+  }
 
   return NextResponse.json({
     success: true,

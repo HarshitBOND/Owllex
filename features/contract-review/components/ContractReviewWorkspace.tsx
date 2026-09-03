@@ -12,6 +12,76 @@ import { DEFAULT_TYPOGRAPHY, type ContractFileMeta, type ContractIssue, type Con
 
 type Status = "idle" | "extracting" | "analyzing" | "ready" | "error"
 
+type RouteResult<T> = { ok: true; data: T } | { ok: false; message: string }
+
+/**
+ * Ceiling for one call, sitting above the routes' own 300s maxDuration so the
+ * server's real message wins whenever there is one. Without any ceiling a
+ * request that never gets answered leaves the page spinning indefinitely.
+ */
+const ROUTE_TIMEOUT_MS = 320_000
+
+/**
+ * Calls one of this feature's routes and comes back with either parsed JSON or a
+ * message describing what actually went wrong.
+ *
+ * Reading the body inside the same try as the fetch used to conflate two very
+ * different failures: a route that dies outside its own error handling -- a
+ * gateway timeout on a slow extraction, a body over the upload limit, a killed
+ * function -- answers with an HTML error page, and json() then throws exactly
+ * like an offline network does. Both surfaced as "check your connection", which
+ * sends people to their router over a backend that was merely slow.
+ */
+async function callRoute<T>(input: string, init: RequestInit): Promise<RouteResult<T>> {
+  let res: Response
+  try {
+    res = await fetch(input, { ...init, signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) })
+  } catch (error) {
+    // A timeout here is not the same as being offline, and saying so sent people
+    // to their router over a document that was simply still being OCR'd.
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return {
+        ok: false,
+        message:
+          "The document is taking longer than expected and the request timed out. Scanned contracts are the slow case -- try again, or upload a smaller file.",
+      }
+    }
+    return { ok: false, message: "Couldn't reach the server. Check your connection and try again." }
+  }
+
+  try {
+    return { ok: true, data: (await res.json()) as T }
+  } catch {
+    if (res.status === 413) {
+      return { ok: false, message: "That file is too large to upload. Try a smaller document." }
+    }
+    if (res.status === 408 || res.status === 504) {
+      return {
+        ok: false,
+        message: "The server took too long to respond. Large or scanned documents can time out -- try again, or upload a smaller file.",
+      }
+    }
+    return { ok: false, message: `The server returned an unreadable response (HTTP ${res.status}). Please try again.` }
+  }
+}
+
+interface UploadResponse {
+  success: boolean
+  error?: string
+  id: string
+  contentHtml: string
+  typography: typeof DEFAULT_TYPOGRAPHY
+  version: number
+  fileMeta: ContractFileMeta
+}
+
+interface AnalyzeResponse {
+  success: boolean
+  error?: string
+  issues: ContractIssue[]
+  summary: ContractSummary
+}
+
 interface ContractReviewWorkspaceProps {
   onStatusChange?: (status: "idle" | "analyzing" | "ready") => void
   onIssuesChange?: (issues: ContractIssue[], fileMeta: ContractFileMeta | null) => void
@@ -48,25 +118,26 @@ export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange
   const runAnalyze = async (id: string) => {
     setStatus("analyzing")
     setAnalyzeError(null)
-    try {
-      const res = await fetch(`/api/contract-review/${id}/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        setAnalyzeError(data.error || "Analysis failed")
-        setStatus("error")
-        return
-      }
-      setIssues(data.issues)
-      setSummary(data.summary)
-      setStatus("ready")
-    } catch {
-      setAnalyzeError("Couldn't reach the AI reviewer. Check your connection and try again.")
+    const result = await callRoute<AnalyzeResponse>(`/api/contract-review/${id}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+
+    if (!result.ok) {
+      setAnalyzeError(result.message)
       setStatus("error")
+      return
     }
+    if (!result.data.success) {
+      setAnalyzeError(result.data.error || "Analysis failed")
+      setStatus("error")
+      return
+    }
+
+    setIssues(result.data.issues)
+    setSummary(result.data.summary)
+    setStatus("ready")
   }
 
   const handleUpload = async (file: File) => {
@@ -77,31 +148,25 @@ export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange
     setContentHtml("")
     setStatus("extracting")
 
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-      const res = await fetch("/api/contract-review", { method: "POST", body: formData })
-      const data = await res.json()
+    const formData = new FormData()
+    formData.append("file", file)
+    const result = await callRoute<UploadResponse>("/api/contract-review", { method: "POST", body: formData })
 
-      if (!data.success) {
-        setUploadError(data.error || "Upload failed")
-        setStatus("idle")
-        setFileMeta(null)
-        return
-      }
-
-      setReviewId(data.id)
-      setContentHtml(data.contentHtml)
-      setTypography(data.typography)
-      setVersion(data.version)
-      setFileMeta(data.fileMeta)
-
-      await runAnalyze(data.id)
-    } catch {
-      setUploadError("Couldn't reach the server. Check your connection and try again.")
+    if (!result.ok || !result.data.success) {
+      setUploadError(result.ok ? result.data.error || "Upload failed" : result.message)
       setStatus("idle")
       setFileMeta(null)
+      return
     }
+
+    const data = result.data
+    setReviewId(data.id)
+    setContentHtml(data.contentHtml)
+    setTypography(data.typography)
+    setVersion(data.version)
+    setFileMeta(data.fileMeta)
+
+    await runAnalyze(data.id)
   }
 
   const handleReupload = () => {

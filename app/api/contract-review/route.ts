@@ -12,7 +12,19 @@ import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
 
-export const maxDuration = 120
+// Extraction is the long pole: Docling measures ~30s on a 15-page text PDF and
+// far more on a scanned one it has to OCR, before R2 and Mongo are even touched.
+// At 120 the platform killed the function mid-extraction and the browser got a
+// gateway error page instead of JSON -- see EXTRACT_TIMEOUT_MS, which is set
+// under this so the timeout is reported rather than swallowed.
+export const maxDuration = 300
+
+/** Matches the maxlength on ContractReview.extractedText / .contentHtml. */
+const MAX_DOCUMENT_FIELD_CHARS = 400_000
+
+function clampToFieldLimit(value: string) {
+  return value.length > MAX_DOCUMENT_FIELD_CHARS ? value.slice(0, MAX_DOCUMENT_FIELD_CHARS) : value
+}
 
 export async function GET(request: NextRequest) {
   const userContext = await requireUserContext(request)
@@ -133,7 +145,7 @@ export async function POST(request: NextRequest) {
         // holds these bytes needs no write at all.
         r2Key: isImage || exists ? undefined : r2Key,
       })
-      const { text } = extracted
+      const { text: rawText } = extracted
 
       // The backend declined or failed the write (R2 unconfigured on that
       // instance, say). Store the original from here so the file is never lost.
@@ -142,7 +154,12 @@ export async function POST(request: NextRequest) {
       } else if (extracted.stored_bytes) {
         review.size = extracted.stored_bytes
       }
-      const contentHtml = sanitizeDocumentHtml(markdownToHtml(text))
+      // Both columns are capped at 400k in the schema, and a long contract does
+      // exceed that. Mongoose enforces maxlength by throwing on save, which the
+      // catch below would report to the user as an extraction failure for a
+      // document that extracted perfectly -- so trim to fit instead.
+      const text = clampToFieldLimit(rawText)
+      const contentHtml = clampToFieldLimit(sanitizeDocumentHtml(markdownToHtml(text)))
 
       review.extractedText = text
       review.contentHtml = contentHtml

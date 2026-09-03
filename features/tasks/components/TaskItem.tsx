@@ -68,7 +68,7 @@ const categoryConfig: Record<Category, { label: string; color: string; icon: str
   discovery: { label: 'Discovery', color: 'bg-accent', icon: '🔎' },
 };
 
-export const TaskItem: React.FC<TaskItemProps> = ({
+const TaskItemComponent: React.FC<TaskItemProps> = ({
   task,
   onToggleComplete,
   onDelete,
@@ -343,3 +343,5 @@ export const TaskItem: React.FC<TaskItemProps> = ({
     </motion.div>
   );
 };
+
+export const TaskItem = React.memo(TaskItemComponent);

@@ -1,9 +1,11 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ClerkLoaded, ClerkLoading, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
 import { LayoutDashboard, Menu, Moon, Sun, X } from "lucide-react"
 import { useTheme } from "next-themes"
+import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 
@@ -13,6 +15,25 @@ const navLinks = [
   { href: "#how-it-works", label: "How It Works" },
   { href: "#contact", label: "Contact" },
 ]
+
+function PlansNavLink({ className, onNavigate }: { className: string; onNavigate?: () => void }) {
+  return (
+    <>
+      <SignedIn>
+        <Link href="/pricing" onClick={onNavigate} className={className}>
+          Plans &amp; Payments
+        </Link>
+      </SignedIn>
+      <SignedOut>
+        <SignInButton mode="modal" forceRedirectUrl="/pricing">
+          <button type="button" onClick={onNavigate} className={className}>
+            Plans &amp; Payments
+          </button>
+        </SignInButton>
+      </SignedOut>
+    </>
+  )
+}
 
 export function Header() {
   const { theme, setTheme } = useTheme()
@@ -32,7 +53,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
       <div className="container flex h-16 items-center justify-between gap-2">
         <Link href="/" className="flex shrink-0 items-center">
-          <img src="/logo.png" alt="ravenslaw" className="h-7 w-auto sm:h-8 md:h-9" />
+          <Image src="/logo.png" alt="ravenslaw" width={36} height={36} className="h-7 w-auto sm:h-8 md:h-9" priority />
         </Link>
 
         <nav className="hidden md:flex items-center space-x-6">
@@ -45,6 +66,9 @@ export function Header() {
               {link.label}
             </a>
           ))}
+          <ClerkLoaded>
+            <PlansNavLink className="text-sm font-medium hover:text-primary transition-colors" />
+          </ClerkLoaded>
         </nav>
 
         <div className="flex items-center gap-1.5 sm:gap-3">
@@ -59,29 +83,35 @@ export function Header() {
           </Button>
 
           <div className="hidden items-center gap-3 md:flex">
-            <SignedIn>
-              <UserButton showName={true}>
-                <UserButton.MenuItems>
-                  <UserButton.Link
-                    label="Dashboard"
-                    labelIcon={<LayoutDashboard size={16} />}
-                    href="/dashboard"
-                  />
-                </UserButton.MenuItems>
-              </UserButton>
-            </SignedIn>
-            <SignedOut>
-              <SignInButton>
-                <Button variant="ghost" size="sm">
-                  Sign In
-                </Button>
-              </SignInButton>
-              <SignUpButton>
-                <Button size="sm" className="bg-secondary hover:bg-secondary/90">
-                  Get Started
-                </Button>
-              </SignUpButton>
-            </SignedOut>
+            <ClerkLoading>
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-8 w-28" />
+            </ClerkLoading>
+            <ClerkLoaded>
+              <SignedIn>
+                <UserButton showName={true}>
+                  <UserButton.MenuItems>
+                    <UserButton.Link
+                      label="Dashboard"
+                      labelIcon={<LayoutDashboard size={16} />}
+                      href="/dashboard"
+                    />
+                  </UserButton.MenuItems>
+                </UserButton>
+              </SignedIn>
+              <SignedOut>
+                <SignInButton>
+                  <Button variant="ghost" size="sm">
+                    Sign In
+                  </Button>
+                </SignInButton>
+                <SignUpButton>
+                  <Button size="sm" className="bg-secondary hover:bg-secondary/90">
+                    Get Started
+                  </Button>
+                </SignUpButton>
+              </SignedOut>
+            </ClerkLoaded>
           </div>
 
           <Button
@@ -110,32 +140,44 @@ export function Header() {
                 {link.label}
               </a>
             ))}
+            <ClerkLoaded>
+              <PlansNavLink
+                className="rounded-md px-2 py-2.5 text-left text-sm font-medium hover:bg-muted hover:text-primary transition-colors"
+                onNavigate={() => setMobileMenuOpen(false)}
+              />
+            </ClerkLoaded>
           </nav>
 
           <div className="mt-3 flex flex-col gap-2 border-t pt-3">
-            <SignedIn>
-              <UserButton showName={true}>
-                <UserButton.MenuItems>
-                  <UserButton.Link
-                    label="Dashboard"
-                    labelIcon={<LayoutDashboard size={16} />}
-                    href="/dashboard"
-                  />
-                </UserButton.MenuItems>
-              </UserButton>
-            </SignedIn>
-            <SignedOut>
-              <SignInButton>
-                <Button variant="ghost" className="w-full justify-center">
-                  Sign In
-                </Button>
-              </SignInButton>
-              <SignUpButton>
-                <Button className="w-full justify-center bg-secondary hover:bg-secondary/90">
-                  Get Started
-                </Button>
-              </SignUpButton>
-            </SignedOut>
+            <ClerkLoading>
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+            </ClerkLoading>
+            <ClerkLoaded>
+              <SignedIn>
+                <UserButton showName={true}>
+                  <UserButton.MenuItems>
+                    <UserButton.Link
+                      label="Dashboard"
+                      labelIcon={<LayoutDashboard size={16} />}
+                      href="/dashboard"
+                    />
+                  </UserButton.MenuItems>
+                </UserButton>
+              </SignedIn>
+              <SignedOut>
+                <SignInButton>
+                  <Button variant="ghost" className="w-full justify-center">
+                    Sign In
+                  </Button>
+                </SignInButton>
+                <SignUpButton>
+                  <Button className="w-full justify-center bg-secondary hover:bg-secondary/90">
+                    Get Started
+                  </Button>
+                </SignUpButton>
+              </SignedOut>
+            </ClerkLoaded>
           </div>
         </div>
       )}

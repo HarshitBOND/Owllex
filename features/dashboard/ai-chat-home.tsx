@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
@@ -439,7 +440,7 @@ export function AiChatHome() {
               className="w-full max-w-2xl mb-8 text-center"
             >
               <div className="w-16 h-16 mx-auto mb-5 flex items-center justify-center rounded-2xl bg-accent/10">
-                <img src="/logo.png" alt="" className="w-8 h-8 object-contain" />
+                <Image src="/logo.png" alt="" width={32} height={32} className="w-8 h-8 object-contain" />
               </div>
               <h1 className="font-serif text-3xl sm:text-4xl font-light text-text-100 mb-2 tracking-tight">
                 {greeting}, {user?.firstName || "Counselor"}

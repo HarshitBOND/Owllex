@@ -1,5 +1,3 @@
-"use client";
-
 import { redirect } from "next/navigation";
 
 // Redirect to unified My Clients page

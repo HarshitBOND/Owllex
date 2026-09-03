@@ -15,53 +15,14 @@ This is the canonical deployment runbook for frontend + backend + infrastructure
 - Payments: Razorpay (UPI-friendly)
 - Schedules: Vercel Cron + `CRON_SECRET`
 
-## 2) Environment Variables (Frontend)
+## 2) Environment Variables (Frontend / Vercel)
 
-Set these in Vercel for `Production` and `Preview`:
+Full canonical list with purposes: see [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md#2-nextjs-app-envlocal--vercel).
+Set every variable listed there in Vercel for `Production` and `Preview`.
 
-- `MONGODB_URI`
-- `MONGODB_DB`
-- `CLERK_WEBHOOK_SECRET`
-- `NEXT_PUBLIC_APP_URL`
-- `NEXT_PUBLIC_BACKEND_API`
-- `NEXT_PUBLIC_ADMIN_PANEL_SECRET_URL`
-- `CRON_SECRET`
-- `R2_ACCOUNT_ID`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- `R2_PRIVATE_BUCKET`
-- `R2_PUBLIC_BUCKET`
-- `R2_PUBLIC_BASE_URL`
-- `SENDGRID_API_KEY`
-- `NOTIFICATION_FROM_EMAIL`
-- `NOTIFICATION_FROM_NAME`
-- `SUPPORT_TEAM_EMAIL`
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-- `RAZORPAY_WEBHOOK_SECRET`
-- `RAZORPAY_AMOUNT_STARTER_MONTHLY`
-- `RAZORPAY_AMOUNT_STARTER_YEARLY`
-- `RAZORPAY_AMOUNT_PROFESSIONAL_MONTHLY`
-- `RAZORPAY_AMOUNT_PROFESSIONAL_YEARLY`
-- `RAZORPAY_AMOUNT_ENTERPRISE_MONTHLY`
-- `RAZORPAY_AMOUNT_ENTERPRISE_YEARLY`
+## 3) Environment Variables (Parser Backend / Render)
 
-Optional reliability controls:
-
-- `MONGO_SYNC_INDEXES=true` (run intentionally for controlled index sync)
-
-## 3) Environment Variables (Parser Backend)
-
-Set in backend host/container:
-
-- `MONGODB_URI`
-- `MONGODB_DB`
-- `RAVENSLAW_HOST`
-- `RAVENSLAW_PORT`
-- `RAVENSLAW_DEBUG`
-- `RAVENSLAW_UPLOAD_DIR`
-- `RAVENSLAW_MAX_PDF_SIZE_MB`
-- `RAVENSLAW_CORS_ORIGINS`
+Full canonical list with purposes: see [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md#3-parser-backend-backendenv--render).
 
 ## 4) External Endpoint Setup
 

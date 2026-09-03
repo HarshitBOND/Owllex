@@ -288,7 +288,7 @@ const AddTaskForm = ( {setShowTaskForm, setUpdateTrigger}: {setShowTaskForm: (sh
 
                 <div className="flex items-center justify-end gap-x-2 mt-4">
                     <Button variant="outline" onClick={() => setShowTaskForm(false)}>Cancel</Button>
-                    <Button onClick={() => handleAddTask()} disabled={addingTask}>
+                    <Button onClick={() => handleAddTask()} disabled={addingTask} className="min-w-36 justify-center">
                         {addingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : ""}
                         {addingTask ? "Adding Task..." : "Add Task"}
                     </Button>

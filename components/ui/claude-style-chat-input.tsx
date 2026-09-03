@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Plus, ChevronDown, ArrowUp, Square, X, FileText, Loader2, Check, Archive, Search, FileCheck2, Library, ChevronRight, ArrowLeft } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { MODELS, DEFAULT_MODEL } from "@/lib/ai/models";
 
@@ -57,7 +58,7 @@ const FilePreviewCard: React.FC<FilePreviewCardProps> = ({ file, onRemove }) => 
         <div className={`relative group flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border border-bg-300 bg-bg-200 animate-fade-in transition-all hover:border-text-400`}>
             {isImage ? (
                 <div className="w-full h-full relative">
-                    <img src={file.preview!} alt={file.file.name} className="w-full h-full object-cover" />
+                    <Image src={file.preview!} alt={file.file.name} fill unoptimized sizes="96px" className="object-cover" />
                     <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors" />
                 </div>
             ) : (

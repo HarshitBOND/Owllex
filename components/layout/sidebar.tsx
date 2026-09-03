@@ -20,6 +20,7 @@ import {
     SIDEBAR_COLLAPSED_WIDTH,
 } from "@/contexts/SidebarContext"
 import { useAiChat } from "@/contexts/AiChatContext"
+import { useSettingsModal } from "@/contexts/SettingsContext"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import React from "react"
@@ -28,7 +29,7 @@ import { AiChatHistoryFlyout } from "./ai-chat-history-flyout"
 import { TrialPaywallGate } from "@/components/ui/trial-paywall-gate"
 
 type NavLink = { name: string; icon: React.ReactElement; href: string }
-type NavAction = { name: string; icon: React.ReactElement; action: "new-chat" | "chat-history" }
+type NavAction = { name: string; icon: React.ReactElement; action: "new-chat" | "chat-history" | "ai-settings" }
 type NavLeaf = NavLink | NavAction
 type NavGroup = { name: string; icon: React.ReactElement; items: NavLeaf[] }
 
@@ -41,7 +42,7 @@ const aiGroupItems: NavLeaf[] = [
     { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },
     { name: "Contract Review", icon: <FileCheck2 size={16} />, href: "/contract-review" },
     { name: "AI Workflow", icon: <Workflow size={16} />, href: "/ai-workflow" },
-    { name: "AI Settings", icon: <Settings2 size={16} />, href: "/ai-settings" },
+    { name: "AI Settings", icon: <Settings2 size={16} />, action: "ai-settings" },
 ]
 
 const workspaceGroupItems: NavLeaf[] = [
@@ -66,6 +67,7 @@ const Sidebar = () => {
     const pathname = usePathname()
     const { theme, setTheme } = useTheme()
     const aiChat = useAiChat()
+    const { openSettings } = useSettingsModal()
     const [mounted, setMounted] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
     const [isSupport, setIsSupport] = useState(false)
@@ -151,7 +153,9 @@ const Sidebar = () => {
 
     const handleLeafClick = (item: NavLeaf) => {
         if (isNavAction(item)) {
-            if (item.action === "new-chat") {
+            if (item.action === "ai-settings") {
+                openSettings("model")
+            } else if (item.action === "new-chat") {
                 aiChat.startNewConversation()
                 aiChat.closeHistory()
                 if (pathname !== "/dashboard") router.push("/dashboard")
@@ -220,12 +224,13 @@ const Sidebar = () => {
         )
     }
 
-    const FlatItem = ({ name, icon, href, isMobile = false }: { name: string; icon: React.ReactElement; href: string; isMobile?: boolean }) => (
-        <div className="cursor-pointer" onClick={() => handleNavigation(href)}>
+    // Either routes to `href` or, for panel-style entries like Settings, runs `onClick`.
+    const FlatItem = ({ name, icon, href, onClick, isMobile = false }: { name: string; icon: React.ReactElement; href?: string; onClick?: () => void; isMobile?: boolean }) => (
+        <div className="cursor-pointer" onClick={() => (onClick ? onClick() : href && handleNavigation(href))}>
             <div className={cn(
                 "flex items-center h-9 rounded-lg transition-all duration-200",
                 isOpen || isMobile ? "gap-x-2 px-2" : "justify-center px-0",
-                isLeafActive(href)
+                href && isLeafActive(href)
                     ? "bg-sidebar-primary/10 text-sidebar-primary"
                     : "text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-gray-400"
             )}>
@@ -300,7 +305,7 @@ const Sidebar = () => {
             <div className="flex flex-col gap-y-1 px-1 pb-4 pt-2">
                 <hr className="mb-2 border-gray-200 dark:border-gray-700" />
 
-                <FlatItem isMobile={isMobile} name="Settings" icon={<Settings size={20} />} href="/settings" />
+                <FlatItem isMobile={isMobile} name="Settings" icon={<Settings size={20} />} onClick={() => openSettings("general")} />
 
                 <button
                     onClick={toggleTheme}

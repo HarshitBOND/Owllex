@@ -20,8 +20,6 @@ export function ContactMessageForm({ formData, status, user, onChange, onSubmit 
         <h2 className="text-xl font-bold text-gray-900 mb-1">Send us a message</h2>
         <p className="text-sm text-gray-500 mb-6">Fill out the form below and we&apos;ll get back to you as soon as possible.</p>
 
-        <ContactFormStatus status={status} />
-
         <form onSubmit={onSubmit} className="space-y-5">
           <div className="grid md:grid-cols-2 gap-4">
             <div>
@@ -116,6 +114,10 @@ export function ContactMessageForm({ formData, status, user, onChange, onSubmit 
             </Button>
           </div>
         </form>
+
+        <div className="mt-6">
+          <ContactFormStatus status={status} />
+        </div>
       </div>
     </div>
   )

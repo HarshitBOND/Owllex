@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { ListTodo, Sparkles, Plus, LoaderCircle, Gavel, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { backendApiUrl } from "@/lib/backendApi";
 import { parseCourtDate } from "@/lib/utils";
@@ -13,7 +15,6 @@ import {
   TaskFilters,
   TaskList,
   TaskSettingsPanel,
-  TaskStatsCard,
   type Category,
   type Priority,
   type SortDirection,
@@ -23,6 +24,14 @@ import {
   type TaskSettings,
   type TaskStats,
 } from "@/features/tasks";
+
+const TaskStatsCard = dynamic(
+  () => import("@/features/tasks/components/TaskStats").then((m) => ({ default: m.TaskStatsCard })),
+  {
+    loading: () => <div className="h-32 rounded-xl bg-gray-100 animate-pulse" />,
+    ssr: false,
+  },
+);
 
 interface MergedTaskWorkspaceProps {
   tasks: BackendTask[];
@@ -501,9 +510,19 @@ export default function MergedTaskWorkspace({ tasks, loading, onAddTask, onRefre
         </div>
 
         {upcomingHearingsLoading ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-            Loading upcoming hearings
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-border/70 bg-background/70 p-3">
+                <div className="flex items-start gap-3">
+                  <Skeleton className="h-11 w-12 rounded-lg shrink-0" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : upcomingHearings.length > 0 ? (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

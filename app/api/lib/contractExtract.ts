@@ -2,6 +2,9 @@ import { getBackendInternalHeaders } from "@/app/api/lib/backendInternalAuth"
 
 const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || "http://localhost:8000"
 
+/** Kept under the callers' own maxDuration so the timeout is reported, not swallowed by the platform. */
+const EXTRACT_TIMEOUT_MS = 240_000
+
 export type ExtractResult = {
   success: true
   text: string
@@ -42,8 +45,20 @@ export async function extractDocumentText(opts: {
       method: "POST",
       headers: getBackendInternalHeaders(),
       body: form,
+      // Without this the call can outlive the route's own maxDuration: the platform
+      // then kills the function mid-flight and the browser gets a gateway error page
+      // instead of JSON, which the page can only report as a connection failure.
+      // Ending it here leaves time to answer with a real message.
+      signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
     })
   } catch (cause) {
+    if (cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError")) {
+      throw new Error(
+        `Document extraction timed out after ${Math.round(EXTRACT_TIMEOUT_MS / 1000)}s. ` +
+          "The file may be too large or too scanned to OCR in one request -- try a smaller or text-based document.",
+        { cause },
+      )
+    }
     // fetch() rejects rather than returning a status when the backend is unreachable, and its
     // message is a bare "fetch failed" -- which is what the caller ends up showing the user on
     // the 502. Name the service and the URL so the usual cause (backend not started) is obvious.

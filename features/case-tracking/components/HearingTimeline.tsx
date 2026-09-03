@@ -50,7 +50,7 @@ export function HearingTimeline({ cases, onSelect }: HearingTimelineProps) {
               key={c._id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.08 }}
+              transition={{ delay: Math.min(i * 0.08, 0.3) }}
               onClick={() => onSelect(c)}
               className="relative pl-10 sm:pl-14 cursor-pointer group"
             >
