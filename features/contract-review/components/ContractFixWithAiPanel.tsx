@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai"
+import { toast } from "sonner"
 import { AlertCircle, ArrowUp, Check, ChevronDown, Sparkles, Wand2, X } from "lucide-react"
 import {
   DropdownMenu,
@@ -16,6 +17,7 @@ import { sanitizeDraftHtml } from "@/lib/html/sanitize-draft"
 import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
 import { useAllowedModels } from "@/hooks/useAllowedModels"
 import { severityStyles, type ContractIssue } from "../data"
+import ClarifyingQuestionCard from "./ClarifyingQuestionCard"
 
 interface ContractFixWithAiPanelProps {
   reviewId: string
@@ -23,6 +25,7 @@ interface ContractFixWithAiPanelProps {
   resolvedIssueIds: Set<string>
   getDocumentHtml: () => string
   onApply: (html: string) => void
+  onSelectIssue: (id: string) => void
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -33,6 +36,7 @@ export default function ContractFixWithAiPanel({
   resolvedIssueIds,
   getDocumentHtml,
   onApply,
+  onSelectIssue,
   open,
   onOpenChange,
 }: ContractFixWithAiPanelProps) {
@@ -42,6 +46,9 @@ export default function ContractFixWithAiPanel({
   const allowedModels = useAllowedModels()
   const [applied, setApplied] = useState<Record<string, "applied" | "discarded">>({})
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Set right before sending a per-issue "Fix" request; consumed by the effect
+  // below as soon as that request's proposeFix (or a clarifying question) lands.
+  const autoApplyRef = useRef(false)
 
   const transport = useMemo(
     () => new DefaultChatTransport({ api: `/api/contract-review/${reviewId}/chat`, body: { model } }),
@@ -70,6 +77,38 @@ export default function ContractFixWithAiPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
   }, [messages, status])
 
+  // Resolves a per-issue "Fix" click as soon as its response lands: a proposeFix
+  // is applied straight to the document (no manual "Apply" click), while a
+  // clarifying question falls back to opening the drawer so the user can answer it.
+  useEffect(() => {
+    if (!autoApplyRef.current) return
+    const lastMsg = messages[messages.length - 1]
+    if (!lastMsg || lastMsg.role === "user") return
+
+    const proposal = lastMsg.parts.find((p) => isToolUIPart(p) && getToolName(p) === "proposeFix") as
+      | { toolCallId: string; state: string; input?: { html?: string; summary?: string } }
+      | undefined
+    if (proposal?.input?.html && !applied[proposal.toolCallId]) {
+      autoApplyRef.current = false
+      const previousHtml = getDocumentHtml()
+      const html = sanitizeDraftHtml(proposal.input.html)
+      onApply(html)
+      setApplied((p) => ({ ...p, [proposal.toolCallId]: "applied" }))
+      addToolResult({ tool: "proposeFix", toolCallId: proposal.toolCallId, output: { accepted: true } })
+      toast.success("Fix applied", {
+        description: proposal.input.summary,
+        action: { label: "Undo", onClick: () => onApply(previousHtml) },
+      })
+      return
+    }
+
+    const clarifying = lastMsg.parts.find((p) => isToolUIPart(p) && getToolName(p) === "askClarifyingQuestion")
+    if (clarifying) {
+      autoApplyRef.current = false
+      onOpenChange(true)
+    }
+  }, [messages, applied, addToolResult, getDocumentHtml, onApply, onOpenChange])
+
   const submit = () => {
     if (!input.trim()) return
     send(input)
@@ -77,7 +116,8 @@ export default function ContractFixWithAiPanel({
   }
 
   const fixIssue = (issue: ContractIssue) => {
-    onOpenChange(true)
+    onSelectIssue(issue.id)
+    autoApplyRef.current = true
     send(
       `Fix this issue: [${issue.severity}] ${issue.title} ${issue.description}${
         issue.quote ? ` (quoting: "${issue.quote}")` : ""
@@ -189,6 +229,15 @@ export default function ContractFixWithAiPanel({
                 | { toolCallId: string; state: string; input?: { html?: string; summary?: string } }
                 | undefined
 
+              const clarifyingParts = msg.parts.filter(
+                (p) => isToolUIPart(p) && getToolName(p) === "askClarifyingQuestion",
+              ) as Array<{
+                toolCallId: string
+                state: string
+                input?: { question?: string; options?: string[]; allowFreeText?: boolean }
+                output?: { answer: string }
+              }>
+
               return (
                 <div key={msg.id} className="flex flex-col items-start">
                   {text && (
@@ -250,6 +299,25 @@ export default function ContractFixWithAiPanel({
                         )}
                       </div>
                     </div>
+                  )}
+
+                  {clarifyingParts.map((part) =>
+                    part.input?.question ? (
+                      <ClarifyingQuestionCard
+                        key={part.toolCallId}
+                        question={part.input.question}
+                        options={part.input.options}
+                        allowFreeText={part.input.allowFreeText}
+                        answer={part.output?.answer}
+                        onAnswer={(answer) => {
+                          addToolResult({
+                            tool: "askClarifyingQuestion",
+                            toolCallId: part.toolCallId,
+                            output: { answer },
+                          })
+                        }}
+                      />
+                    ) : null,
                   )}
                 </div>
               )

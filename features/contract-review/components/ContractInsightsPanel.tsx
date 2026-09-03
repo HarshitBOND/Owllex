@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { AlertCircle, Check, CheckCircle2, ChevronRight, Info, Sparkles } from "lucide-react"
+import { useEffect, useState } from "react"
+import { AlertCircle, Check, CheckCircle2, ChevronDown, ChevronRight, Info, Sparkles } from "lucide-react"
 import { severityStyles, type ContractIssue, type ContractSummary, type IssueSeverity } from "../data"
 
 interface ContractInsightsPanelProps {
@@ -35,6 +35,20 @@ export default function ContractInsightsPanel({
   onOpenChat,
 }: ContractInsightsPanelProps) {
   const [tab, setTab] = useState<(typeof tabs)[number]["key"]>("all")
+  const [summaryExpanded, setSummaryExpanded] = useState(false)
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("contract-review:summary-expanded")
+    if (stored !== null) setSummaryExpanded(stored === "true")
+  }, [])
+
+  const toggleSummaryExpanded = () => {
+    setSummaryExpanded((prev) => {
+      const next = !prev
+      window.localStorage.setItem("contract-review:summary-expanded", String(next))
+      return next
+    })
+  }
 
   const filteredIssues = issues.filter((issue) => tab === "all" || issue.severity === tab)
   const counts = {
@@ -52,9 +66,14 @@ export default function ContractInsightsPanel({
   ]
 
   return (
-    <div className="w-full xl:w-[400px] shrink-0 h-[75vh] xl:h-[calc(100vh-190px)] flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
-      <div className="px-4 py-4 border-b border-gray-200 dark:border-border shrink-0">
-        <div className="flex items-center gap-1.5 mb-3">
+    <div className="w-full h-full flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
+      <div className="border-b border-gray-200 dark:border-border shrink-0">
+        <button
+          type="button"
+          onClick={toggleSummaryExpanded}
+          className="w-full flex items-center gap-1.5 px-4 py-4"
+          aria-expanded={summaryExpanded}
+        >
           <h2 className="text-sm font-semibold text-gray-900 dark:text-foreground">Review summary</h2>
           {summary && (
             <span
@@ -69,22 +88,27 @@ export default function ContractInsightsPanel({
               {summary.riskLevel} risk
             </span>
           )}
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className={`rounded-lg border ${stat.style.badgeBorder} ${stat.style.badgeBg} px-2 py-2 text-center`}
-            >
-              <p className={`text-base font-bold ${stat.style.badgeText}`}>{stat.value}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{stat.label}</p>
+          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${summaryExpanded ? "" : "-rotate-90"} ${summary ? "" : "ml-auto"}`} />
+        </button>
+        {summaryExpanded && (
+          <div className="px-4 pb-4">
+            <div className="grid grid-cols-4 gap-2">
+              {stats.map((stat) => (
+                <div
+                  key={stat.label}
+                  className={`rounded-lg border ${stat.style.badgeBorder} ${stat.style.badgeBg} px-2 py-2 text-center`}
+                >
+                  <p className={`text-base font-bold ${stat.style.badgeText}`}>{stat.value}</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{stat.label}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {summary?.summary && (
-          <p className="mt-3 text-[12.5px] leading-relaxed text-gray-600 dark:text-muted-foreground">
-            {summary.summary}
-          </p>
+            {summary?.summary && (
+              <p className="mt-3 text-[12.5px] leading-relaxed text-gray-600 dark:text-muted-foreground">
+                {summary.summary}
+              </p>
+            )}
+          </div>
         )}
       </div>
 

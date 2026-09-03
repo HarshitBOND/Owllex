@@ -25,6 +25,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@clerk/nextjs", () => ({
   useUser: mockState.useUser,
   useAuth: mockState.useAuth,
+  UserButton: () => "user-button-mock",
 }))
 
 vi.mock("@/contexts/SidebarContext", () => ({

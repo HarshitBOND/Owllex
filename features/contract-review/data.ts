@@ -21,6 +21,14 @@ export type ContractFileMeta = {
   uploadedLabel: string
 }
 
+/**
+ * "auto" uses the per-page text-layer detection already in the backend (fast,
+ * exact for normal PDFs; OCR only kicks in for pages that need it). The other
+ * two force a single strategy for the whole document -- useful when auto gets
+ * it wrong (a text layer that's present but garbled, or a scan auto missed).
+ */
+export type ExtractionMode = "auto" | "force_ocr" | "text_only"
+
 export const severityStyles: Record<
   IssueSeverity,
   {

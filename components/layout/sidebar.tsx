@@ -42,7 +42,6 @@ const aiGroupItems: NavLeaf[] = [
     { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },
     { name: "Contract Review", icon: <FileCheck2 size={16} />, href: "/contract-review" },
     { name: "AI Workflow", icon: <Workflow size={16} />, href: "/ai-workflow" },
-    { name: "AI Settings", icon: <Settings2 size={16} />, action: "ai-settings" },
 ]
 
 const workspaceGroupItems: NavLeaf[] = [

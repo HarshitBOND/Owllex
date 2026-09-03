@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useEditor, EditorContent, type Editor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import TextAlign from "@tiptap/extension-text-align"
+import Underline from "@tiptap/extension-underline"
 import CharacterCount from "@tiptap/extension-character-count"
 import { TableKit } from "@tiptap/extension-table"
 import {
@@ -148,6 +149,7 @@ export default function ContractDocumentPanel({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      Underline,
       TableKit.configure({ table: { resizable: false } }),
       CharacterCount,
       IssueHighlight.configure({
@@ -187,9 +189,17 @@ export default function ContractDocumentPanel({
     editor.view.dispatch(tr)
   }, [editor, issues, selectedIssueId, resolvedIssueIds])
 
+  // Runs after the decoration effect above, so the highlighted span for
+  // `selectedIssueId` already exists in the DOM by the time this queries for it.
+  useEffect(() => {
+    if (!editor || !selectedIssueId) return
+    const el = editor.view.dom.querySelector(`[data-issue-id="${CSS.escape(selectedIssueId)}"]`)
+    el?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }, [editor, selectedIssueId])
+
   if (!editor) {
     return (
-      <div className="flex-1 min-w-0 h-[75vh] xl:h-[calc(100vh-190px)] flex items-center justify-center rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card">
+      <div className="h-full flex items-center justify-center rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card">
         <div className="w-8 h-8 border-4 border-t-transparent border-sidebar-primary rounded-full animate-spin" />
       </div>
     )
@@ -253,7 +263,7 @@ export default function ContractDocumentPanel({
     )
 
   return (
-    <div className="flex-1 min-w-0 h-[75vh] xl:h-[calc(100vh-190px)] flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
+    <div className="h-full min-w-0 flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
       <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200 dark:border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-lg bg-red-50 dark:bg-red-500/10 flex items-center justify-center shrink-0">
@@ -277,19 +287,31 @@ export default function ContractDocumentPanel({
             </button>
           )}
           {reviewId && (
-            <button
-              type="button"
-              onClick={() => saveToVault.save()}
-              disabled={saveToVault.state === "saving"}
-              className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors disabled:opacity-50"
-            >
-              {saveToVault.state === "saving" ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Vault className="w-3.5 h-3.5" />
-              )}
-              Save to Vault
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={saveToVault.state === "saving"}
+                  className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors disabled:opacity-50"
+                >
+                  {saveToVault.state === "saving" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Vault className="w-3.5 h-3.5" />
+                  )}
+                  Save to Vault
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => saveToVault.save(`/api/contract-review/${reviewId}/save-to-vault?format=docx`)}>
+                  Word (.docx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => saveToVault.save(`/api/contract-review/${reviewId}/save-to-vault?format=pdf`)}>
+                  PDF (.pdf)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <button
             type="button"

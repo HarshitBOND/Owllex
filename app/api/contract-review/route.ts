@@ -67,6 +67,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No file uploaded" }, { status: 400 })
     }
 
+    const EXTRACTION_MODES = new Set(["auto", "force_ocr", "text_only"])
+    const requestedMode = formData.get("extractionMode")
+    const extractionMode = typeof requestedMode === "string" && EXTRACTION_MODES.has(requestedMode)
+      ? (requestedMode as "auto" | "force_ocr" | "text_only")
+      : "auto"
+
     const maxFileSizeBytes = 25 * 1024 * 1024
     if (file.size > maxFileSizeBytes) {
       return NextResponse.json({ success: false, error: "File size exceeds 25MB" }, { status: 400 })
@@ -144,6 +150,7 @@ export async function POST(request: NextRequest) {
         // backend so it passes through Ghostscript first. A key that already
         // holds these bytes needs no write at all.
         r2Key: isImage || exists ? undefined : r2Key,
+        mode: extractionMode,
       })
       const { text: rawText } = extracted
 

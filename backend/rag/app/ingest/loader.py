@@ -1,5 +1,8 @@
 import gc
 from pathlib import Path
+from typing import Literal
+
+ExtractionMode = Literal["auto", "force_ocr", "text_only"]
 
 # Docling has no plain-text format, so .txt is read directly instead of converted.
 PLAIN_TEXT_SUFFIXES = {".txt"}
@@ -59,7 +62,7 @@ def _ocr_pil_image(pil_image) -> str:
     return "\n".join(result.txts) if result and result.txts else ""
 
 
-def _load_pdf_text(path: Path) -> str:
+def _load_pdf_text(path: Path, mode: ExtractionMode = "auto") -> str:
     """Extract a PDF page by page: its embedded text layer where one exists,
     OCR only for the pages that don't have one.
 
@@ -69,6 +72,11 @@ def _load_pdf_text(path: Path) -> str:
     scan, or a signed page inserted as an image), which keeps the common case
     fast and bounds the worst case's peak memory to roughly one rendered page
     at a time instead of scaling with how many pages a document has.
+
+    `mode` overrides that per-page heuristic: "force_ocr" always OCRs, even
+    pages with a text layer (useful when the embedded layer is present but
+    garbled -- e.g. from a prior bad OCR pass); "text_only" never OCRs, so a
+    genuinely scanned page comes back blank rather than paying the OCR cost.
     """
     import pypdfium2 as pdfium
 
@@ -80,7 +88,8 @@ def _load_pdf_text(path: Path) -> str:
             text = textpage.get_text_range()
             textpage.close()
 
-            if len(text.strip()) < MIN_TEXT_LAYER_CHARS:
+            needs_ocr = mode == "force_ocr" or (mode == "auto" and len(text.strip()) < MIN_TEXT_LAYER_CHARS)
+            if needs_ocr and mode != "text_only":
                 bitmap = page.render(scale=200 / 72)
                 text = _ocr_pil_image(bitmap.to_pil())
                 bitmap.close()
@@ -99,8 +108,13 @@ def _load_pdf_text(path: Path) -> str:
         pdf.close()
 
 
-def load_text(path):
-    """Return the document as text, whatever the input format."""
+def load_text(path, mode: ExtractionMode = "auto"):
+    """Return the document as text, whatever the input format.
+
+    `mode` only affects PDFs, which are the only format with a text-layer
+    alternative to OCR -- plain text is always read as-is, and images always
+    need OCR since they have no embedded text layer to fall back to.
+    """
     path = Path(path)
     if path.suffix.lower() in PLAIN_TEXT_SUFFIXES:
         return path.read_text(encoding="utf-8", errors="replace")
@@ -110,7 +124,7 @@ def load_text(path):
 
         with Image.open(path) as img:
             return _ocr_pil_image(img)
-    return _load_pdf_text(path)
+    return _load_pdf_text(path, mode)
 
 
 if __name__ == "__main__":

@@ -3,12 +3,19 @@
 import { useEffect, useRef, useState } from "react"
 import type { Editor } from "@tiptap/react"
 import { FileText } from "lucide-react"
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import ContractUploadState from "./ContractUploadState"
 import ContractDocumentPanel from "./ContractDocumentPanel"
 import ContractInsightsPanel from "./ContractInsightsPanel"
 import ContractFixWithAiPanel from "./ContractFixWithAiPanel"
 import { useDraftAutosave } from "@/features/draft-documents/hooks/useDraftAutosave"
-import { DEFAULT_TYPOGRAPHY, type ContractFileMeta, type ContractIssue, type ContractSummary } from "../data"
+import {
+  DEFAULT_TYPOGRAPHY,
+  type ContractFileMeta,
+  type ContractIssue,
+  type ContractSummary,
+  type ExtractionMode,
+} from "../data"
 
 type Status = "idle" | "extracting" | "analyzing" | "ready" | "error"
 
@@ -84,11 +91,25 @@ interface AnalyzeResponse {
 
 interface ContractReviewWorkspaceProps {
   onStatusChange?: (status: "idle" | "analyzing" | "ready") => void
-  onIssuesChange?: (issues: ContractIssue[], fileMeta: ContractFileMeta | null) => void
+  onReviewIdChange?: (reviewId: string | null) => void
 }
 
-export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange }: ContractReviewWorkspaceProps) {
+/** Panels only split side-by-side at the same `xl` breakpoint the rest of this layout uses. */
+function useIsWideScreen() {
+  const [isWide, setIsWide] = useState(false)
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1280px)")
+    setIsWide(mql.matches)
+    const onChange = (e: MediaQueryListEvent) => setIsWide(e.matches)
+    mql.addEventListener("change", onChange)
+    return () => mql.removeEventListener("change", onChange)
+  }, [])
+  return isWide
+}
+
+export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChange }: ContractReviewWorkspaceProps) {
   const editorRef = useRef<Editor | null>(null)
+  const isWideScreen = useIsWideScreen()
 
   const [reviewId, setReviewId] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>("idle")
@@ -112,8 +133,8 @@ export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange
   }, [status, onStatusChange])
 
   useEffect(() => {
-    onIssuesChange?.(issues, fileMeta)
-  }, [issues, fileMeta, onIssuesChange])
+    onReviewIdChange?.(reviewId)
+  }, [reviewId, onReviewIdChange])
 
   const runAnalyze = async (id: string) => {
     setStatus("analyzing")
@@ -140,7 +161,7 @@ export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange
     setStatus("ready")
   }
 
-  const handleUpload = async (file: File) => {
+  const handleUpload = async (file: File, extractionMode: ExtractionMode) => {
     setUploadError(null)
     setFileMeta({ name: file.name, size: file.size, uploadedLabel: "Uploaded just now" })
     setSelectedIssueId(null)
@@ -150,6 +171,7 @@ export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange
 
     const formData = new FormData()
     formData.append("file", file)
+    formData.append("extractionMode", extractionMode)
     const result = await callRoute<UploadResponse>("/api/contract-review", { method: "POST", body: formData })
 
     if (!result.ok || !result.data.success) {
@@ -234,38 +256,64 @@ export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange
   }
 
   return (
-    <div className="flex flex-col xl:flex-row gap-4 items-start">
-      <ContractDocumentPanel
-        fileMeta={fileMeta}
-        reviewId={reviewId}
-        contentHtml={contentHtml}
-        typography={typography}
-        onTypographyChange={handleTypographyChange}
-        onContentChange={handleContentChange}
-        onEditorReady={(editor) => {
-          editorRef.current = editor
-        }}
-        saveStatus={autosave.status}
-        onRetrySave={autosave.retry}
-        issues={issues}
-        selectedIssueId={selectedIssueId}
-        onSelectIssue={setSelectedIssueId}
-        resolvedIssueIds={resolvedIssueIds}
-        onReupload={handleReupload}
-        onRerun={handleRerun}
-        isReanalyzing={status === "analyzing"}
-      />
-      <ContractInsightsPanel
-        isAnalyzing={status === "analyzing"}
-        error={status === "error" ? analyzeError : null}
-        issues={issues}
-        summary={summary}
-        selectedIssueId={selectedIssueId}
-        onSelectIssue={setSelectedIssueId}
-        resolvedIssueIds={resolvedIssueIds}
-        onToggleResolved={toggleResolved}
-        onOpenChat={() => setChatOpen(true)}
-      />
+    <div className="h-[75vh] xl:h-[calc(100vh-190px)]">
+      <PanelGroup
+        key={isWideScreen ? "horizontal" : "vertical"}
+        direction={isWideScreen ? "horizontal" : "vertical"}
+        autoSaveId={isWideScreen ? "contract-review-split" : undefined}
+        className="gap-4"
+      >
+        <Panel defaultSize={70} minSize={40}>
+          <ContractDocumentPanel
+            fileMeta={fileMeta}
+            reviewId={reviewId}
+            contentHtml={contentHtml}
+            typography={typography}
+            onTypographyChange={handleTypographyChange}
+            onContentChange={handleContentChange}
+            onEditorReady={(editor) => {
+              editorRef.current = editor
+            }}
+            saveStatus={autosave.status}
+            onRetrySave={autosave.retry}
+            issues={issues}
+            selectedIssueId={selectedIssueId}
+            onSelectIssue={setSelectedIssueId}
+            resolvedIssueIds={resolvedIssueIds}
+            onReupload={handleReupload}
+            onRerun={handleRerun}
+            isReanalyzing={status === "analyzing"}
+          />
+        </Panel>
+        <PanelResizeHandle
+          className={
+            isWideScreen
+              ? "flex w-2 shrink-0 items-center justify-center group"
+              : "flex h-2 shrink-0 items-center justify-center group"
+          }
+        >
+          <div
+            className={
+              isWideScreen
+                ? "w-1 h-10 rounded-full bg-gray-200 dark:bg-border group-hover:bg-accent group-data-[resize-handle-state=drag]:bg-accent transition-colors"
+                : "h-1 w-10 rounded-full bg-gray-200 dark:bg-border group-hover:bg-accent group-data-[resize-handle-state=drag]:bg-accent transition-colors"
+            }
+          />
+        </PanelResizeHandle>
+        <Panel defaultSize={30} minSize={22}>
+          <ContractInsightsPanel
+            isAnalyzing={status === "analyzing"}
+            error={status === "error" ? analyzeError : null}
+            issues={issues}
+            summary={summary}
+            selectedIssueId={selectedIssueId}
+            onSelectIssue={setSelectedIssueId}
+            resolvedIssueIds={resolvedIssueIds}
+            onToggleResolved={toggleResolved}
+            onOpenChat={() => setChatOpen(true)}
+          />
+        </Panel>
+      </PanelGroup>
       {status === "ready" && reviewId && (
         <ContractFixWithAiPanel
           reviewId={reviewId}
@@ -273,6 +321,7 @@ export default function ContractReviewWorkspace({ onStatusChange, onIssuesChange
           resolvedIssueIds={resolvedIssueIds}
           getDocumentHtml={() => contentHtml}
           onApply={applyChatEdit}
+          onSelectIssue={setSelectedIssueId}
           open={chatOpen}
           onOpenChange={setChatOpen}
         />

@@ -75,6 +75,7 @@ export const CONTRACT_CHAT_TOOL_RULES = `How you edit the document:
 - If the user is only asking a question, or wants advice rather than an edit, answer in prose and do not call the tool.
 - Never wrap HTML in markdown fences. Use <table> only for genuinely tabular content such as payment schedules.
 - "Fix all critical issues" means: apply a redline for every issue in <flagged_issues> marked critical, in one pass.
+- A "Fix this issue" request is applied to the document automatically as soon as you call proposeFix, with no confirmation step -- so only call it once you are confident in the redline. If you are genuinely missing one specific fact needed to write it correctly (which of two dates, whether to keep or drop a clause), call askClarifyingQuestion instead of guessing or asking in plain text, then call proposeFix once you have the answer.
 
 Everything you say to the advocate outside the document itself, whether that is the explanation beside a redline, an answer to a question, or a refusal to guess at a fact, follows the house voice:
 

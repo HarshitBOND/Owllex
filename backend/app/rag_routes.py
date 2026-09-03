@@ -260,9 +260,13 @@ async def extract_document_text(
     file: UploadFile = File(...),
     r2_key: str = Form(default=""),
     content_type: str = Form(default="application/octet-stream"),
+    ocr_mode: str = Form(default="auto"),
 ):
     if not file.filename or Path(file.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, MD, JPG, or PNG files are accepted")
+
+    if ocr_mode not in ("auto", "force_ocr", "text_only"):
+        raise HTTPException(status_code=400, detail="ocr_mode must be one of: auto, force_ocr, text_only")
 
     max_bytes = settings.MAX_PDF_SIZE_MB * 1024 * 1024
     content = await file.read()
@@ -284,7 +288,7 @@ async def extract_document_text(
                 detail="RAG dependencies are not installed on this instance (run: uv sync --extra rag)",
             )
 
-        text = await run_in_threadpool(load_text, temp_path)
+        text = await run_in_threadpool(load_text, temp_path, ocr_mode)
         if not text or not text.strip():
             raise HTTPException(status_code=422, detail="Nothing extractable in this document")
 

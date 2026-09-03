@@ -110,8 +110,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .describe("One line describing what changed, e.g. 'Shortened payment terms from 60 to 30 days.'"),
         }),
       }),
+      askClarifyingQuestion: tool({
+        description:
+          "Ask the user exactly one specific question when you need one piece of information before you can answer or propose a fix -- e.g. which of two dates they meant, or whether to keep or remove a clause. Renders as a clickable question card, not chat text, so prefer this over asking in a plain sentence whenever the answer is a short choice or fact.",
+        inputSchema: z.object({
+          question: z.string().min(1).max(300),
+          options: z
+            .array(z.string().min(1).max(80))
+            .min(2)
+            .max(4)
+            .optional()
+            .describe("2-4 short answer choices, if the question has a fixed set of reasonable answers."),
+          allowFreeText: z
+            .boolean()
+            .optional()
+            .describe("Set true if the answer can't be reduced to the given options (or none are given)."),
+        }),
+      }),
     },
-    stopWhen: stepCountIs(3),
+    stopWhen: stepCountIs(5),
     experimental_transform: smoothStream({ chunking: "word" }),
     onFinish: async ({ totalUsage }) => {
       await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-chat", modelKey, usage: totalUsage })

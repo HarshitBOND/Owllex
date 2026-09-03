@@ -3,32 +3,48 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
-import { Check, ChevronDown, FileCheck2, Library, Plus } from "lucide-react"
+import { Sparkles } from "lucide-react"
 
 import Sidebar from "@/components/layout/sidebar"
-import Navbar from "@/components/layout/navbar"
+import { useSidebar } from "@/contexts/SidebarContext"
 import {
-  N8nWorkflowBlock,
-  type WorkflowConnection,
-  type WorkflowNode,
-} from "@/components/ui/n8n-workflow-block-shadcnui"
+  WorkflowCanvasImmersive,
+  type WorkflowCanvasHandle,
+} from "@/features/ai-workflow/components/WorkflowCanvasImmersive"
+import WorkflowTopBar from "@/features/ai-workflow/components/WorkflowTopBar"
+import WorkflowAiChatPanel from "@/features/ai-workflow/components/WorkflowAiChatPanel"
+import type { WorkflowConnection, WorkflowNode } from "@/components/ui/n8n-workflow-block-shadcnui"
 import {
   initialWorkflowConnections,
   initialWorkflowNodes,
   legalNodeTemplates,
 } from "@/lib/workflow-nodes"
-import WorkflowAiChatPanel from "@/features/ai-workflow/components/WorkflowAiChatPanel"
 import { useAiChat } from "@/contexts/AiChatContext"
-import { useSidebar } from "@/contexts/SidebarContext"
 import { cn } from "@/lib/utils"
 
 export default function AiWorkflowPage() {
-  useSidebar()
   const router = useRouter()
   const { isLoaded, isSignedIn } = useUser()
   const { corpora } = useAiChat()
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const pickerRef = useRef<HTMLDivElement>(null)
+  const { isOpen, setIsOpen } = useSidebar()
+  const canvasRef = useRef<WorkflowCanvasHandle>(null)
+
+  // Immersive canvas mode: collapse the app rail to an icon strip while this
+  // page is open, and put it back the way the user had it on the way out.
+  const sidebarWasOpenRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    sidebarWasOpenRef.current = isOpen
+    setIsOpen(false)
+    return () => {
+      if (sidebarWasOpenRef.current !== null) setIsOpen(sidebarWasOpenRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [panMode, setPanMode] = useState(false)
+  const [scale, setScale] = useState(1)
+  const [assistantOpen, setAssistantOpen] = useState(true)
+  const [pinned, setPinned] = useState(true)
 
   // Mirrors the canvas's live graph (manual edits included) so the AI chat
   // panel always sends accurate context, and lets an AI proposal replace it.
@@ -53,14 +69,6 @@ export default function AiWorkflowPage() {
     }
   }, [isLoaded, isSignedIn, router])
 
-  useEffect(() => {
-    const onClickOutside = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false)
-    }
-    document.addEventListener("mousedown", onClickOutside)
-    return () => document.removeEventListener("mousedown", onClickOutside)
-  }, [])
-
   if (!isLoaded || !isSignedIn) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -70,106 +78,60 @@ export default function AiWorkflowPage() {
   }
 
   return (
-    <div className="flex">
+    <div className="flex h-screen overflow-hidden bg-[#F7F8FA] dark:bg-background">
       <Sidebar />
-      <div className={cn("bg-[#F3F5F9] dark:bg-background min-h-screen w-full transition-all duration-300 pb-20 lg:pb-0", "lg:ml-[var(--sidebar-offset)]")}>
-        <div className="max-w-[1400px] w-full mx-auto px-3 sm:px-4 md:px-6 py-3 md:py-4">
-          <Navbar location="AI Workflow" />
+      <div className={cn("flex flex-col h-screen w-full min-w-0", "lg:ml-[var(--sidebar-offset)]")}>
+        <WorkflowTopBar
+          panMode={panMode}
+          onPanModeChange={setPanMode}
+          scalePct={Math.round(scale * 100)}
+          onZoomIn={() => canvasRef.current?.zoomIn()}
+          onZoomOut={() => canvasRef.current?.zoomOut()}
+          onZoomReset={() => canvasRef.current?.resetZoom()}
+          onFitView={() => canvasRef.current?.fitView()}
+          corpora={corpora}
+        />
 
-          <div className="mt-4 mb-5">
-            <div className="flex flex-wrap items-center gap-3 mb-2">
-              <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-accent/10">
-                <FileCheck2 className="w-5 h-5 text-accent" />
-              </div>
-              <h1 className="font-serif text-xl sm:text-2xl font-semibold text-gray-900 dark:text-foreground">
-                AI Workflow
-              </h1>
-
-              <div className="relative ml-auto" ref={pickerRef}>
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen((v) => !v)}
-                  aria-expanded={pickerOpen}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-gray-200 dark:border-border bg-white dark:bg-card text-sm font-medium text-gray-700 dark:text-foreground hover:border-accent/40 transition-colors"
-                >
-                  <Library className="w-4 h-4 text-gray-500 dark:text-muted-foreground" />
-                  Run against a corpus
-                  <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", pickerOpen && "rotate-180")} />
-                </button>
-
-                {pickerOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-[280px] bg-white dark:bg-card border border-gray-200 dark:border-border rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-1.5 animate-fade-in">
-                    <div className="max-h-[280px] overflow-y-auto custom-scrollbar flex flex-col">
-                      {corpora.length === 0 && (
-                        <p className="px-3 py-3 text-xs text-gray-500 dark:text-muted-foreground leading-relaxed">
-                          No corpus yet. Create one to run this pipeline against a specific matter&apos;s cases and
-                          documents.
-                        </p>
-                      )}
-                      {corpora.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setPickerOpen(false)
-                            router.push(`/corpus/${c.id}/workflow`)
-                          }}
-                          className="w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-secondary/60 transition-colors"
-                        >
-                          <Library className="w-4 h-4 text-gray-400 shrink-0" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[13px] font-semibold text-gray-900 dark:text-foreground truncate">
-                              {c.name}
-                            </span>
-                            <span className="block text-[11px] text-gray-500 dark:text-muted-foreground">
-                              {c.caseCount} case{c.caseCount === 1 ? "" : "s"} &middot; {c.documentCount} doc
-                              {c.documentCount === 1 ? "" : "s"}
-                            </span>
-                          </span>
-                          <Check className="w-4 h-4 text-transparent shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="h-px bg-gray-100 dark:bg-border my-1 mx-2" />
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPickerOpen(false)
-                        router.push("/corpus")
-                      }}
-                      className="w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-secondary/60 transition-colors"
-                    >
-                      <Plus className="w-4 h-4 text-gray-400 shrink-0" />
-                      <span className="text-[13px] font-semibold text-gray-900 dark:text-foreground">
-                        Manage corpus
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 p-3 sm:p-4">
+          <div className="flex-1 min-w-0 min-h-0">
+            <WorkflowCanvasImmersive
+              key={canvasRevision}
+              ref={canvasRef}
+              nodes={workflow.nodes}
+              connections={workflow.connections}
+              onChange={handleCanvasChange}
+              onScaleChange={setScale}
+              onRequestAssistant={() => setAssistantOpen(true)}
+              panMode={panMode}
+              className="h-full"
+            />
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-3 md:gap-4">
-            <div className="flex-1 min-w-0">
-              <N8nWorkflowBlock
-                key={canvasRevision}
-                label="Legal Workflow Builder"
-                nodes={workflow.nodes}
-                connections={workflow.connections}
-                templates={legalNodeTemplates}
-                onChange={handleCanvasChange}
-                className="bg-white dark:bg-card border-gray-200 dark:border-border"
-              />
-            </div>
-            <WorkflowAiChatPanel chatId="ai-workflow" currentWorkflow={workflow} onApply={applyAiWorkflow} />
-          </div>
+          {assistantOpen && (
+            <WorkflowAiChatPanel
+              chatId="ai-workflow"
+              currentWorkflow={workflow}
+              onApply={applyAiWorkflow}
+              templates={legalNodeTemplates}
+              onAddNode={(template) => canvasRef.current?.addNode(template)}
+              pinned={pinned}
+              onTogglePin={() => setPinned((v) => !v)}
+              onClose={() => setAssistantOpen(false)}
+            />
+          )}
         </div>
       </div>
+
+      {!assistantOpen && (
+        <button
+          type="button"
+          onClick={() => setAssistantOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-white shadow-lg hover:bg-accent-hover transition-colors"
+          aria-label="Open AI assistant"
+        >
+          <Sparkles className="h-5 w-5" />
+        </button>
+      )}
     </div>
   )
 }

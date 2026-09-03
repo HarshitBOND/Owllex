@@ -1,14 +1,19 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
-import { Download, HelpCircle, Share2 } from "lucide-react"
+import { ChevronDown, Download, HelpCircle, Share2 } from "lucide-react"
 import dynamic from "next/dynamic"
 import Sidebar from "@/components/layout/sidebar"
 import Navbar from "@/components/layout/navbar"
 import { cn } from "@/lib/utils"
-import type { ContractFileMeta, ContractIssue } from "@/features/contract-review/data"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const ContractReviewWorkspace = dynamic(
   () => import("@/features/contract-review/components/ContractReviewWorkspace"),
@@ -29,9 +34,8 @@ export default function Page() {
   const [downloadLabel, setDownloadLabel] = useState("Download report")
   const [shareLabel, setShareLabel] = useState("Share report")
   const [workspaceStatus, setWorkspaceStatus] = useState<"idle" | "analyzing" | "ready">("idle")
-  const [issues, setIssues] = useState<ContractIssue[]>([])
-  const [fileMeta, setFileMeta] = useState<ContractFileMeta | null>(null)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
+  const [reviewId, setReviewId] = useState<string | null>(null)
   const howItWorksRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -58,20 +62,9 @@ export default function Page() {
     )
   }
 
-  const handleDownloadReport = () => {
-    const lines = [
-      "Contract Review Report",
-      fileMeta ? `File: ${fileMeta.name}` : "",
-      "",
-      ...issues.map((issue) => `[${issue.severity.toUpperCase()}] ${issue.title} ${issue.description}`),
-    ].filter(Boolean)
-    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "contract-review-report.txt"
-    a.click()
-    URL.revokeObjectURL(url)
+  const handleDownloadReport = (format: "docx" | "pdf") => {
+    if (!reviewId) return
+    window.location.href = `/api/contract-review/${reviewId}/export?format=${format}`
     setDownloadLabel("Downloaded")
     setTimeout(() => setDownloadLabel("Download report"), 1500)
   }
@@ -103,14 +96,22 @@ export default function Page() {
             actions={
               workspaceStatus === "ready" ? (
                 <div className="hidden sm:flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDownloadReport}
-                    className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors min-w-[150px]"
-                  >
-                    <Download className="w-3.5 h-3.5 shrink-0" />
-                    {downloadLabel}
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors min-w-[150px]"
+                      >
+                        <Download className="w-3.5 h-3.5 shrink-0" />
+                        {downloadLabel}
+                        <ChevronDown className="w-3 h-3 shrink-0" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleDownloadReport("docx")}>Word (.docx)</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDownloadReport("pdf")}>PDF (.pdf)</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <button
                     type="button"
                     onClick={handleShareReport}
@@ -163,13 +164,7 @@ export default function Page() {
           />
         </div>
         <div className="px-3 sm:px-4 md:px-6 pb-6">
-          <ContractReviewWorkspace
-            onStatusChange={setWorkspaceStatus}
-            onIssuesChange={(nextIssues, nextFileMeta) => {
-              setIssues(nextIssues)
-              setFileMeta(nextFileMeta)
-            }}
-          />
+          <ContractReviewWorkspace onStatusChange={setWorkspaceStatus} onReviewIdChange={setReviewId} />
         </div>
       </div>
     </div>

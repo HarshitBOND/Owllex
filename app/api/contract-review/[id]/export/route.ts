@@ -1,44 +1,40 @@
 import { NextRequest, NextResponse } from "next/server"
-import { enforceRateLimit, objectIdSchema, requireUserContext } from "@/app/api/lib/routeGuards"
+import { objectIdSchema, requireUserContext } from "@/app/api/lib/routeGuards"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
 import { htmlToBlocks } from "@/app/api/lib/export/htmlBlocks"
 import { renderPdf } from "@/app/api/lib/export/pdf"
 import { renderDocx } from "@/app/api/lib/export/docx"
-import { saveBufferToVault } from "@/app/api/lib/vault/copyToVault"
 
 export const maxDuration = 60
 
-const MIME: Record<"pdf" | "docx", string> = {
+const MIME = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+/**
+ * Exports the reviewed contract as it stands right now -- including any edits
+ * made in the editor or applied via Fix with AI -- as a properly formatted
+ * document, not the plain-text issue list this route used to back.
+ */
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const userContext = await requireUserContext(request)
   if (userContext instanceof NextResponse) return userContext
 
-  const { blockedResponse } = await enforceRateLimit(request, {
-    key: `vault:save:contract-review:${userContext.clerkUid}`,
-    max: 40,
-    windowMs: 10 * 60 * 1000,
-  })
-  if (blockedResponse) return blockedResponse
-
   const { id } = await params
   if (!objectIdSchema.safeParse(id).success) {
-    return NextResponse.json({ success: false, error: "Invalid id" }, { status: 400 })
+    return NextResponse.json({ success: false, error: "Not found" }, { status: 404 })
   }
 
   const format = new URL(request.url).searchParams.get("format") === "pdf" ? "pdf" : "docx"
 
   await connectMongoWithRetry()
   const review = await ContractReview.findOne({ _id: id, clerkUid: userContext.clerkUid }).lean<any>()
-  if (!review) return NextResponse.json({ success: false, error: "Document not found" }, { status: 404 })
+  if (!review) {
+    return NextResponse.json({ success: false, error: "Not found" }, { status: 404 })
+  }
 
-  // Saves the reviewed document as it stands now -- including edits made in the
-  // editor and fixes applied via AI -- instead of re-copying the pristine
-  // original upload, which never reflected any of that.
   const blocks = htmlToBlocks(review.contentHtml || "")
   const options = {
     title: review.fileName || "Contract",
@@ -52,16 +48,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     (review.fileName || "contract-review").replace(/\.[^./]+$/, "").replace(/[^\w\s.-]+/g, "").trim().slice(0, 80) ||
     "contract-review"
 
-  const result = await saveBufferToVault({
-    clerkUid: userContext.clerkUid,
-    filename: `${safeName}.${format}`,
-    mimeType: MIME[format],
-    bytes: buffer,
+  return new NextResponse(new Uint8Array(buffer), {
+    status: 200,
+    headers: {
+      "Content-Type": MIME[format],
+      "Content-Disposition": `attachment; filename="${safeName}.${format}"`,
+    },
   })
-
-  if (!result.ok) {
-    return NextResponse.json({ success: false, error: result.error }, { status: 400 })
-  }
-
-  return NextResponse.json({ success: true, alreadyInVault: result.alreadyInVault, document: result.document })
 }

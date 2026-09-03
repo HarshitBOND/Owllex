@@ -31,12 +31,17 @@ export async function extractDocumentText(opts: {
   bytes: Buffer
   mimeType: string
   r2Key?: string
+  /** Defaults to "auto" (per-page text-layer detection) on the backend if omitted. */
+  mode?: "auto" | "force_ocr" | "text_only"
 }) {
   const form = new FormData()
   form.append("file", new File([new Uint8Array(opts.bytes)], opts.filename, { type: opts.mimeType }))
   if (opts.r2Key) {
     form.append("r2_key", opts.r2Key)
     form.append("content_type", opts.mimeType)
+  }
+  if (opts.mode) {
+    form.append("ocr_mode", opts.mode)
   }
 
   let response: Response

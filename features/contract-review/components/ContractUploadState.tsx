@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { SAMPLE_CONTRACT_MARKDOWN } from "../data"
+import { SAMPLE_CONTRACT_MARKDOWN, type ExtractionMode } from "../data"
 
 const securityPoints = [
   {
@@ -41,9 +41,15 @@ const securityPoints = [
 ]
 
 interface ContractUploadStateProps {
-  onUpload: (file: File) => void
+  onUpload: (file: File, extractionMode: ExtractionMode) => void
   error?: string | null
 }
+
+const extractionModes: Array<{ key: ExtractionMode; label: string; description: string }> = [
+  { key: "auto", label: "Auto-detect", description: "Reads normal PDF text directly; OCR only kicks in for scanned pages." },
+  { key: "force_ocr", label: "Force OCR", description: "Runs OCR on every page, even ones with a text layer." },
+  { key: "text_only", label: "Text only", description: "Never runs OCR -- fastest, but scanned pages come back blank." },
+]
 
 const whatYouGet = [
   {
@@ -79,11 +85,13 @@ const whatYouGet = [
 export default function ContractUploadState({ onUpload, error }: ContractUploadStateProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isSecurityDialogOpen, setIsSecurityDialogOpen] = useState(false)
+  const [extractionMode, setExtractionMode] = useState<ExtractionMode>("auto")
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleSample = () => {
     onUpload(
       new File([SAMPLE_CONTRACT_MARKDOWN], "Sample_Service_Agreement.md", { type: "text/markdown" }),
+      extractionMode,
     )
   }
 
@@ -103,7 +111,7 @@ export default function ContractUploadState({ onUpload, error }: ContractUploadS
             e.preventDefault()
             setIsDragging(false)
             const file = e.dataTransfer.files?.[0]
-            if (file) onUpload(file)
+            if (file) onUpload(file, extractionMode)
           }}
           className={`flex flex-col rounded-2xl border-2 border-dashed transition-colors ${
             isDragging ? "border-accent bg-accent/5" : "border-gray-200 dark:border-border bg-white dark:bg-card"
@@ -146,6 +154,31 @@ export default function ContractUploadState({ onUpload, error }: ContractUploadS
               Supports PDF, DOCX, TXT, scanned images <span className="mx-1">•</span> Max size 25MB
             </p>
 
+            <div
+              role="radiogroup"
+              aria-label="Text extraction mode"
+              onClick={(e) => e.stopPropagation()}
+              className="mt-4 inline-flex items-center gap-0.5 rounded-lg border border-gray-200 dark:border-border bg-gray-50 dark:bg-secondary/40 p-0.5"
+            >
+              {extractionModes.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={extractionMode === m.key}
+                  title={m.description}
+                  onClick={() => setExtractionMode(m.key)}
+                  className={`h-7 px-2.5 rounded-md text-[11.5px] font-medium transition-colors ${
+                    extractionMode === m.key
+                      ? "bg-white dark:bg-card text-gray-900 dark:text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-gray-700 dark:hover:text-foreground"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
             <input
               ref={inputRef}
               type="file"
@@ -153,7 +186,7 @@ export default function ContractUploadState({ onUpload, error }: ContractUploadS
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
-                if (file) onUpload(file)
+                if (file) onUpload(file, extractionMode)
                 e.target.value = ""
               }}
             />
