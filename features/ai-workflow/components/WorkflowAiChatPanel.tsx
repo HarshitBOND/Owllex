@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai"
-import { AlertCircle, ArrowUp, Pin, PinOff, Sparkles, X } from "lucide-react"
+import { AlertCircle, ArrowUp, Check, ChevronDown, Pin, PinOff, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   colorClasses,
   type WorkflowConnection,
@@ -14,32 +20,13 @@ import {
   type WorkflowNodeTemplate,
 } from "@/components/ui/n8n-workflow-block-shadcnui"
 import { WORKFLOW_ICON_MAP, iconKeyFor, type WorkflowIconKey } from "@/lib/workflow-icon-registry"
+import { MODELS, DEFAULT_MODEL, type ModelKey } from "@/lib/ai/models"
+import { useAllowedModels } from "@/hooks/useAllowedModels"
 
 const QUICK_ACTIONS = [
   "Extract key dates and deadlines",
   "Identify governing law and jurisdiction",
   "Add approval step before final response",
-]
-
-const SUGGESTED_MODELS = [
-  {
-    name: "GPT-4o",
-    description: "Best for complex reasoning",
-    recommended: true,
-    tint: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
-  },
-  {
-    name: "Claude 3.5 Sonnet",
-    description: "Great for legal analysis",
-    recommended: false,
-    tint: "bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400",
-  },
-  {
-    name: "Gemini 1.5 Pro",
-    description: "Long context understanding",
-    recommended: false,
-    tint: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400",
-  },
 ]
 
 const NODE_WIDTH = 200
@@ -124,10 +111,18 @@ export default function WorkflowAiChatPanel({
 }: WorkflowAiChatPanelProps) {
   const [value, setValue] = useState("")
   const [tab, setTab] = useState<"assistant" | "library">("assistant")
+  const [model, setModel] = useState<ModelKey>(DEFAULT_MODEL)
+  const allowedModels = useAllowedModels()
   const scrollRef = useRef<HTMLDivElement>(null)
   const workflowRef = useRef(currentWorkflow)
   workflowRef.current = currentWorkflow
   const appliedRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (allowedModels && !allowedModels.includes(model)) {
+      setModel(allowedModels.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : (allowedModels[0] as ModelKey))
+    }
+  }, [allowedModels, model])
 
   const transport = useMemo(() => new DefaultChatTransport({ api: "/api/ai/workflow" }), [])
 
@@ -147,6 +142,7 @@ export default function WorkflowAiChatPanel({
         { text: trimmed },
         {
           body: {
+            model,
             workflow: {
               nodes: wf.nodes.map((n) => ({
                 id: n.id,
@@ -162,7 +158,7 @@ export default function WorkflowAiChatPanel({
         }
       )
     },
-    [busy, sendMessage]
+    [busy, sendMessage, model]
   )
 
   useEffect(() => {
@@ -340,7 +336,38 @@ export default function WorkflowAiChatPanel({
               rows={2}
               className="w-full bg-transparent resize-none px-3.5 pt-3 pb-1.5 text-[13px] text-text-100 dark:text-foreground placeholder:text-text-400 outline-none"
             />
-            <div className="flex items-center justify-end px-2 pb-2">
+            <div className="flex items-center justify-between px-2 pb-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 px-2 h-7 rounded-lg text-[11.5px] font-medium text-gray-500 dark:text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
+                  >
+                    {MODELS[model].name}
+                    <ChevronDown className="w-3 h-3 opacity-70" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top">
+                  {(Object.entries(MODELS) as [ModelKey, (typeof MODELS)[ModelKey]][]).map(([key, m]) => {
+                    const locked = allowedModels ? !allowedModels.includes(key) : false
+                    return (
+                      <DropdownMenuItem
+                        key={key}
+                        disabled={locked}
+                        onClick={() => setModel(key)}
+                        className="flex items-start justify-between gap-3"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-[12.5px] font-medium">{m.name}</span>
+                          <span className="text-[11px] text-muted-foreground">{m.description}</span>
+                        </div>
+                        {model === key && <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <button
                 type="button"
                 onClick={submit}
@@ -388,37 +415,6 @@ export default function WorkflowAiChatPanel({
             </div>
           )}
 
-          {messages.length === 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[11px] font-semibold text-gray-500 dark:text-muted-foreground">Suggested Models</p>
-                <button type="button" className="text-[11px] font-medium text-accent hover:underline">
-                  View all
-                </button>
-              </div>
-              <div className="flex flex-col gap-1">
-                {SUGGESTED_MODELS.map((model) => (
-                  <div
-                    key={model.name}
-                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-secondary/60 transition-colors cursor-default"
-                  >
-                    <div className={cn("w-7 h-7 rounded-md flex items-center justify-center shrink-0", model.tint)}>
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12px] font-medium text-gray-900 dark:text-foreground truncate">{model.name}</p>
-                      <p className="text-[10.5px] text-gray-500 dark:text-muted-foreground truncate">{model.description}</p>
-                    </div>
-                    {model.recommended && (
-                      <span className="shrink-0 text-[10px] font-medium text-accent bg-accent/10 rounded-full px-2 py-0.5">
-                        Recommended
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </TabsContent>
 
