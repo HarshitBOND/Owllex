@@ -12,6 +12,7 @@ Usage:
 import logging
 import os
 import sys
+import threading
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -121,6 +122,25 @@ app.include_router(
 app.include_router(userdetails_router)
 
 
+# ─── Root ────────────────────────────────────────────────────────────────────
+
+@app.get("/", tags=["System"], include_in_schema=False)
+async def root():
+    """Service banner.
+
+    Every route lives under /api/v1, so the bare origin used to 404 -- which is
+    what a browser, an uptime probe, or anyone checking whether the backend is
+    up hits first, and a 404 there reads as "wrong URL" rather than "running".
+    """
+    return {
+        "service": "ravenslaw-api",
+        "version": __version__,
+        "status": "ok",
+        "docs": "/docs" if settings.DEBUG else None,
+        "health": "/health",
+    }
+
+
 # ─── Health check ────────────────────────────────────────────────────────────
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
@@ -171,10 +191,40 @@ def _sweep_stale_uploads(max_age_hours: int = 6) -> None:
         logger.info("Swept %d stale upload(s) from %s (%.1f MB)", removed, upload_dir, freed / 1024 / 1024)
 
 
+def _warm_document_converter() -> None:
+    """Build the Docling converter now instead of inside the first upload.
+
+    Constructing it loads the layout and OCR models and costs ~20s on a warm
+    disk (far more when the models still have to be fetched). Built lazily, that
+    cost lands on whoever uploads first after a restart: their extraction runs
+    past the frontend's patience and the browser reports a connection failure
+    for a backend that is working fine, just slowly. Warming it in a daemon
+    thread keeps startup non-blocking -- requests arriving during the warm-up
+    simply wait on the same lazy build they would have triggered themselves.
+    """
+    try:
+        from rag.app.ingest.loader import _get_converter
+    except ImportError:
+        logger.info("Docling not installed; skipping converter warm-up")
+        return
+    started = time.time()
+    try:
+        _get_converter()
+    except Exception as e:
+        # A failed warm-up must not take the API down -- the first real request
+        # retries the same build and surfaces the error to its caller.
+        logger.warning("Document converter warm-up failed: %s", e)
+    else:
+        logger.info("Document converter warmed in %.1fs", time.time() - started)
+
+
 @app.on_event("startup")
 async def on_startup():
     logger.info("Ravenslaw v%s starting on %s:%s", __version__, settings.HOST, settings.PORT)
     _sweep_stale_uploads()
+
+    if settings.WARM_DOCUMENT_CONVERTER:
+        threading.Thread(target=_warm_document_converter, name="docling-warmup", daemon=True).start()
     if settings.MONGODB_URI:
         logger.info("MongoDB configured: %s", settings.MONGODB_DB)
     else:

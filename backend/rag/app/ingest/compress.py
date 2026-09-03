@@ -1,9 +1,11 @@
 """Lossy PDF recompression before a source document is archived in R2.
 
 Court judgments arrive as scans -- page-sized images wrapped in a PDF, often
-several MB each. Ghostscript's /ebook profile re-encodes those images at
-150 dpi (300 dpi for 1-bit mono, where 150 turns text to mush), which typically
-takes 60-85% off a scan and almost nothing off an already-text PDF.
+several MB each. Ghostscript's /screen profile re-encodes those images at
+72 dpi (144 dpi for 1-bit mono), which is the smallest Ghostscript preset --
+it takes the most it can off a scan (more than /ebook) and almost nothing off
+an already-text PDF. This is the maximum-compression end of the dial: seals,
+signatures, and fine print will visibly soften.
 
 This is deliberately lossy and irreversible: seals and signatures on a scanned
 judgment will lose detail. It is safe for retrieval because text extraction and
@@ -62,15 +64,18 @@ def compress_pdf(src_path: str | Path) -> tuple[str, dict]:
         _GS_BINARY,
         "-sDEVICE=pdfwrite",
         "-dCompatibilityLevel=1.7",
-        "-dPDFSETTINGS=/ebook",
+        "-dPDFSETTINGS=/screen",
         "-dDownsampleColorImages=true",
         f"-dColorImageResolution={dpi}",
         "-dDownsampleGrayImages=true",
         f"-dGrayImageResolution={dpi}",
-        # Mono is 1-bit scanned text. Downsampling it to 150 makes it illegible,
-        # so it keeps twice the resolution of the colour channels.
+        # Mono is 1-bit scanned text. Downsampling it to the same dpi as the
+        # colour channels makes it illegible, so it keeps twice the resolution.
         "-dDownsampleMonoImages=true",
         f"-dMonoImageResolution={dpi * 2}",
+        # Collapses repeated images (letterheads, stamps, logos across pages)
+        # to a single copy instead of re-encoding each occurrence.
+        "-dDetectDuplicateImages=true",
         "-dNOPAUSE",
         "-dBATCH",
         "-dQUIET",

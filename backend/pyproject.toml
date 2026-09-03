@@ -20,6 +20,7 @@ dependencies = [
     "playwright>=1.62.0",
     "langchain-experimental>=0.4.2",
     "langchain-openai>=1.6.0",
+    "docling>=2.123.0",
 ]
 
 # Ingestion/RAG only deliberately NOT in the base dependency set. Docling
