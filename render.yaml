@@ -1,0 +1,80 @@
+# Render Blueprint for the Ravenslaw Python backend (Docling OCR + RAG + scraper).
+#
+# This is deliberately its own service, separate from the Vercel-hosted Next.js
+# app: Vercel's serverless functions can't run Ghostscript and can't hold the
+# multi-GB torch/OCR model weights Docling needs (see backend/Dockerfile and
+# app/api/lib/contractExtract.ts). Vercel only ever calls this over HTTPS.
+#
+# Deploy: Render dashboard -> New -> Blueprint -> point at this repo. Render
+# reads this file and creates the service below; you then fill in the env vars
+# marked `sync: false` from your local backend/.env (Render prompts for each
+# one in its dashboard -- nothing secret is committed here).
+#
+# Sizing: 2c-4g (4GB) is the floor, not a starting guess. `free` and any
+# 512MB-1GB tier WILL get OOM-killed mid-extraction -- Docling loads a layout
+# model and an OCR model per worker, multiple GB before a single document is
+# even processed. This is exactly what happened locally: see the loader.py
+# batch-size comment next to RapidOcrOptions for the other half of that fix.
+# Drop to 1c-2g only if budget forces it, and expect it to be tight.
+services:
+  - type: web
+    name: ravenslaw-backend
+    runtime: docker
+    # dockerfilePath and dockerContext are relative to the repo root, not to
+    # any rootDir -- Render's own docs are explicit about this and it is easy
+    # to get backwards in a monorepo.
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: 2c-4g
+    region: singapore
+    healthCheckPath: /health
+    numInstances: 1
+    envVars:
+      # Non-secret defaults -- safe to commit.
+      - key: RAVENSLAW_DEBUG
+        value: "false"
+      - key: RAVENSLAW_WARM_DOCUMENT_CONVERTER
+        value: "true"
+      - key: ENABLE_SCRAPER_SCHEDULER
+        value: "false"
+      - key: PDF_DOWNLOAD_ENABLED
+        value: "false"
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: WEB_TIMEOUT
+        value: "300"
+      # RAVENSLAW_TRUSTED_HOSTS defaults to include *.onrender.com already
+      # (see backend/README.md) -- only override if you're on a custom domain.
+
+      # Secrets and per-environment values -- fill in via the Render dashboard,
+      # copying from your local backend/.env. Nothing here is written to git.
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        sync: false
+      - key: RAVENSLAW_INTERNAL_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CHROMA_API_KEY
+        sync: false
+      - key: CHROMA_TENANT
+        sync: false
+      - key: CHROMA_DATABASE
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_PUBLIC_DOCS_BASE_URL
+        sync: false
+      - key: CLERK_JWT_ISSUER
+        sync: false
+      # Must be the exact Vercel production domain(s), comma-separated,
+      # HTTPS only -- the backend refuses to boot without this in production.
+      - key: RAVENSLAW_CORS_ORIGINS
+        sync: false
