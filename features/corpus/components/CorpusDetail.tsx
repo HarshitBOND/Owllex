@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Briefcase,
   Check,
+  FilePlus2,
   FileText,
   Library,
   Loader2,
@@ -170,14 +171,26 @@ export default function CorpusDetail({ corpusId }: { corpusId: string }) {
             </h1>
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{corpus.description}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => startChat()}
-            className="hidden sm:inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
-          >
-            <MessageSquare className="w-4 h-4" />
-            Chat in this corpus
-          </button>
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            {/* Opens the form library with this corpus already linked, so the
+                first thing the wizard does is fill in what the matter knows. */}
+            <button
+              type="button"
+              onClick={() => router.push(`/draft-documents/templates?corpusId=${encodeURIComponent(corpusId)}`)}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-gray-200 dark:border-border text-sm font-medium text-gray-800 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors"
+            >
+              <FilePlus2 className="w-4 h-4" />
+              Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => startChat()}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Chat in this corpus
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-gray-500 dark:text-muted-foreground">

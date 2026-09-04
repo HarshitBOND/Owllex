@@ -16,6 +16,15 @@ const CorpusDocumentSchema = new mongoose.Schema(
       default: "pending",
     },
     error: { type: String, default: "" },
+    // Whether compressPdf actually shrank the archived copy, and why not when it
+    // did not. Mirrors VaultDocument's field of the same name. Indexing always
+    // reads the uncompressed original, so this never affects retrieval.
+    compressionStatus: {
+      type: String,
+      enum: ["compressed", "unchanged"],
+      default: "unchanged",
+    },
+    compressionReason: { type: String, default: "" },
   },
   { timestamps: true }
 );

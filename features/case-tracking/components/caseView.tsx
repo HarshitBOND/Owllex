@@ -422,6 +422,16 @@ const CaseView = ({id}: {id: string}) => {
                         </div>
                     </div>
                     <div className='ms-auto w-full mt-4 flex flex-col gap-2'>
+                        {/* Opens the form library with this case linked, so the
+                            court, case number and hearing date are filled in
+                            before the advocate is asked anything. */}
+                        <Button
+                            variant="outline"
+                            onClick={() => router.push(`/draft-documents/templates?caseId=${encodeURIComponent(String(id))}`)}
+                            className="w-full"
+                        >
+                            Draft a document
+                        </Button>
                         <Button variant="outline" onClick={() => router.push('/invoices')} className="w-full">Raise an Invoice</Button>
                         <DropdownMenu >
                             <DropdownMenuTrigger asChild>

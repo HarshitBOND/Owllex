@@ -15,6 +15,7 @@ import {
   Check,
   ChevronDown,
   Download,
+  FileText,
   Italic,
   Link as LinkIcon,
   Link2,
@@ -38,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { toast } from "sonner"
 import { useSaveToVault } from "@/features/vault/useSaveToVault"
 import type { SaveStatus } from "../hooks/useDraftAutosave"
 
@@ -53,6 +55,10 @@ interface DocumentEditorPanelProps {
   onContentChange: (html: string, words: number) => void
   onEditorReady: (editor: Editor) => void
   beforeExport: () => Promise<void>
+  /** Set when this document came from an imported court form, so the original stays reachable. */
+  templateId?: string | null
+  templateVersion?: number
+  hasSourcePdf?: boolean
   assistantOpen: boolean
   onOpenAssistant: () => void
 }
@@ -113,9 +119,13 @@ export default function DocumentEditorPanel({
   onContentChange,
   onEditorReady,
   beforeExport,
+  templateId,
+  templateVersion,
+  hasSourcePdf,
   assistantOpen,
   onOpenAssistant,
 }: DocumentEditorPanelProps) {
+  const [openingSource, setOpeningSource] = useState(false)
   const [wordCount, setWordCount] = useState(0)
   const [zoom, setZoom] = useState(100)
   const [shareLabel, setShareLabel] = useState("Copy link")
@@ -180,13 +190,83 @@ export default function DocumentEditorPanel({
     if (url) editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
   }
 
+  /**
+   * Opens the court's own blank form in a new tab.
+   *
+   * The link is signed and short-lived, so it is fetched at the moment it is
+   * needed rather than embedded in the page and left to go stale.
+   */
+  const openSourcePdf = async () => {
+    if (!templateId) return
+    setOpeningSource(true)
+    try {
+      const query = templateVersion ? `?version=${templateVersion}` : ""
+      const res = await fetch(`/api/document-templates/${templateId}/source${query}`)
+      const data = await res.json()
+      if (data.success) window.open(data.url, "_blank", "noopener,noreferrer")
+    } catch {
+      // Nothing to recover: the draft itself is unaffected, and the form is
+      // still reachable from the template library.
+    } finally {
+      setOpeningSource(false)
+    }
+  }
+
+  /**
+   * Downloads as a blob rather than navigating to the URL.
+   *
+   * A stamped PDF can come back with warnings -- a name shortened to fit the
+   * court's box, or more parties than the printed form has rows for. Those
+   * travel in a response header, and a plain navigation would throw them away:
+   * the advocate would get a document that looks finished and is quietly
+   * missing half a party's name.
+   */
   const exportAs = async (format: "pdf" | "docx") => {
     setExporting(format)
     try {
       await beforeExport()
-      window.location.href = `/api/draft-documents/${draftId}/export?format=${format}`
+
+      const res = await fetch(`/api/draft-documents/${draftId}/export?format=${format}`)
+      if (!res.ok) {
+        toast.error("That document could not be exported.")
+        return
+      }
+
+      const rawWarnings = res.headers.get("X-Stamp-Warnings")
+      const blob = await res.blob()
+
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `${(title || "document").replace(/[^\w\s.-]+/g, "").trim() || "document"}.${format}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+
+      if (rawWarnings) {
+        try {
+          const warnings = JSON.parse(decodeURIComponent(rawWarnings)) as {
+            label: string
+            reason: string
+          }[]
+          toast.warning(
+            warnings.length === 1
+              ? "One value did not fit the court's form"
+              : `${warnings.length} values did not fit the court's form`,
+            {
+              description: warnings.map((w) => `${w.label} ${w.reason}`).join(" · "),
+              duration: 12000,
+            }
+          )
+        } catch {
+          // A malformed header must not stop a download that already succeeded.
+        }
+      }
+    } catch {
+      toast.error("That document could not be exported.")
     } finally {
-      setTimeout(() => setExporting(null), 1200)
+      setExporting(null)
     }
   }
 
@@ -305,6 +385,19 @@ export default function DocumentEditorPanel({
                 <Vault className="mr-2 h-3.5 w-3.5" />
                 Save Word to Vault
               </DropdownMenuItem>
+              {hasSourcePdf && templateId && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={openSourcePdf} disabled={openingSource}>
+                    {openingSource ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <FileText className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    The court&apos;s original form
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

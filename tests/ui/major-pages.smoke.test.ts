@@ -149,7 +149,10 @@ describe("major page smoke tests", () => {
   it("renders dashboard page shell", () => {
     const markup = renderToString(React.createElement(DashboardPage))
 
-    expect(markup).toContain("Draft an affidavit")
+    // Starters are paginated, so assert on one that is on the first page
+    // rather than on a label that only appears after "More ideas".
+    expect(markup).toContain("Summarise a judgment")
+    expect(markup).toContain("More ideas")
     expect(markup).toContain("Ask your legal assistant anything...")
   })
 

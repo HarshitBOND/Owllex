@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { streamText, convertToModelMessages, stepCountIs, smoothStream, type UIMessage } from "ai"
+import {
+  streamText,
+  generateObject,
+  convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  stepCountIs,
+  smoothStream,
+  type UIMessage,
+} from "ai"
 import { z } from "zod"
 import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
@@ -13,10 +22,18 @@ import { resolveModel } from "@/lib/ai/models"
 import { CHAT_SYSTEM_PROMPT, corpusContextBlock } from "@/lib/ai/prompts"
 import { CASE_FIELDS, CLIENT_FIELDS } from "@/lib/ai/corpus-match"
 import { legalTools } from "@/lib/ai/tools"
-import { messagesForStorage, stripEphemeralParts, MAX_STORED_MESSAGES } from "@/lib/ai/message-trim"
+import { createSourceRegistry } from "@/lib/ai/sources"
+import { ANSWER_META_PROMPT } from "@/lib/ai/prompts"
+import {
+  messagesForStorage,
+  settleDanglingToolCalls,
+  stripEphemeralParts,
+  MAX_STORED_MESSAGES,
+} from "@/lib/ai/message-trim"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
-export const maxDuration = 60
+// The answer itself gets 60s; the title-and-follow-ups epilogue runs after it.
+export const maxDuration = 90
 
 const bodySchema = z.object({
   id: z.string().min(1).max(64),
@@ -96,28 +113,75 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const result = streamText({
-    model: modelFor(modelKey),
-    system,
-    messages: [
-      ...(await convertToModelMessages(
-        stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[])
-      )),
-      ...(corpusContext ? [{ role: "user" as const, content: corpusContext }] : []),
-    ],
-    tools: legalTools(userContext.clerkUid, activeCorpusId),
-    stopWhen: stepCountIs(6),
-    experimental_transform: smoothStream({ chunking: "word" }),
-    providerOptions: {
-      openai: { reasoningSummary: "auto" },
-    },
-    onFinish: async ({ totalUsage }) => {
-      await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "chat", modelKey, usage: totalUsage })
-    },
-  })
+  const modelMessages = [
+    // settleDanglingToolCalls before conversion: askClarifyingQuestion has no
+    // execute, so a question the advocate answered by typing instead of
+    // clicking would otherwise reach convertToModelMessages as a call with no
+    // result, and take the whole conversation down with AI_MissingToolResultsError.
+    ...(await convertToModelMessages(
+      settleDanglingToolCalls(stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[]))
+    )),
+    ...(corpusContext ? [{ role: "user" as const, content: corpusContext }] : []),
+  ]
 
-  return result.toUIMessageStreamResponse({
+  const stream = createUIMessageStream<UIMessage>({
     originalMessages: messages as UIMessage[],
+    execute: async ({ writer }) => {
+      // One registry per request: it hands the retrieval tools the numbers the
+      // model cites with, and the same numbers reach the UI as `data-sources`.
+      const registry = createSourceRegistry()
+
+      const result = streamText({
+        model: modelFor(modelKey),
+        system,
+        messages: modelMessages,
+        tools: legalTools(userContext.clerkUid, activeCorpusId, { registry, writer }),
+        stopWhen: stepCountIs(6),
+        experimental_transform: smoothStream({ chunking: "word" }),
+        providerOptions: {
+          openai: { reasoningSummary: "auto" },
+        },
+        onFinish: async ({ totalUsage }) => {
+          await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "chat", modelKey, usage: totalUsage })
+        },
+      })
+
+      // sendFinish: false so the epilogue below still has an open stream to
+      // write into; createUIMessageStream emits the finish chunk when execute
+      // resolves.
+      writer.merge(result.toUIMessageStream({ sendFinish: false }))
+
+      const answer = await result.text
+      if (!answer.trim()) return
+
+      // A turn that ends by asking the advocate something is not an answer yet:
+      // titling it and generating follow-ups would describe a question that is
+      // about to be closed, and the real answer gets its own metadata anyway.
+      const asked = (await result.toolCalls).some((call) => call?.toolName === "askClarifyingQuestion")
+      if (asked) return
+
+      // A title and follow-ups for the answer card. Best-effort: losing them
+      // must never cost the advocate the answer they are already reading.
+      try {
+        const lastUser = [...messages].reverse().find((m) => m.role === "user")
+        const meta = await generateObject({
+          model: modelFor("fast"),
+          schema: z.object({
+            title: z.string().max(70).describe("A short noun-phrase title for this answer, no trailing full stop"),
+            followUps: z
+              .array(z.string().max(160))
+              .max(4)
+              .describe("Questions the advocate would realistically ask next about this same matter"),
+          }),
+          system: ANSWER_META_PROMPT,
+          prompt: `Question:\n${lastUser ? textOf(lastUser) : ""}\n\nAnswer:\n${answer.slice(0, 6000)}`,
+        })
+        await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "chat", modelKey: "fast", usage: meta.usage })
+        writer.write({ type: "data-answer-meta", id: "meta", data: meta.object })
+      } catch (error) {
+        console.error("[CHAT] answer metadata failed:", error)
+      }
+    },
     onEnd: async ({ messages: finalMessages, isAborted }) => {
       if (isAborted) return
       const firstUser = finalMessages.find((m) => m.role === "user")
@@ -127,11 +191,42 @@ export async function POST(request: NextRequest) {
       await Conversation.findOneAndUpdate(
         { clerkUid: userContext.clerkUid, chatId },
         {
-          $set: { messages: messagesForStorage(finalMessages), model, updatedAt: new Date() },
+          $set: {
+            messages: await withPreservedFeedback(userContext.clerkUid, chatId, messagesForStorage(finalMessages)),
+            model,
+            updatedAt: new Date(),
+          },
           $setOnInsert: { clerkUid: userContext.clerkUid, chatId, title, corpusId: activeCorpusId },
         },
         { upsert: true }
       )
     },
+    onError: (error) => {
+      console.error("[CHAT] stream failed:", error)
+      return "The assistant couldn't respond. Please try again."
+    },
   })
+
+  return createUIMessageStreamResponse({ stream })
+}
+
+/**
+ * The turn is written back with `$set`, which would otherwise erase a thumbs
+ * up/down the advocate left on an earlier answer in the same thread. Ratings
+ * live on the stored message, not on the UI message the model stream produces,
+ * so they have to be carried across by hand.
+ */
+async function withPreservedFeedback(clerkUid: string, chatId: string, next: UIMessage[]) {
+  const existing = await Conversation.findOne({ clerkUid, chatId }).select("messages").lean<any>()
+  if (!existing?.messages?.length) return next
+
+  const ratings = new Map<string, string>()
+  for (const message of existing.messages) {
+    if (message?.id && message.feedback) ratings.set(message.id, message.feedback)
+  }
+  if (!ratings.size) return next
+
+  return next.map((message) =>
+    ratings.has(message.id) ? { ...message, feedback: ratings.get(message.id) } : message
+  )
 }

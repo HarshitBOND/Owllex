@@ -12,9 +12,12 @@ import { htmlToPlainText, sanitizeDocumentHtml } from "@/app/api/lib/html/saniti
 import {
   MIN_PUBLISHED_BODY_CHARS,
   PUBLISH_BODY_ERROR,
+  assertOverlayComplete,
+  assertTemplateConsistent,
   slugify,
   templateInputSchema,
 } from "@/app/api/lib/documentTemplates";
+import { seedFirstVersion } from "@/app/api/lib/services/templateVersions";
 import { DOCUMENT_CATEGORIES } from "@/lib/document-categories";
 
 export async function GET(request: NextRequest) {
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
   if ((DOCUMENT_CATEGORIES as readonly string[]).includes(category)) {
     query.category = category;
   }
-  if (status === "draft" || status === "published") {
+  if (status === "draft" || status === "published" || status === "archived") {
     query.status = status;
   }
 
@@ -77,11 +80,22 @@ export async function POST(request: NextRequest) {
   const parsed = await parseAndValidateJson(request, templateInputSchema);
   if (!parsed.success) return parsed.response;
 
-  const { title, description, category, status } = parsed.data;
+  const { title, description, category, status, fields, renderMode, changeNote } = parsed.data;
   const bodyHtml = sanitizeDocumentHtml(parsed.data.bodyHtml);
 
   if (status === "published" && htmlToPlainText(bodyHtml).length < MIN_PUBLISHED_BODY_CHARS) {
     return NextResponse.json({ success: false, error: PUBLISH_BODY_ERROR }, { status: 400 });
+  }
+
+  const inconsistent = assertTemplateConsistent(bodyHtml, fields);
+  if (inconsistent) {
+    return NextResponse.json({ success: false, error: inconsistent }, { status: 400 });
+  }
+  if (renderMode === "pdf-overlay") {
+    const unmapped = assertOverlayComplete(fields);
+    if (unmapped) {
+      return NextResponse.json({ success: false, error: unmapped }, { status: 400 });
+    }
   }
 
   await connectMongoWithRetry();
@@ -102,10 +116,18 @@ export async function POST(request: NextRequest) {
     description,
     category,
     bodyHtml,
+    fields,
     status,
+    latestVersion: 1,
     createdBy: admin.dbUserId,
     updatedBy: admin.dbUserId,
     publishedAt: status === "published" ? new Date() : null,
+  });
+
+  await seedFirstVersion({
+    templateId: template._id,
+    userId: admin.dbUserId,
+    input: { bodyHtml, fields, renderMode, changeNote },
   });
 
   await logAdminAction(admin.dbUserId, "created_document_template", request, {

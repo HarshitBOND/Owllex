@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_API = "https://owllex-backend-owllex.onrender.com"
+const DEFAULT_BACKEND_API = "https://owllex-backend.owllex-backend-container.workers.dev"
 
 export const BACKEND_API_BASE = (
   process.env.NEXT_PUBLIC_BACKEND_API ||

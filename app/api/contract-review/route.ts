@@ -6,6 +6,7 @@ import { logSecurityEvent } from "@/app/api/lib/securityLogger"
 import { putPrivateObject } from "@/app/api/lib/storage/r2"
 import { contentAddressedKey } from "@/app/api/lib/storage/dedupe"
 import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage"
+import { compressPdf } from "@/app/api/lib/storage/compressPdf"
 import { extractDocumentText } from "@/app/api/lib/contractExtract"
 import { markdownToHtml } from "@/app/api/lib/html/markdownToHtml"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
@@ -107,15 +108,25 @@ export async function POST(request: NextRequest) {
 
     const mimeType = file.type || "application/octet-stream"
 
-    // Images are downscaled here; PDFs are compressed by the backend during
-    // extraction below, because Ghostscript cannot run on Vercel.
+    // Images are downscaled here; PDFs are recompressed in-process by
+    // compressPdf. This used to be the backend's job, done as a side effect of
+    // the extraction call below -- which meant a backend that was down or
+    // unconfigured stored the file full-size and said nothing. compressPdf runs
+    // on Vercel, so it cannot be skipped that way.
     const isImage = validation.resourceType === "image"
     const optimized = isImage ? await optimizeImage(buffer, mimeType) : null
-    const storedBuffer = optimized?.buffer ?? buffer
+    const compressed = isImage ? null : await compressPdf(buffer)
+    const storedBuffer = optimized?.buffer ?? compressed?.buffer ?? buffer
     const storedMime = optimized?.contentType ?? mimeType
     const storedName = optimized
       ? withExtension(validation.sanitizedFileName!, optimized.extension)
       : validation.sanitizedFileName!
+
+    if (compressed && !compressed.compressed) {
+      console.warn(
+        `[contract-review] stored file uncompressed (${compressed.reason}): ${buffer.length} bytes, user ${userContext.clerkUid}`
+      )
+    }
 
     const { key: r2Key, exists } = await contentAddressedKey({
       prefix: `${userContext.clerkUid}/contract-review`,
@@ -123,11 +134,12 @@ export async function POST(request: NextRequest) {
       filename: storedName,
     })
 
-    // Images are already final, so they are written now. PDFs and DOCX wait for
-    // the extraction call to store the compressed copy -- with a fallback below
-    // so a failed extraction still leaves the user their file. Either way, an
-    // object already at this key is the same bytes and is reused as-is.
-    if (isImage && !exists) {
+    // Everything is written here, before extraction, rather than leaving the
+    // write to the backend. Storing up front is also what makes the file
+    // survive an extraction that times out or throws -- the fallback writes
+    // that used to do that are gone with it. An object already at this key
+    // holds the same upload bytes and is reused as-is.
+    if (!exists) {
       await putPrivateObject(r2Key, storedBuffer, storedMime)
     }
 
@@ -142,25 +154,16 @@ export async function POST(request: NextRequest) {
     })
 
     try {
-      const extracted = await extractDocumentText({
+      const { text: rawText } = await extractDocumentText({
         filename: validation.sanitizedFileName!,
         bytes: buffer,
         mimeType,
-        // Images were already stored above; everything else is archived by the
-        // backend so it passes through Ghostscript first. A key that already
-        // holds these bytes needs no write at all.
-        r2Key: isImage || exists ? undefined : r2Key,
+        // No r2Key: this route stores its own file now. The backend extracts
+        // and nothing else. Note the *original* bytes go for extraction, not
+        // the compressed ones -- OCR should read the sharpest copy available.
         mode: extractionMode,
       })
-      const { text: rawText } = extracted
 
-      // The backend declined or failed the write (R2 unconfigured on that
-      // instance, say). Store the original from here so the file is never lost.
-      if (!isImage && !exists && extracted.stored !== true) {
-        await putPrivateObject(r2Key, buffer, mimeType)
-      } else if (extracted.stored_bytes) {
-        review.size = extracted.stored_bytes
-      }
       // Both columns are capped at 400k in the schema, and a long contract does
       // exceed that. Mongoose enforces maxlength by throwing on save, which the
       // catch below would report to the user as an extraction failure for a
@@ -182,12 +185,9 @@ export async function POST(request: NextRequest) {
         fileMeta: { name: review.fileName, size: review.size, uploadedLabel: "Uploaded just now" },
       })
     } catch (error) {
-      if (!isImage && !exists) {
-        // Extraction is what would have stored this file, so on failure the
-        // original is uploaded here instead -- the review row already points at
-        // this key and the user can still download what they sent.
-        await putPrivateObject(r2Key, buffer, mimeType).catch(() => {})
-      }
+      // The file is already in R2 from before extraction started, so there is
+      // nothing to rescue here -- the review row points at a key that holds it
+      // and the user can still download what they sent.
       review.status = "error"
       review.errorMessage = error instanceof Error ? error.message : "Extraction failed"
       await review.save()

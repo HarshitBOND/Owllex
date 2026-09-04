@@ -5,6 +5,9 @@ const MessageSchema = new mongoose.Schema(
     id: { type: String, required: true },
     role: { type: String, required: true, enum: ["user", "assistant", "system"] },
     parts: { type: mongoose.Schema.Types.Mixed, required: true },
+    // Thumbs up/down on an assistant turn. Carried across the turn rewrite in
+    // the chat route, since that writes the whole array back with $set.
+    feedback: { type: String, enum: ["up", "down", null], default: null },
     createdAt: { type: Date, default: Date.now },
   },
   { _id: false }

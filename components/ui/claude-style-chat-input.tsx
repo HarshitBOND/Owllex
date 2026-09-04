@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
 import { Plus, ChevronDown, ArrowUp, Square, X, FileText, Loader2, Check, Archive, Search, FileCheck2, Library, ChevronRight, ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -422,7 +422,13 @@ interface ClaudeChatInputProps {
     defaultModel?: string;
 }
 
-export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage, placeholder = "How can I help you today?", disabled = false, isGenerating = false, onStop, corpora = [], activeCorpusId = null, onSelectCorpus, allowedModels, defaultModel }) => {
+export interface ClaudeChatInputHandle {
+    /** Puts text in the composer without sending it, so the user can edit it first. */
+    setMessage: (text: string) => void;
+    focus: () => void;
+}
+
+export const ClaudeChatInput = forwardRef<ClaudeChatInputHandle, ClaudeChatInputProps>(({ onSendMessage, placeholder = "How can I help you today?", disabled = false, isGenerating = false, onStop, corpora = [], activeCorpusId = null, onSelectCorpus, allowedModels, defaultModel }, ref) => {
     const [message, setMessage] = useState("");
     const [files, setFiles] = useState<AttachedFile[]>([]);
     const [pastedContent, setPastedContent] = useState<PastedContent[]>([]);
@@ -434,6 +440,19 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Suggestion chips fill the composer through this instead of sending straight away,
+    // so a starter prompt can be completed or edited before it goes to the model. The caret
+    // is placed once the new value has actually been committed, not on a rAF guess.
+    const pendingCaretRef = useRef<number | null>(null);
+
+    useImperativeHandle(ref, () => ({
+        setMessage: (text: string) => {
+            pendingCaretRef.current = text.length;
+            setMessage(text);
+        },
+        focus: () => textareaRef.current?.focus(),
+    }), []);
 
     const models = Object.entries(MODELS).map(([id, m]) => ({
         id,
@@ -450,9 +469,17 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
     }, [allowedModels, selectedModel, defaultModel]);
 
     useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = "auto";
-            textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 384) + "px";
+        const el = textareaRef.current;
+        if (!el) return;
+        el.style.height = "auto";
+        el.style.height = Math.min(el.scrollHeight, 384) + "px";
+
+        if (pendingCaretRef.current !== null) {
+            const caret = Math.min(pendingCaretRef.current, el.value.length);
+            pendingCaretRef.current = null;
+            el.focus();
+            el.setSelectionRange(caret, caret);
+            el.scrollTop = el.scrollHeight;
         }
     }, [message]);
 
@@ -530,7 +557,7 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
 
     return (
         <div
-            className={`relative w-full max-w-2xl mx-auto transition-all duration-300 font-sans`}
+            className={`relative w-full max-w-4xl mx-auto transition-all duration-300 font-sans`}
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
             onDrop={onDrop}
@@ -686,6 +713,8 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage,
             />
         </div>
     );
-};
+});
+
+ClaudeChatInput.displayName = "ClaudeChatInput";
 
 export default ClaudeChatInput;

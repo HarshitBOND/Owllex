@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, Settings, HelpCircle, Moon, Sun, BarChart3, CalendarDays, Workflow, Library } from "lucide-react"
+import { Bot, FileSearch, UsersRound, ReceiptText, ListTodo, MoreHorizontal, X, Settings, HelpCircle, Moon, Sun, BarChart3, CalendarDays, Workflow, Library, FileText } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
@@ -21,18 +21,20 @@ const MobileBottomNav = () => {
 
     const mainNavItems = [
         { name: "AI", icon: Bot, href: "/dashboard" },
-        { name: "Cases", icon: FileSearch, href: "/case-tracking" },
-        { name: "Clients", icon: UsersRound, href: "/my-clients" },
-        { name: "Invoices", icon: ReceiptText, href: "/invoices" },
-        { name: "Tasks", icon: ListTodo, href: "/tasks" },
+        { name: "Corpus", icon: Library, href: "/corpus" },
+        { name: "Workflow", icon: Workflow, href: "/ai-workflow" },
+        { name: "Contract Review", icon: FileText, href: "/contract-review" },
+        // { name: "Cases", icon: FileSearch, href: "/case-tracking" },
+        // { name: "Clients", icon: UsersRound, href: "/my-clients" },
+        // { name: "Invoices", icon: ReceiptText, href: "/invoices" },
+        // { name: "Tasks", icon: ListTodo, href: "/tasks" },
     ]
 
     const moreNavItems = [
+        { name: "Deep Research", icon: FileSearch, href: "/legal-research" },
         { name: "Overview", icon: BarChart3, href: "/dashboard/overview" },
-        { name: "Corpus", icon: Library, href: "/corpus" },
-        { name: "AI Workflow", icon: Workflow, href: "/ai-workflow" },
-        { name: "Calendar", icon: CalendarDays, href: "/calendar" },
         { name: "Help & Support", icon: HelpCircle, href: "/contact-us" },
+        // { name: "Calendar", icon: CalendarDays, href: "/calendar" },
     ]
 
     const handleNavigation = (href: string) => {

@@ -22,7 +22,6 @@ const JobRunSchema = new mongoose.Schema(
     startedAt: {
       type: Date,
       default: Date.now,
-      index: true,
     },
     finishedAt: {
       type: Date,

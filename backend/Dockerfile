@@ -55,8 +55,11 @@ FROM base AS ingest
 
 # Ghostscript recompresses scanned PDFs before archival
 # (rag/app/ingest/compress.py). Only this image ever runs it.
+# libgl1 + libglib2.0-0: rapidocr pulls in opencv-python (not headless), which
+# dlopen()s libGL.so.1 at import time even though nothing here does GUI/video --
+# without these, OCR engine init fails (see loader.py's use of RapidOCR).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ghostscript \
+ && apt-get install -y --no-install-recommends ghostscript libgl1 libglib2.0-0 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN uv sync --locked --no-install-project --extra rag

@@ -27,6 +27,7 @@ import path from "node:path"
 import { AwsClient } from "aws4fetch"
 import { config as loadEnv } from "dotenv"
 import mongoose from "mongoose"
+import { connectDB } from "../app/api/lib/db/connectMongo"
 import { compressPdf } from "../app/api/lib/storage/compressPdf"
 
 // Plain `node` doesn't auto-load .env.local the way Next's dev/build commands
@@ -78,7 +79,7 @@ async function putObject(key: string, body: Buffer, contentType: string): Promis
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(2)} MB`
 
 async function main() {
-  await mongoose.connect(MONGODB_URI!, { dbName: MONGODB_DB || "LexVert" })
+  await connectDB()
   const db = mongoose.connection.db!
 
   const docs = await db

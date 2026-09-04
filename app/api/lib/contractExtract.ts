@@ -8,38 +8,27 @@ const EXTRACT_TIMEOUT_MS = 240_000
 export type ExtractResult = {
   success: true
   text: string
-  /** Present only when r2Key was supplied and the backend completed the write. */
-  stored?: boolean
-  r2_key?: string
-  original_bytes?: number
-  stored_bytes?: number
-  compressed?: boolean
 }
 
 /**
- * Extracts a document's text, optionally handing the backend the private-bucket
- * key to archive it under.
+ * Extracts a document's text. Extraction only -- this does not store anything.
  *
- * Passing r2Key makes the backend do the R2 write, which is the only way these
- * uploads get a Ghostscript pass -- that binary cannot run on Vercel, and the
- * file is already being shipped here for extraction, so it costs no extra
- * transfer. Callers must still handle stored !== true by uploading the original
- * themselves.
+ * It used to accept an r2Key and let the backend archive the file as a side
+ * effect, because Ghostscript could not run on Vercel. That made storage
+ * depend on a service being reachable, and a backend that was down stored the
+ * file full-size without saying so. Callers now compress with
+ * app/api/lib/storage/compressPdf.ts and write to R2 themselves, so this call
+ * has one job and no storage parameters to get wrong.
  */
 export async function extractDocumentText(opts: {
   filename: string
   bytes: Buffer
   mimeType: string
-  r2Key?: string
   /** Defaults to "auto" (per-page text-layer detection) on the backend if omitted. */
   mode?: "auto" | "force_ocr" | "text_only"
 }) {
   const form = new FormData()
   form.append("file", new File([new Uint8Array(opts.bytes)], opts.filename, { type: opts.mimeType }))
-  if (opts.r2Key) {
-    form.append("r2_key", opts.r2Key)
-    form.append("content_type", opts.mimeType)
-  }
   if (opts.mode) {
     form.append("ocr_mode", opts.mode)
   }

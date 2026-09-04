@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react"
 import { toast } from "sonner"
+import type { TemplateField } from "@/lib/templates/fields"
 import type { DocumentTemplateRecord } from "../types"
 
 export type TemplateInput = {
@@ -7,7 +8,9 @@ export type TemplateInput = {
   description: string
   category: string
   bodyHtml: string
+  fields: TemplateField[]
   status: "draft" | "published"
+  changeNote?: string
 }
 
 export function useDocumentTemplatesData() {
@@ -137,7 +140,13 @@ export function useDocumentTemplatesData() {
           toast.error(data.error || "Could not delete the template")
           return
         }
-        toast.success("Template deleted")
+        // A template other documents were drafted from is archived, not
+        // deleted -- the server says which happened and why.
+        if (data.archived) {
+          toast.success("Template archived", { description: data.message })
+        } else {
+          toast.success("Template deleted")
+        }
         await fetchTemplates(tplPage)
       } finally {
         setSavingId(null)

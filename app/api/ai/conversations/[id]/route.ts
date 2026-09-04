@@ -24,7 +24,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       id: row.chatId,
       title: row.title,
       model: row.model,
-      messages: row.messages.map((m) => ({ id: m.id, role: m.role, parts: m.parts })),
+      messages: row.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        parts: m.parts,
+        ...(m.feedback ? { feedback: m.feedback } : {}),
+      })),
     },
   })
 }
@@ -33,15 +38,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const userContext = await requireUserContext(request)
   if (userContext instanceof NextResponse) return userContext
 
-  const parsed = await parseAndValidateJson(request, z.object({ title: z.string().trim().min(1).max(200) }))
+  // Two edits reach a conversation: renaming it from the history panel, and
+  // rating one of its answers from the answer card.
+  const parsed = await parseAndValidateJson(
+    request,
+    z.union([
+      z.object({ title: z.string().trim().min(1).max(200) }),
+      z.object({
+        messageId: z.string().min(1).max(128),
+        feedback: z.enum(["up", "down"]).nullable(),
+      }),
+    ])
+  )
   if (!parsed.success) return parsed.response
 
   const { id } = await params
   await connectMongoWithRetry()
-  const res = await Conversation.updateOne(
-    { clerkUid: userContext.clerkUid, chatId: id },
-    { $set: { title: parsed.data.title } }
-  )
+
+  const res =
+    "title" in parsed.data
+      ? await Conversation.updateOne(
+          { clerkUid: userContext.clerkUid, chatId: id },
+          { $set: { title: parsed.data.title } }
+        )
+      : await Conversation.updateOne(
+          { clerkUid: userContext.clerkUid, chatId: id },
+          { $set: { "messages.$[m].feedback": parsed.data.feedback } },
+          { arrayFilters: [{ "m.id": parsed.data.messageId }] }
+        )
 
   if (!res.matchedCount) {
     return NextResponse.json({ success: false, error: "Conversation not found" }, { status: 404 })

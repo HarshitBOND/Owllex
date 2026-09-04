@@ -13,6 +13,7 @@
 import path from "node:path"
 import { config as loadEnv } from "dotenv"
 import mongoose from "mongoose"
+import { connectDB } from "../app/api/lib/db/connectMongo"
 
 loadEnv({ path: path.resolve(process.cwd(), ".env.local") })
 
@@ -68,7 +69,7 @@ const templates: { title: string; description: string; bodyHtml: string }[] = [
 ]
 
 async function main() {
-  await mongoose.connect(MONGODB_URI!, { dbName: MONGODB_DB || "LexVert" })
+  await connectDB()
   const db = mongoose.connection.db!
 
   const admin =

@@ -13,8 +13,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { DOCUMENT_CATEGORIES } from "@/lib/document-categories"
+import { validateTokenParity, type TemplateField } from "@/lib/templates/fields"
 import type { DocumentTemplateRecord } from "../types"
 import type { TemplateInput } from "../hooks/useDocumentTemplatesData"
+import { TemplateFieldsEditor } from "./TemplateFieldsEditor"
 
 const TemplateBodyEditor = dynamic(() => import("./TemplateBodyEditor"), {
   ssr: false,
@@ -45,6 +47,7 @@ export function TemplateEditorDialog({
   const [category, setCategory] = useState<string>(DOCUMENT_CATEGORIES[0])
   const [bodyHtml, setBodyHtml] = useState("")
   const [bodyLength, setBodyLength] = useState(0)
+  const [fields, setFields] = useState<TemplateField[]>([])
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -54,6 +57,7 @@ export function TemplateEditorDialog({
     setCategory(editing?.category || DOCUMENT_CATEGORIES[0])
     setBodyHtml(editing?.bodyHtml || "")
     setBodyLength((editing?.bodyHtml || "").replace(/<[^>]*>/g, "").trim().length)
+    setFields(editing?.fields || [])
     setError("")
   }, [open, editing])
 
@@ -70,8 +74,22 @@ export function TemplateEditorDialog({
       setError("The template body cannot be empty.")
       return
     }
+    // A body and field list that disagree render a literal "{{court_name}}" on
+    // a document going to a registry, so publishing is blocked until they match.
+    const parityErrors = validateTokenParity(bodyHtml, fields)
+    if (status === "published" && parityErrors.length > 0) {
+      setError("The body and the field list have to agree before this can be published.")
+      return
+    }
     setError("")
-    const ok = await onSubmit({ title: title.trim(), description: description.trim(), category, bodyHtml, status })
+    const ok = await onSubmit({
+      title: title.trim(),
+      description: description.trim(),
+      category,
+      bodyHtml,
+      fields,
+      status,
+    })
     if (ok) onClose()
   }
 
@@ -143,6 +161,23 @@ export function TemplateEditorDialog({
                   }}
                 />
               )}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Fillable fields</label>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                Every <code className="font-mono">{"{{token}}"}</code> in the body needs one
+              </span>
+            </div>
+            <div className="mt-1">
+              <TemplateFieldsEditor
+                fields={fields}
+                onChange={setFields}
+                parityErrors={validateTokenParity(bodyHtml, fields)}
+                disabled={saving}
+              />
             </div>
           </div>
 

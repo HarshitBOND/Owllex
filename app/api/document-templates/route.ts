@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   const [rows, total, counts] = await Promise.all([
     DocumentTemplate.find(query)
-      .select("title description category usageCount")
+      .select("title description category usageCount fields latestVersion")
       .sort(sort === "az" ? { title: 1 } : { usageCount: -1, title: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -57,6 +57,11 @@ export async function GET(request: NextRequest) {
       description: t.description,
       category: t.category,
       usageCount: t.usageCount,
+      // Drives the "fill this in" affordance on the card. A template with no
+      // fields is a plain body: it opens straight in the editor exactly as it
+      // did before the wizard existed.
+      fieldCount: Array.isArray(t.fields) ? t.fields.length : 0,
+      version: t.latestVersion ?? 1,
     })),
     categories: counts.map((c: { _id: string; count: number }) => ({
       category: c._id,

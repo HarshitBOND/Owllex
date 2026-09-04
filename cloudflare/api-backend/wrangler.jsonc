@@ -18,7 +18,7 @@
     {
       "class_name": "RavenslawBackend",
       "image": "../../backend/Dockerfile",
-      "instance_type": "standard-1",
+      "instance_type": "standard-2",
       "max_instances": 2
     }
   ],

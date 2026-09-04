@@ -1,0 +1,19 @@
+name = "owllex-backend"
+main = "worker.js"
+compatibility_date = "2026-09-04"
+
+[build]
+dockerfile = "./Dockerfile"
+
+[[containers]]
+class_name = "BackendContainer"
+image = "./Dockerfile"
+max_instances = 2
+
+[[durable_objects.bindings]]
+name = "BACKEND"
+class_name = "BackendContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BackendContainer"]

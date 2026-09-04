@@ -15,12 +15,13 @@ import type { Sharp } from "sharp"
 /**
  * Recompresses a PDF in-process, with no backend and no Ghostscript.
  *
- * PDF compression used to be handed to the Python service
- * (app/api/lib/storage/compressAndStore.ts), because Ghostscript cannot run on
- * Vercel. That call is a no-op whenever the service is unreachable, and it
- * swallowed the failure, so vault PDFs were stored byte-for-byte while the app
- * reported compression as on. This runs on Vercel instead, so it cannot be
- * switched off by a service being down.
+ * PDF compression used to be handed to a Python service (Ghostscript cannot
+ * run on Vercel), via a now-deleted compressAndStore.ts that every upload
+ * route called. That call was a no-op whenever the service was unreachable,
+ * and it swallowed the failure, so PDFs across the vault, attachments, and
+ * corpus were stored byte-for-byte while the app reported compression as on.
+ * This is the single compressor all three routes call now: it runs on
+ * Vercel, so it cannot be switched off by a service being down.
  *
  * Two passes, because the two kinds of document in this vault waste space in
  * completely different places:

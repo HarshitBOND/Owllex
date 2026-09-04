@@ -1,10 +1,21 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Plus } from "lucide-react"
 import Navbar from "@/components/layout/navbar"
 import { cn } from "@/lib/utils"
 import DocumentTemplatesLibrary from "@/features/draft-documents/components/DocumentTemplatesLibrary"
+
+function Library() {
+  const searchParams = useSearchParams()
+  return (
+    <DocumentTemplatesLibrary
+      initialCorpusId={searchParams.get("corpusId") ?? undefined}
+      initialCaseId={searchParams.get("caseId") ?? undefined}
+    />
+  )
+}
 
 export default function Page() {
   const router = useRouter()
@@ -34,7 +45,9 @@ export default function Page() {
         />
       </div>
       <div className="px-3 sm:px-4 md:px-6 pb-6">
-        <DocumentTemplatesLibrary />
+        <Suspense fallback={null}>
+          <Library />
+        </Suspense>
       </div>
     </div>
   )

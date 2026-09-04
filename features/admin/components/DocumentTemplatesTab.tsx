@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Eye, EyeOff, FileStack, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { Archive, Eye, EyeOff, FileStack, Loader2, Pencil, Plus, ScanSearch, Search, Stamp, Trash2, UploadCloud } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -19,11 +19,32 @@ import type { useDocumentTemplatesData } from "../hooks/useDocumentTemplatesData
 import { formatDateTime } from "../utils"
 import { Pagination } from "./Pagination"
 import { TemplateEditorDialog } from "./TemplateEditorDialog"
+import { TemplateImportDialog } from "./TemplateImportDialog"
+import { DuplicateReviewPanel } from "./DuplicateReviewPanel"
+import { TemplateOverlayMapper } from "./TemplateOverlayMapper"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocumentTemplatesData> }) {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [editing, setEditing] = useState<DocumentTemplateRecord | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<DocumentTemplateRecord | null>(null)
+  const [checkingDupes, setCheckingDupes] = useState<DocumentTemplateRecord | null>(null)
+  const [mapping, setMapping] = useState<DocumentTemplateRecord | null>(null)
+
+  const openMapper = async (row: DocumentTemplateRecord) => {
+    // The list omits bodyHtml and may omit fields, and the mapper needs the
+    // full field list to place.
+    const full = await data.loadTemplate(row._id)
+    if (!full) return
+    setMapping(full)
+  }
 
   const openNew = () => {
     setEditing(null)
@@ -78,9 +99,13 @@ export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocu
             <option value="">All statuses</option>
             <option value="published">Published</option>
             <option value="draft">Draft</option>
+            <option value="archived">Archived</option>
           </select>
           <Button size="sm" variant="outline" onClick={() => data.fetchTemplates()} className="gap-1.5">
             <Search size={14} /> Search
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="gap-1.5">
+            <UploadCloud size={14} /> Import from PDF
           </Button>
           <Button size="sm" onClick={openNew} className="gap-1.5">
             <Plus size={14} /> New template
@@ -111,9 +136,14 @@ export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocu
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       Create one to make it available in the Draft Documents library.
                     </p>
-                    <Button size="sm" onClick={openNew} className="mt-4 gap-1.5">
-                      <Plus size={14} /> New template
-                    </Button>
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="gap-1.5">
+                        <UploadCloud size={14} /> Import from PDF
+                      </Button>
+                      <Button size="sm" onClick={openNew} className="gap-1.5">
+                        <Plus size={14} /> New template
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -134,6 +164,13 @@ export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocu
                       {t.status === "published" ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 border border-brand-200 text-brand-700 dark:bg-brand-500/10 dark:border-brand-500/20 dark:text-brand-400">
                           Published
+                        </span>
+                      ) : t.status === "archived" ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 border border-gray-200 text-gray-600 dark:bg-gray-500/10 dark:border-gray-500/20 dark:text-gray-400"
+                          title="Hidden from the library. Documents already drafted from it still open."
+                        >
+                          <Archive size={10} /> Archived
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400">
@@ -156,12 +193,37 @@ export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocu
                         >
                           <Pencil size={12} /> Edit
                         </Button>
+                        {t.status === "draft" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            disabled={data.savingId === t._id}
+                            onClick={() => setCheckingDupes(t)}
+                            title="Check whether this form is already published"
+                          >
+                            <ScanSearch size={12} /> Duplicates
+                          </Button>
+                        )}
+                        {(t.fields?.length ?? 0) > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            disabled={data.savingId === t._id}
+                            onClick={() => openMapper(t)}
+                            title="Place each field on the court's own PDF so values can be stamped onto it"
+                          >
+                            <Stamp size={12} /> Place on PDF
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs gap-1"
                           disabled={data.savingId === t._id}
                           onClick={() => data.togglePublish(t._id, t.status === "published" ? "draft" : "published")}
+                          hidden={t.status === "archived"}
                         >
                           {data.savingId === t._id ? (
                             <Loader2 size={12} className="animate-spin" />
@@ -209,13 +271,52 @@ export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocu
         }
       />
 
+      <Dialog open={mapping !== null} onOpenChange={(v) => !v && setMapping(null)}>
+        <DialogContent className="max-w-6xl max-h-[94vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Place fields on the court&apos;s PDF</DialogTitle>
+            <DialogDescription>
+              Values are drawn onto the court&apos;s own form rather than onto a rebuild of it, so the
+              printed result is exact. Drag a box where each value should appear.
+            </DialogDescription>
+          </DialogHeader>
+          {mapping && (
+            <TemplateOverlayMapper
+              templateId={mapping._id}
+              version={mapping.latestVersion}
+              fields={mapping.fields ?? []}
+              onSaved={() => {
+                setMapping(null)
+                data.fetchTemplates(data.tplPage)
+              }}
+              onClose={() => setMapping(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <DuplicateReviewPanel
+        open={checkingDupes !== null}
+        templateId={checkingDupes?._id ?? null}
+        templateTitle={checkingDupes?.title ?? ""}
+        onClose={() => setCheckingDupes(null)}
+        onResolved={() => data.fetchTemplates(data.tplPage)}
+      />
+
+      <TemplateImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => data.fetchTemplates(1)}
+      />
+
       <AlertDialog open={confirmDelete !== null} onOpenChange={(v) => !v && setConfirmDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this template?</AlertDialogTitle>
+            <AlertDialogTitle>Remove this template?</AlertDialogTitle>
             <AlertDialogDescription>
-              &ldquo;{confirmDelete?.title}&rdquo; will be removed from the library. Documents already drafted
-              from it are not affected.
+              &ldquo;{confirmDelete?.title}&rdquo; will stop appearing in the library. If any document has
+              already been drafted from it, it is archived rather than deleted, so those documents keep
+              working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -227,7 +328,7 @@ export function DocumentTemplatesTab({ data }: { data: ReturnType<typeof useDocu
                 setConfirmDelete(null)
               }}
             >
-              Delete
+              Remove
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

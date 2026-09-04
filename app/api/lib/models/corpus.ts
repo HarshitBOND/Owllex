@@ -11,6 +11,12 @@ const CorpusSchema = new mongoose.Schema(
     clientIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Client" }],
     accent: { type: String, default: "teal" },
     archived: { type: Boolean, default: false },
+    // Bookkeeping for the synthesised fact sheet that mirrors CorpusFact rows
+    // into the vector index. The hash lets a re-index be skipped when nothing
+    // actually changed, so editing a draft does not pay an embedding cost per
+    // save.
+    factSheetHash: { type: String, default: "" },
+    factSheetSyncedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

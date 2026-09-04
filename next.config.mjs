@@ -46,7 +46,11 @@ const nextConfig = {
   // sharp is a native module -- it must not be traced/bundled into the server
   // build. Upload routes import it directly to downscale images before they
   // ever reach R2 (app/api/upload/image/route.ts).
-  serverExternalPackages: ['sharp'],
+  // pdfkit resolves its Standard-14 .afm font files via a __dirname-relative
+  // path at runtime. Bundled by webpack, that path resolves to a fake "/ROOT"
+  // root instead of the real node_modules location (ENOENT on export). Kept
+  // external so it loads with native require and __dirname stays real.
+  serverExternalPackages: ['sharp', 'pdfkit'],
   experimental: {
     // Rewrites barrel imports (`import { X } from "recharts"`) into direct
     // module paths at build time, so a page that uses one chart or one date

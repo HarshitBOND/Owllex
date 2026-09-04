@@ -1,3 +1,5 @@
+import type { TemplateField } from "@/lib/templates/fields"
+
 import type { LucideIcon } from "lucide-react"
 
 export interface DashboardStats {
@@ -68,12 +70,26 @@ export interface DocumentTemplateRecord {
   slug: string
   description: string
   category: string
-  status: "draft" | "published"
+  // "archived" is what a superseded or still-referenced template becomes.
+  // Deleting one would orphan every draft made from it.
+  status: "draft" | "published" | "archived"
   usageCount: number
   bodyHtml?: string
+  fields?: TemplateField[]
+  latestVersion?: number
+  supersededBy?: string | null
   publishedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface TemplateVersionSummary {
+  _id: string
+  version: number
+  changeNote: string
+  renderMode: "html" | "pdf-overlay"
+  publishedAt: string | null
+  createdAt: string
 }
 
 export type Tab =

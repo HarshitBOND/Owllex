@@ -36,6 +36,9 @@ export async function POST(
     sourceR2Key: doc.r2Key,
     filename: doc.filename,
     mimeType: doc.mimeType,
+    // The corpus upload already compressed this object. Re-running the lossy
+    // image pass here would soften it a second time for almost no gain.
+    alreadyCompressed: doc.compressionStatus === "compressed",
   })
 
   if (!result.ok) {

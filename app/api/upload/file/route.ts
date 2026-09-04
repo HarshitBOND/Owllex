@@ -3,7 +3,7 @@ import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards"
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage";
-import { compressAndStore } from "@/app/api/lib/storage/compressAndStore";
+import { compressPdf } from "@/app/api/lib/storage/compressPdf";
 import { headPrivateObject, putPrivateObject } from "@/app/api/lib/storage/r2";
 import { contentAddressedKey } from "@/app/api/lib/storage/dedupe";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
@@ -57,9 +57,19 @@ export async function POST(request: NextRequest) {
 
     const mimeType = file.type || "application/octet-stream";
 
-    // Images are downscaled here; PDFs go to the backend for a Ghostscript pass.
+    // Images are downscaled here; PDFs are recompressed in-process by
+    // compressPdf, which runs on Vercel and cannot be silently skipped by a
+    // backend being unreachable. compressPdf self-detects non-PDF input and
+    // returns it unchanged, so it is safe to call for any non-image file.
     const isImage = validation.resourceType === "image";
     const optimized = isImage ? await optimizeImage(buffer, mimeType) : null;
+    const compressed = isImage ? null : await compressPdf(buffer);
+
+    if (compressed && !compressed.compressed) {
+      console.warn(
+        `[upload] stored file uncompressed (${compressed.reason}): ${buffer.byteLength} bytes, user ${userContext.clerkUid}`
+      );
+    }
 
     const storedName = optimized
       ? withExtension(validation.sanitizedFileName!, optimized.extension)
@@ -70,30 +80,27 @@ export async function POST(request: NextRequest) {
       filename: storedName,
     });
 
-    let storedBytes = buffer.length;
-    let storedMime = mimeType;
+    const payload = optimized?.buffer ?? compressed?.buffer ?? buffer;
+    const payloadMime = optimized?.contentType ?? mimeType;
+
+    let storedBytes = payload.length;
+    let storedMime = payloadMime;
 
     if (exists) {
       const head = await headPrivateObject(r2Key);
       storedBytes = head.contentLength ?? storedBytes;
-      if (optimized) storedMime = optimized.contentType;
-    } else if (optimized) {
-      await putPrivateObject(r2Key, optimized.buffer, optimized.contentType);
-      storedBytes = optimized.storedBytes;
-      storedMime = optimized.contentType;
+      storedMime = payloadMime;
     } else {
-      const result = await compressAndStore({
-        filename: validation.sanitizedFileName!,
-        bytes: buffer,
-        mimeType,
-        r2Key,
-      });
-      if (result.stored) {
-        storedBytes = result.stored_bytes ?? storedBytes;
-      } else {
-        await putPrivateObject(r2Key, buffer, mimeType);
-      }
+      await putPrivateObject(r2Key, payload, payloadMime);
     }
+
+    const compressionStatus = optimized
+      ? optimized.storedBytes < optimized.originalBytes
+        ? "compressed"
+        : "unchanged"
+      : compressed?.compressed
+        ? "compressed"
+        : "unchanged";
 
     await connectMongoWithRetry();
     const attachment = await Attachment.create({
@@ -102,6 +109,8 @@ export async function POST(request: NextRequest) {
       mimeType: storedMime,
       size: storedBytes,
       r2Key,
+      compressionStatus,
+      compressionReason: compressed && !compressed.compressed ? compressed.reason : "",
     });
 
     return NextResponse.json({
@@ -110,6 +119,7 @@ export async function POST(request: NextRequest) {
       filename: attachment.filename,
       mimeType: attachment.mimeType,
       size: attachment.size,
+      compressionApplied: compressionStatus === "compressed",
     });
 
   } catch (error: any) {

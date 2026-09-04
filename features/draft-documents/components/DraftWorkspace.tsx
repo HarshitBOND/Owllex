@@ -7,6 +7,7 @@ import type { UIMessage } from "ai"
 import { AlertTriangle, FileQuestion } from "lucide-react"
 import DocumentEditorPanel from "./DocumentEditorPanel"
 import AiAssistantPanel from "./AiAssistantPanel"
+import TemplateVersionBanner from "./TemplateVersionBanner"
 import { useDraftAutosave } from "../hooks/useDraftAutosave"
 
 type Draft = {
@@ -17,11 +18,25 @@ type Draft = {
   typography: { fontFamily: string; fontSizePt: number }
   version: number
   chatMessages: UIMessage[]
+  templateId: string | null
+  fieldsVersion: number
+  fieldValues: Record<string, unknown>
+}
+
+/** Resolved against the snapshot the draft is pinned to, never the latest. */
+type TemplateInfo = {
+  id: string
+  fields: { key: string; label: string; type: string }[]
+  pinnedVersion: number
+  latestVersion: number
+  hasNewerVersion: boolean
+  hasSourcePdf: boolean
 }
 
 export default function DraftWorkspace({ draftId }: { draftId: string }) {
   const editorRef = useRef<Editor | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [templateInfo, setTemplateInfo] = useState<TemplateInfo | null>(null)
   const [loadState, setLoadState] = useState<"loading" | "ready" | "missing">("loading")
   const [title, setTitle] = useState("")
   const [typography, setTypography] = useState({ fontFamily: "Georgia", fontSizePt: 12 })
@@ -40,6 +55,7 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
           return
         }
         setDraft(data.draft)
+        setTemplateInfo(data.template ?? null)
         setTitle(data.draft.title)
         setTypography(data.draft.typography ?? { fontFamily: "Georgia", fontSizePt: 12 })
         setLoadState("ready")
@@ -49,6 +65,49 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
       cancelled = true
     }
   }, [draftId])
+
+  /**
+   * Accepts values the assistant proposed for a court form.
+   *
+   * The document is re-rendered server-side from the field values rather than
+   * written as HTML here, so the court's prescribed wording and layout stay
+   * exactly as issued. `force` is set because the advocate has just explicitly
+   * accepted the change.
+   */
+  const applyFields = useCallback(
+    async (values: { key: string; value: string }[]) => {
+      if (!draft) return
+
+      const next: Record<string, unknown> = { ...(draft.fieldValues ?? {}) }
+      for (const { key, value } of values) {
+        const field = templateInfo?.fields.find((f) => f.key === key)
+        if (field?.type === "table") {
+          // Table values arrive as JSON from the model; a malformed one is
+          // dropped rather than written as a string the renderer cannot use.
+          try {
+            const parsed = JSON.parse(value)
+            if (Array.isArray(parsed)) next[key] = parsed
+          } catch {
+            continue
+          }
+          continue
+        }
+        next[key] = value
+      }
+
+      const res = await fetch(`/api/draft-documents/${draftId}/fields`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fieldValues: next, force: true }),
+      })
+      const data = await res.json()
+      if (!data.success) return
+
+      editorRef.current?.commands.setContent(data.contentHtml)
+      setDraft((prev) => (prev ? { ...prev, fieldValues: next } : prev))
+    },
+    [draft, draftId, templateInfo]
+  )
 
   const applyProposal = useCallback(
     (html: string) => {
@@ -117,6 +176,14 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
         </div>
       )}
 
+      {templateInfo?.hasNewerVersion && (
+        <TemplateVersionBanner
+          draftId={draftId}
+          pinnedVersion={templateInfo.pinnedVersion}
+          latestVersion={templateInfo.latestVersion}
+        />
+      )}
+
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 md:gap-4">
         <DocumentEditorPanel
           draftId={draftId}
@@ -138,6 +205,9 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
             editorRef.current = editor
           }}
           beforeExport={flush}
+          templateId={templateInfo?.id ?? null}
+          templateVersion={templateInfo?.pinnedVersion}
+          hasSourcePdf={templateInfo?.hasSourcePdf}
           assistantOpen={assistantOpen}
           onOpenAssistant={() => setAssistantOpen(true)}
         />
@@ -149,6 +219,12 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
             seedPrompt={draft.seedPrompt}
             getDocumentHtml={() => editorRef.current?.getHTML() ?? ""}
             onApply={applyProposal}
+            onApplyFields={templateInfo?.fields.length ? applyFields : undefined}
+            fieldLabels={
+              templateInfo
+                ? Object.fromEntries(templateInfo.fields.map((f) => [f.key, f.label]))
+                : undefined
+            }
             onClose={() => setAssistantOpen(false)}
           />
         )}

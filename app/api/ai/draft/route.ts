@@ -4,13 +4,29 @@ import { z } from "zod"
 import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import DraftDocument from "@/app/api/lib/models/draft-document"
+import DocumentTemplateVersion from "@/app/api/lib/models/document-template-version"
+import CorpusDocument from "@/app/api/lib/models/corpus-document"
+import { searchCorpus } from "@/app/api/lib/corpusBackend"
+import { factsForFields } from "@/app/api/lib/services/corpusFacts"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
+import { renderTemplate, missingRequired } from "@/lib/templates/render"
+import type { TemplateField } from "@/lib/templates/fields"
 import { modelFor } from "@/lib/ai/provider"
 import { resolveModel } from "@/lib/ai/models"
-import { DRAFTING_SYSTEM_PROMPT, DRAFT_TOOL_RULES } from "@/lib/ai/prompts"
+import {
+  DRAFTING_SYSTEM_PROMPT,
+  DRAFT_TOOL_RULES,
+  DRAFT_FIELD_RULES,
+  DRAFT_CORPUS_RULES,
+} from "@/lib/ai/prompts"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 import { trimDocumentForPrompt } from "@/lib/ai/document-context"
-import { messagesForStorage, stripEphemeralParts, MAX_STORED_MESSAGES } from "@/lib/ai/message-trim"
+import {
+  messagesForStorage,
+  settleDanglingToolCalls,
+  stripEphemeralParts,
+  MAX_STORED_MESSAGES,
+} from "@/lib/ai/message-trim"
 
 export const maxDuration = 60
 
@@ -57,24 +73,149 @@ export async function POST(request: NextRequest) {
   if (!gate.allowed) return aiLimitResponse(gate)
   const modelKey = resolveModel(gate.snapshot.plan, model, "balanced")
 
+  // A document started from a court form is filled, not redrafted. Loading its
+  // snapshot lets the model be told which blanks exist, which are still empty,
+  // and that the surrounding wording is the court's and not its to improve.
+  await connectMongoWithRetry()
+  const draftRecord = await DraftDocument.findOne({ _id: draftId, clerkUid: userContext.clerkUid })
+    .select("templateId fieldsVersion fieldValues templateTitle corpusId")
+    .lean()
+
+  let fields: TemplateField[] = []
+  let templateBodyHtml = ""
+  if (draftRecord?.templateId && draftRecord.fieldsVersion > 0) {
+    const snapshot = await DocumentTemplateVersion.findOne({
+      templateId: draftRecord.templateId,
+      version: draftRecord.fieldsVersion,
+    })
+      .select("fields bodyHtml")
+      .lean()
+    fields = (snapshot?.fields as TemplateField[]) || []
+    templateBodyHtml = snapshot?.bodyHtml || ""
+  }
+
+  const fieldValues = (draftRecord?.fieldValues as Record<string, unknown>) || {}
+  const isFormFill = fields.length > 0
+
+  /**
+   * What this matter's own corpus can already tell the assistant.
+   *
+   * Without it the model asks the advocate for the court, the parties and the
+   * dates that are sitting in the plaint they uploaded ten minutes ago -- which
+   * is exactly the retyping this feature exists to remove. Facts recorded from
+   * earlier forms come first because they are exact and free; retrieval only
+   * covers what they do not.
+   */
+  let corpusContext = ""
+  if (draftRecord?.corpusId) {
+    const corpusId = draftRecord.corpusId
+
+    try {
+      const known: string[] = []
+
+      if (isFormFill) {
+        const facts = await factsForFields({ clerkUid: userContext.clerkUid, corpusId, fields })
+        for (const [key, fact] of Object.entries(facts)) {
+          known.push(`- ${fact.label || key}: ${fact.value}`)
+        }
+      }
+
+      const indexed = await CorpusDocument.countDocuments({
+        clerkUid: userContext.clerkUid,
+        corpusId,
+        status: "ready",
+      })
+
+      const excerpts: string[] = []
+      if (indexed > 0) {
+        const query = isFormFill
+          ? [draftRecord.templateTitle, ...fields.map((f) => f.label)].filter(Boolean).join(", ")
+          : messages
+              .slice(-2)
+              .flatMap((m) => m.parts.filter((p) => p.type === "text").map((p) => (p as { text: string }).text))
+              .join(" ")
+              .slice(0, 600)
+
+        if (query.trim()) {
+          const search = await searchCorpus({ corpusId, clerkUid: userContext.clerkUid, query, k: 8 })
+          for (const [i, result] of search.results.entries()) {
+            excerpts.push(`--- excerpt ${i + 1}${result.title ? ` from "${result.title}"` : ""} ---\n${result.text}`)
+          }
+        }
+      }
+
+      if (known.length > 0 || excerpts.length > 0) {
+        corpusContext = [
+          "",
+          "<case_file>",
+          "These come from this matter's own corpus -- the advocate's uploaded documents and",
+          "answers they gave on earlier forms. Use them. Do not ask for anything answered here.",
+          ...(known.length > 0 ? ["", "Already recorded for this matter:", ...known] : []),
+          ...(excerpts.length > 0 ? ["", "From the documents in this matter:", ...excerpts] : []),
+          "</case_file>",
+        ].join("\n")
+      }
+    } catch (error) {
+      // Corpus context is an improvement, not a requirement: losing it means
+      // the assistant asks more questions, not that drafting fails.
+      console.error("Corpus context unavailable for draft", draftId, error)
+    }
+  }
+
   // Sanitized before it reaches the model, so a poisoned document body cannot
   // smuggle markup or handlers into the prompt.
   const safeDocument = trimDocumentForPrompt(sanitizeDocumentHtml(documentHtml))
 
-  // The system prompt is kept byte-identical across every request. The document
-  // used to live in here, and because it changes on each turn it invalidated the
-  // cached prefix -- system, tool definitions and the whole history behind it --
-  // on every single call. Sending it as the last message instead means
-  // everything before it caches at a tenth of the input rate, and only the
-  // document itself is charged in full.
-  const system = `${DRAFTING_SYSTEM_PROMPT}\n\n${DRAFT_TOOL_RULES}`
+  // The system prompt is byte-identical across every request FOR A GIVEN DRAFT:
+  // which blocks are included depends only on whether this draft came from a
+  // form and whether it has a corpus, neither of which changes mid-conversation.
+  // That stability is the point. The document used to live in here, and because
+  // it changes on each turn it invalidated the cached prefix -- system, tool
+  // definitions and the whole history behind it -- on every single call. The
+  // document and the case file go in the last message instead, so everything
+  // before them caches at a tenth of the input rate.
+  const system = [
+    DRAFTING_SYSTEM_PROMPT,
+    DRAFT_TOOL_RULES,
+    ...(isFormFill ? [DRAFT_FIELD_RULES] : []),
+    ...(draftRecord?.corpusId ? [DRAFT_CORPUS_RULES] : []),
+  ].join("\n\n")
 
+  // Repairs history that reaches us with a tool call the advocate answered in
+  // prose rather than with a button. Without this the whole conversation is
+  // rejected, and since it is persisted, the draft's assistant stays broken.
   const history = await convertToModelMessages(
-    stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[])
+    settleDanglingToolCalls(stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[]))
   )
+  // The field schema rides in the same trailing message as the document, so the
+  // cached prefix -- system, tools and history -- is not invalidated by it.
+  const fieldContext = isFormFill
+    ? [
+        "",
+        `<form name="${draftRecord?.templateTitle ?? ""}">`,
+        ...fields.map((field) => {
+          const filled =
+            field.type === "table"
+              ? JSON.stringify(fieldValues[field.key] ?? [])
+              : String(fieldValues[field.key] ?? "")
+          const columns =
+            field.type === "table"
+              ? ` columns=[${field.columns.map((c) => `${c.key}:"${c.label}"`).join(", ")}]`
+              : field.type === "select"
+                ? ` choices=[${field.options.join(" | ")}]`
+                : ""
+          return `  ${field.key} (${field.type}${field.required ? ", required" : ""})${columns} — "${field.label}" — currently: ${filled || "(empty)"}`
+        }),
+        "</form>",
+        missingRequired(fields, fieldValues).length > 0
+          ? `Still required: ${missingRequired(fields, fieldValues).map((f) => f.label).join(", ")}.`
+          : "Every required field has a value.",
+      ].join("\n")
+    : ""
+
   const documentMessage = {
     role: "user" as const,
-    content: `<current_document>\n${safeDocument || "(The document is empty.)"}\n</current_document>`,
+    content: `<current_document>\n${safeDocument || "(The document is empty.)"}\n</current_document>${fieldContext}${corpusContext}`,
   }
 
   const result = streamText({
@@ -98,6 +239,42 @@ export async function POST(request: NextRequest) {
             .describe("One line describing what changed, e.g. 'Added clause 6 interest on delayed refund'."),
         }),
       }),
+      /**
+       * Fills the named blanks on a court form.
+       *
+       * Separate from proposeDocument because a prescribed form must not be
+       * rewritten to insert a value: the app renders it from these values, so
+       * the court's own wording and layout stay exactly as issued. Like the
+       * others it has no execute -- the advocate accepts the values before
+       * anything reaches the document.
+       */
+      ...(isFormFill
+        ? {
+            setFields: tool({
+              description:
+                "Fill in the named blanks on this court form. Use this instead of proposeDocument whenever you are supplying values for the form's fields. Only include fields you have been told a value for -- never guess a name, address, caste, tehsil or district.",
+              inputSchema: z.object({
+                values: z
+                  .array(
+                    z.object({
+                      key: z.string().describe("The field key exactly as given in <form>."),
+                      value: z
+                        .string()
+                        .describe(
+                          "Plain text as it should print on the form. For a repeating table, JSON: [{\"column\":\"value\"}]."
+                        ),
+                    })
+                  )
+                  .min(1)
+                  .max(60),
+                summary: z
+                  .string()
+                  .max(200)
+                  .describe("One line on what you filled in, e.g. 'Filled the court and case details'."),
+              }),
+            }),
+          }
+        : {}),
       // No execute here either: the questions render to the advocate, who answers
       // in their next message rather than resolving a tool result.
       askClarification: tool({

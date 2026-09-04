@@ -3,7 +3,10 @@ import { z } from "zod";
 import { objectIdSchema, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import DraftDocument from "@/app/api/lib/models/draft-document";
+import DocumentTemplate from "@/app/api/lib/models/document-template";
+import DocumentTemplateVersion from "@/app/api/lib/models/document-template-version";
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml";
+import type { TemplateField } from "@/lib/templates/fields";
 
 const patchSchema = z
   .object({
@@ -33,6 +36,48 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
   }
 
+  // Everything about this draft resolves against the snapshot it was pinned to,
+  // never the template's latest. The only thing "latest" is used for is telling
+  // the advocate a newer version exists -- shown, never applied.
+  let templateInfo: {
+    id: string;
+    fields: TemplateField[];
+    pinnedVersion: number;
+    latestVersion: number;
+    hasNewerVersion: boolean;
+    renderMode: "html" | "pdf-overlay";
+    hasSourcePdf: boolean;
+  } | null = null;
+
+  if (draft.templateId) {
+    const [family, snapshot] = await Promise.all([
+      DocumentTemplate.findById(draft.templateId).select("latestVersion").lean(),
+      draft.fieldsVersion > 0
+        ? DocumentTemplateVersion.findOne({
+            templateId: draft.templateId,
+            version: draft.fieldsVersion,
+          })
+            .select("fields renderMode sourcePdf version")
+            .lean()
+        : null,
+    ]);
+
+    if (family) {
+      const latestVersion = family.latestVersion ?? 1;
+      templateInfo = {
+        id: String(draft.templateId),
+        fields: (snapshot?.fields as TemplateField[]) || [],
+        pinnedVersion: draft.fieldsVersion,
+        latestVersion,
+        // Drafts made before versioning existed (fieldsVersion 0) have nothing
+        // to compare, so they are never nagged.
+        hasNewerVersion: draft.fieldsVersion > 0 && latestVersion > draft.fieldsVersion,
+        renderMode: snapshot?.renderMode ?? "html",
+        hasSourcePdf: !!snapshot?.sourcePdf?.r2Key,
+      };
+    }
+  }
+
   return NextResponse.json({
     success: true,
     draft: {
@@ -41,7 +86,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       contentHtml: draft.contentHtml,
       status: draft.status,
       category: draft.category,
+      templateId: draft.templateId ? String(draft.templateId) : null,
       templateTitle: draft.templateTitle,
+      fieldsVersion: draft.fieldsVersion,
+      fieldValues: draft.fieldValues || {},
+      fieldProvenance: draft.fieldProvenance || {},
+      caseId: draft.caseId ? String(draft.caseId) : null,
+      corpusId: draft.corpusId,
+      rememberInCorpus: draft.rememberInCorpus,
       seedPrompt: draft.seedPrompt,
       typography: draft.typography,
       wordCount: draft.wordCount,
@@ -49,6 +101,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       chatMessages: draft.chatMessages,
       updatedAt: draft.updatedAt,
     },
+    template: templateInfo,
   });
 }
 

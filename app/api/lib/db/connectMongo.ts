@@ -7,6 +7,7 @@ declare global {
     conn: typeof mongoose | null;
     promise: Promise<typeof mongoose> | null;
     modelsRegistered: boolean;
+    lastError: { error: Error; at: number } | null;
   } | undefined;
 }
 
@@ -17,65 +18,98 @@ if (!cached) {
     conn: null,
     promise: null,
     modelsRegistered: false,
+    lastError: null,
   };
 }
 
 let hasSyncedIndexes = false;
 
-const connectMongo = async (): Promise<typeof mongoose> => {
+const numberFromEnv = (name: string, fallback: number) => {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+// Server selection is what actually detects an unreachable cluster (blocked port,
+// missing Atlas IP allowlist entry). Keep it short so requests fail fast instead
+// of hanging for a minute and a half before the route gives up.
+const SERVER_SELECTION_TIMEOUT_MS = numberFromEnv("MONGODB_SERVER_SELECTION_TIMEOUT_MS", 10000);
+const CONNECT_TIMEOUT_MS = numberFromEnv("MONGODB_CONNECT_TIMEOUT_MS", 10000);
+const MAX_ATTEMPTS = numberFromEnv("MONGODB_CONNECT_ATTEMPTS", 2);
+const RETRY_DELAY_MS = numberFromEnv("MONGODB_CONNECT_RETRY_DELAY_MS", 1000);
+// After a failed attempt, short-circuit further calls for a moment so a page that
+// fires a dozen parallel requests doesn't queue a dozen more connection attempts.
+const FAILURE_COOLDOWN_MS = numberFromEnv("MONGODB_FAILURE_COOLDOWN_MS", 5000);
+
+// No query buffering: every DB entry point awaits connectDB() first, so a query
+// reaching a model while the connection is down is a bug, not something to sit on
+// for 10s. Failing immediately surfaces the real connection error instead of a
+// misleading "buffering timed out" one.
+mongoose.set("bufferCommands", false);
+
+const openConnection = async (uri: string): Promise<typeof mongoose> => {
+  console.log("Attempting to connect to MongoDB...");
+
+  const conn = await mongoose.connect(uri, {
+    dbName: process.env.MONGODB_DB || "LexVert",
+    bufferCommands: false,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: CONNECT_TIMEOUT_MS,
+    serverSelectionTimeoutMS: SERVER_SELECTION_TIMEOUT_MS,
+  });
+
+  console.log("MongoDB connection successful.");
+
+  // Register all models once per process
+  if (!cached!.modelsRegistered) {
+    await registerModels();
+    cached!.modelsRegistered = true;
+  }
+
+  // Optional controlled index sync
+  await syncIndexesIfEnabled();
+
+  return conn;
+};
+
+const connectMongo = async (
+  options?: { ignoreCooldown?: boolean },
+): Promise<typeof mongoose> => {
   // If already connected and cached, return immediately
   if (cached!.conn && mongoose.connection.readyState === 1) {
     return cached!.conn;
   }
 
-  // If connection is in progress, wait for it
-  if (cached!.promise) {
-    try {
-      cached!.conn = await cached!.promise;
-      return cached!.conn;
-    } catch {
-      // If the cached promise failed, reset and try again
+  if (!cached!.promise) {
+    const recentFailure = cached!.lastError;
+    if (
+      !options?.ignoreCooldown &&
+      recentFailure &&
+      Date.now() - recentFailure.at < FAILURE_COOLDOWN_MS
+    ) {
+      throw recentFailure.error;
+    }
+
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      throw new Error("MONGODB_URI is not defined in environment variables.");
+    }
+
+    // A single shared in-flight attempt: concurrent callers await this same
+    // promise instead of each opening their own connection.
+    cached!.promise = openConnection(uri).catch((error: Error) => {
       cached!.promise = null;
-    }
+      cached!.conn = null;
+      cached!.lastError = { error, at: Date.now() };
+      console.error("MongoDB connection error:", error);
+      throw error;
+    });
   }
 
-  const uri = process.env.MONGODB_URI;
-  if (!uri) {
-    throw new Error("MONGODB_URI is not defined in environment variables.");
-  }
-
-  console.log("Attempting to connect to MongoDB...");
-
-  cached!.promise = mongoose.connect(uri, {
-    dbName: process.env.MONGODB_DB || "LexVert",
-    maxPoolSize: 10,
-    minPoolSize: 2,
-    socketTimeoutMS: 45000,
-    connectTimeoutMS: 30000,
-    serverSelectionTimeoutMS: 30000,
-  });
-
-  try {
-    cached!.conn = await cached!.promise;
-    console.log("MongoDB connection successful.");
-
-    // Register all models once per process
-    if (!cached!.modelsRegistered) {
-      await registerModels();
-      cached!.modelsRegistered = true;
-    }
-
-    // Optional controlled index sync
-    await syncIndexesIfEnabled();
-
-    return cached!.conn;
-  } catch (error) {
-    // Reset cache on failure so next call can retry
-    cached!.promise = null;
-    cached!.conn = null;
-    console.error("MongoDB connection error:", error);
-    throw error;
-  }
+  cached!.conn = await cached!.promise;
+  cached!.lastError = null;
+  return cached!.conn;
 };
 
 const registerModels = async () => {
@@ -159,28 +193,38 @@ const syncIndexesIfEnabled = async () => {
   }
 };
 
-const connectMongoWithRetry = async () => {
-  let tries = 0;
-  const maxRetries = 3;
-  const retryDelay = 3000; // Delay in milliseconds (3 seconds)
+const describeFailure = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Could not connect to any servers")) {
+    return (
+      "Could not reach the MongoDB Atlas cluster. Check that this machine's public IP " +
+      "is on the cluster's Network Access allowlist and that outbound port 27017 is open."
+    );
+  }
+  return `Failed to connect to MongoDB: ${message}`;
+};
 
-  while (tries < maxRetries) {
+const connectMongoWithRetry = async () => {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      await connectMongo();
-      return; // Exit once the connection is successful
+      // Only the first attempt honours the cooldown; a caller that already waited
+      // out its retry delay should get a real attempt, not the cached failure.
+      await connectMongo({ ignoreCooldown: attempt > 1 });
+      return;
     } catch (error) {
-      tries++;
-      console.error(`Retrying MongoDB connection (${tries}/${maxRetries})...`);
-      if (tries < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelay));
-      } else {
-        console.error("All retry attempts failed.");
-        throw new Error(
-          "Failed to connect to MongoDB after multiple attempts.",
-        );
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       }
     }
   }
+
+  // The single shared attempt already logged the underlying driver error; callers
+  // waiting on it just get the summary so one outage isn't logged once per request.
+  throw new Error(describeFailure(lastError));
 };
 
+export { connectMongoWithRetry as connectDB };
 export default connectMongoWithRetry;

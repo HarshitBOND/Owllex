@@ -40,6 +40,9 @@ export async function GET(request: NextRequest) {
       accent: r.accent,
       archived: r.archived,
       caseCount: r.caseIds?.length ?? 0,
+      // Exposed so picking a case can link the corpus that already covers it,
+      // rather than making the advocate find and choose it a second time.
+      caseIds: (r.caseIds ?? []).map((id: unknown) => String(id)),
       clientCount: r.clientIds?.length ?? 0,
       documentCount: docMap.get(r.corpusId) ?? 0,
       chatCount: chatMap.get(r.corpusId) ?? 0,
