@@ -9,6 +9,7 @@ import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImag
 import { compressPdf } from "@/app/api/lib/storage/compressPdf"
 import { extractDocumentText } from "@/app/api/lib/contractExtract"
 import { markdownToHtml } from "@/app/api/lib/html/markdownToHtml"
+import { pagedMarkdownToHtml } from "@/app/api/lib/html/pagedMarkdownToHtml"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
     })
 
     try {
-      const { text: rawText } = await extractDocumentText({
+      const { text: rawText, pages } = await extractDocumentText({
         filename: validation.sanitizedFileName!,
         bytes: buffer,
         mimeType,
@@ -169,10 +170,16 @@ export async function POST(request: NextRequest) {
       // catch below would report to the user as an extraction failure for a
       // document that extracted perfectly -- so trim to fit instead.
       const text = clampToFieldLimit(rawText)
-      const contentHtml = clampToFieldLimit(sanitizeDocumentHtml(markdownToHtml(text)))
+      // Per-page conversion when the backend reported pages, so each block
+      // carries the page it came from and a citation chip can open the
+      // original there. An older backend omits `pages`; the document is then
+      // converted whole and simply has no chips.
+      const markup = pages?.length ? pagedMarkdownToHtml(pages) : markdownToHtml(text)
+      const contentHtml = clampToFieldLimit(sanitizeDocumentHtml(markup))
 
       review.extractedText = text
       review.contentHtml = contentHtml
+      review.pageCount = pages?.length ?? 0
       review.status = "extracted"
       await review.save()
 
@@ -181,6 +188,7 @@ export async function POST(request: NextRequest) {
         id: String(review._id),
         contentHtml,
         typography: review.typography,
+        pageCount: review.pageCount,
         version: review.version,
         fileMeta: { name: review.fileName, size: review.size, uploadedLabel: "Uploaded just now" },
       })

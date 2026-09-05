@@ -43,6 +43,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       issues: review.issues,
       summary: review.summary,
       chatMessages: review.chatMessages,
+      revisions: review.revisions,
+      pageCount: review.pageCount,
       version: review.version,
       updatedAt: review.updatedAt,
     },

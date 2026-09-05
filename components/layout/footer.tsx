@@ -40,7 +40,7 @@ export function Footer() {
       <Reveal className="container relative py-16">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div className="space-y-4">
-            <Image src="/logo.png" width={140} height={140} alt="ravenslaw" className="brightness-0 invert opacity-90" />
+            <Image src="/ravenslaw.png" width={519} height={151} alt="ravenslaw" className="h-10 w-auto brightness-0 invert opacity-90" />
             <p className="max-w-xs text-sm leading-relaxed text-slate-400">
               Your complete legal ecosystem. Revolutionizing how you handle legal work with cutting-edge technology.
             </p>

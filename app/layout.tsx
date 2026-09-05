@@ -11,6 +11,7 @@ import { SidebarProvider } from "@/contexts/SidebarContext"
 import { AiChatProvider } from "@/contexts/AiChatContext"
 import { SettingsProvider } from "@/contexts/SettingsContext"
 import { ThemeProvider } from "@/components/theme-provider"
+import AiChatDock from "@/components/layout/ai-chat-dock"
 
 const averiaSerifLibre = Averia_Serif_Libre({
   subsets: ["latin"],
@@ -66,6 +67,9 @@ export default async function RootLayout({
               <AiChatProvider>
                 <SettingsProvider>
                   {children}
+                  {/* Carries the live conversation onto whatever page an
+                      approved step took the advocate to. */}
+                  <AiChatDock />
                 </SettingsProvider>
               </AiChatProvider>
             </SidebarProvider>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useEditor, EditorContent, type Editor } from "@tiptap/react"
+import RedlineView from "@/components/common/revisions/RedlineView"
 import StarterKit from "@tiptap/starter-kit"
 import TextAlign from "@tiptap/extension-text-align"
 import CharacterCount from "@tiptap/extension-character-count"
@@ -61,6 +62,9 @@ interface DocumentEditorPanelProps {
   hasSourcePdf?: boolean
   assistantOpen: boolean
   onOpenAssistant: () => void
+  /** Renders the tracked-changes diff instead of the editor while true. */
+  showEdits?: boolean
+  redlineHtml?: string
 }
 
 const paragraphStyles = [
@@ -124,6 +128,8 @@ export default function DocumentEditorPanel({
   hasSourcePdf,
   assistantOpen,
   onOpenAssistant,
+  showEdits = false,
+  redlineHtml = "",
 }: DocumentEditorPanelProps) {
   const [openingSource, setOpeningSource] = useState(false)
   const [wordCount, setWordCount] = useState(0)
@@ -412,7 +418,13 @@ export default function DocumentEditorPanel({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 dark:border-border overflow-x-auto shrink-0">
+      {/* Inert while the redline is up -- see the note in ContractDocumentPanel. */}
+      <div
+        aria-hidden={showEdits}
+        className={`flex items-center gap-1 px-4 py-2 border-b border-gray-200 dark:border-border overflow-x-auto shrink-0 ${
+          showEdits ? "pointer-events-none opacity-40" : ""
+        }`}
+      >
         <ToolbarButton
           title="Clear formatting"
           onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
@@ -556,11 +568,19 @@ export default function DocumentEditorPanel({
           className="mx-auto max-w-[760px] origin-top bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-border"
           style={{ zoom: `${zoom}%` }}
         >
-          <EditorContent
-            editor={editor}
-            style={{ fontFamily: typography.fontFamily, fontSize: `${typography.fontSizePt}pt` }}
-            className="px-12 py-14"
-          />
+          {showEdits ? (
+            <RedlineView
+              html={redlineHtml}
+              style={{ fontFamily: typography.fontFamily, fontSize: `${typography.fontSizePt}pt` }}
+              className="px-12 py-14"
+            />
+          ) : (
+            <EditorContent
+              editor={editor}
+              style={{ fontFamily: typography.fontFamily, fontSize: `${typography.fontSizePt}pt` }}
+              className="px-12 py-14"
+            />
+          )}
         </div>
       </div>
 

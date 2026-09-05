@@ -43,6 +43,8 @@ import {
 import { useSaveToVault } from "@/features/vault/useSaveToVault"
 import type { SaveStatus } from "@/features/draft-documents/hooks/useDraftAutosave"
 import { IssueHighlight, issueHighlightKey } from "./issueHighlightExtension"
+import { PageAnchor, PageAttribute } from "./pageAnchorExtension"
+import RedlineView from "@/components/common/revisions/RedlineView"
 import { fontFamilies, fontSizes, type ContractFileMeta, type ContractIssue } from "../data"
 
 interface ContractDocumentPanelProps {
@@ -62,6 +64,9 @@ interface ContractDocumentPanelProps {
   onReupload: () => void
   onRerun: () => void
   isReanalyzing: boolean
+  /** Renders the tracked-changes diff instead of the editor while true. */
+  showEdits: boolean
+  redlineHtml: string
 }
 
 const paragraphStyles = [
@@ -122,6 +127,8 @@ export default function ContractDocumentPanel({
   onReupload,
   onRerun,
   isReanalyzing,
+  showEdits,
+  redlineHtml,
 }: ContractDocumentPanelProps) {
   const [wordCount, setWordCount] = useState(0)
   const [zoom, setZoom] = useState(100)
@@ -145,6 +152,28 @@ export default function ContractDocumentPanel({
     onSelectRef.current = onSelectIssue
   }, [onSelectIssue])
 
+  const viewOriginal = async (page?: number) => {
+    if (!reviewId || viewingOriginal) return
+    setViewingOriginal(true)
+    try {
+      const res = await fetch(`/api/contract-review/${reviewId}/file-url`)
+      const data = await res.json()
+      // #page= is the PDF open parameter every browser viewer honours; a
+      // non-PDF original simply ignores the fragment.
+      if (data.success) {
+        const target = page ? `${data.url}#page=${page}` : data.url
+        window.open(target, "_blank", "noopener,noreferrer")
+      }
+    } finally {
+      setViewingOriginal(false)
+    }
+  }
+
+  // Read by the decoration plugin, which is built once and would otherwise
+  // capture the first render's closure.
+  const viewOriginalRef = useRef(viewOriginal)
+  viewOriginalRef.current = viewOriginal
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
@@ -152,6 +181,10 @@ export default function ContractDocumentPanel({
       Underline,
       TableKit.configure({ table: { resizable: false } }),
       CharacterCount,
+      PageAttribute,
+      PageAnchor.configure({
+        onOpenPage: (page) => viewOriginalRef.current(page),
+      }),
       IssueHighlight.configure({
         getMeta: () => ({
           issues: issuesRef.current,
@@ -224,18 +257,6 @@ export default function ContractDocumentPanel({
 
   const currentFont = fontFamilies.find((f) => f.value === typography.fontFamily) ?? fontFamilies[0]
 
-  const viewOriginal = async () => {
-    if (!reviewId || viewingOriginal) return
-    setViewingOriginal(true)
-    try {
-      const res = await fetch(`/api/contract-review/${reviewId}/file-url`)
-      const data = await res.json()
-      if (data.success) window.open(data.url, "_blank", "noopener,noreferrer")
-    } finally {
-      setViewingOriginal(false)
-    }
-  }
-
   const statusLine =
     saveStatus === "saving" ? (
       <span className="flex items-center gap-1 text-gray-500 dark:text-muted-foreground">
@@ -278,7 +299,7 @@ export default function ContractDocumentPanel({
           {reviewId && (
             <button
               type="button"
-              onClick={viewOriginal}
+              onClick={() => viewOriginal()}
               disabled={viewingOriginal}
               className="h-8 px-3 rounded-lg border border-gray-200 dark:border-border flex items-center gap-1.5 text-[12.5px] font-medium text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-secondary transition-colors disabled:opacity-50"
             >
@@ -333,7 +354,17 @@ export default function ContractDocumentPanel({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 dark:border-border overflow-x-auto shrink-0">
+      {/*
+        Formatting is inert while the redline is up: the visible markup is a
+        generated diff, not the document, so a toolbar click would apply to text
+        the user cannot actually see.
+      */}
+      <div
+        aria-hidden={showEdits}
+        className={`flex items-center gap-1 px-4 py-2 border-b border-gray-200 dark:border-border overflow-x-auto shrink-0 ${
+          showEdits ? "pointer-events-none opacity-40" : ""
+        }`}
+      >
         <ToolbarButton
           title="Clear formatting"
           onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
@@ -500,11 +531,19 @@ export default function ContractDocumentPanel({
           className="mx-auto max-w-[760px] origin-top bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-border"
           style={{ zoom: `${zoom}%` }}
         >
-          <EditorContent
-            editor={editor}
-            style={{ fontFamily: typography.fontFamily, fontSize: `${typography.fontSizePt}pt` }}
-            className="px-12 py-14"
-          />
+          {showEdits ? (
+            <RedlineView
+              html={redlineHtml}
+              style={{ fontFamily: typography.fontFamily, fontSize: `${typography.fontSizePt}pt` }}
+              className="px-12 py-14"
+            />
+          ) : (
+            <EditorContent
+              editor={editor}
+              style={{ fontFamily: typography.fontFamily, fontSize: `${typography.fontSizePt}pt` }}
+              className="px-12 py-14"
+            />
+          )}
         </div>
       </div>
 

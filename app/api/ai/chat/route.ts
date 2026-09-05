@@ -22,6 +22,7 @@ import { MODELS, resolveModel } from "@/lib/ai/models"
 import { ANSWER_LENGTH_RULES, CHAT_SYSTEM_PROMPT, corpusContextBlock } from "@/lib/ai/prompts"
 import { CASE_FIELDS, CLIENT_FIELDS } from "@/lib/ai/corpus-match"
 import { legalTools } from "@/lib/ai/tools"
+import { ACTION_TOOL } from "@/lib/ai/actions"
 import { createSourceRegistry } from "@/lib/ai/sources"
 import { ANSWER_META_PROMPT } from "@/lib/ai/prompts"
 import {
@@ -156,11 +157,14 @@ export async function POST(request: NextRequest) {
       const answer = await result.text
       if (!answer.trim()) return
 
-      // A turn that ends by asking the advocate something is not an answer yet:
-      // titling it and generating follow-ups would describe a question that is
-      // about to be closed, and the real answer gets its own metadata anyway.
-      const asked = (await result.toolCalls).some((call) => call?.toolName === "askClarifyingQuestion")
-      if (asked) return
+      // A turn that ends by putting something to the advocate -- a question, or
+      // an action to approve -- is not an answer yet: titling it and generating
+      // follow-ups would describe a turn that is about to be closed, and the
+      // real answer gets its own metadata anyway.
+      const pending = (await result.toolCalls).some(
+        (call) => call?.toolName === "askClarifyingQuestion" || call?.toolName === ACTION_TOOL
+      )
+      if (pending) return
 
       // A title and follow-ups for the answer card. Best-effort: losing them
       // must never cost the advocate the answer they are already reading.
@@ -197,8 +201,21 @@ export async function POST(request: NextRequest) {
             messages: await withPreservedFeedback(userContext.clerkUid, chatId, messagesForStorage(finalMessages)),
             model,
             updatedAt: new Date(),
+            // Written on every turn, not just at insert: a corpus is very often
+            // created part-way through the conversation that established the
+            // matter (proposeAction -> saveToCorpus), and a thread that adopted
+            // one that way would otherwise never link to it -- leaving the
+            // matter's own conversation missing from /corpus/[id].
+            ...(activeCorpusId ? { corpusId: activeCorpusId } : {}),
           },
-          $setOnInsert: { clerkUid: userContext.clerkUid, chatId, title, corpusId: activeCorpusId },
+          // Only seeds corpusId when there is none to set above; the same field
+          // cannot appear in both operators.
+          $setOnInsert: {
+            clerkUid: userContext.clerkUid,
+            chatId,
+            title,
+            ...(activeCorpusId ? {} : { corpusId: null }),
+          },
         },
         { upsert: true }
       )

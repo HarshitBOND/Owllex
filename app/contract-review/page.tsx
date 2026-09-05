@@ -36,6 +36,7 @@ export default function Page() {
   const [workspaceStatus, setWorkspaceStatus] = useState<"idle" | "analyzing" | "ready">("idle")
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [reviewId, setReviewId] = useState<string | null>(null)
+  const [meta, setMeta] = useState<{ revisionCount: number; sourceCount: number; createdAt: string } | null>(null)
   const howItWorksRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -91,7 +92,18 @@ export default function Page() {
         <div className="px-3 sm:px-4 md:px-6 pt-3 md:pt-4">
           <Navbar
             location="Contract Review"
-            subtitle="Upload a contract and get AI-powered review with actionable insights."
+            subtitle={
+              // Harvey-style provenance line once there is a document to
+              // describe; the pitch only helps before one is loaded.
+              meta
+                ? [
+                    "Draft",
+                    `${meta.revisionCount} revision${meta.revisionCount === 1 ? "" : "s"}`,
+                    `${meta.sourceCount} source${meta.sourceCount === 1 ? "" : "s"}`,
+                    `Created ${meta.createdAt}`,
+                  ].join(" · ")
+                : "Upload a contract and get AI-powered review with actionable insights."
+            }
             badge="Beta"
             actions={
               workspaceStatus === "ready" ? (
@@ -164,7 +176,11 @@ export default function Page() {
           />
         </div>
         <div className="px-3 sm:px-4 md:px-6 pb-6">
-          <ContractReviewWorkspace onStatusChange={setWorkspaceStatus} onReviewIdChange={setReviewId} />
+          <ContractReviewWorkspace
+            onStatusChange={setWorkspaceStatus}
+            onReviewIdChange={setReviewId}
+            onMetaChange={setMeta}
+          />
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { getToolName, isToolUIPart, type UIMessage } from "ai"
-import { ArrowRight, Check, HelpCircle, Pencil } from "lucide-react"
+import { ArrowRight, HelpCircle, Pencil } from "lucide-react"
 
 /**
  * The one chat tool with no server-side execute. The model calls it and the run
@@ -43,13 +43,15 @@ export function pendingClarify(messages: UIMessage[]): ClarifyPart | null {
  * the answer and waiting for a typed reply -- costs the advocate a round trip
  * for something that is two words and a click. Options are numbered and driven
  * from the keyboard, so answering is one keystroke without leaving the thread.
+ *
+ * Callers only render this while the call is unsettled -- once answered, the
+ * question drops out of the thread entirely rather than sticking around as a
+ * read-only summary.
  */
 export function ClarifyingQuestion({
   question,
   options,
   allowFreeText,
-  answer,
-  skipped,
   disabled,
   onAnswer,
   onSkip,
@@ -57,9 +59,6 @@ export function ClarifyingQuestion({
   question: string
   options?: string[]
   allowFreeText?: boolean
-  /** Present once the call is settled, which makes the card read-only. */
-  answer?: string
-  skipped?: boolean
   /** The turn is still streaming, so an answer now would race the model. */
   disabled?: boolean
   onAnswer: (answer: string) => void
@@ -72,7 +71,6 @@ export function ClarifyingQuestion({
   const focused = useRef(false)
 
   const choices = options ?? []
-  const settled = answer !== undefined || skipped
   // A question with nothing to pick from is a free-text question whether or not
   // the model remembered to say so.
   const freeText = allowFreeText || choices.length === 0
@@ -81,36 +79,17 @@ export function ClarifyingQuestion({
   // keyboard the moment it lands -- but never steal the cursor out of a box the
   // advocate is already typing in.
   useEffect(() => {
-    if (settled || disabled || focused.current) return
+    if (disabled || focused.current) return
     const active = document.activeElement
     if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return
     focused.current = true
     if (choices.length) rowRefs.current[0]?.focus()
     else inputRef.current?.focus()
-  }, [settled, disabled, choices.length])
+  }, [disabled, choices.length])
 
   useEffect(() => {
     if (writing) inputRef.current?.focus()
   }, [writing])
-
-  if (settled) {
-    return (
-      <div className="w-full rounded-xl border border-bg-300 bg-bg-100/40 px-3.5 py-2.5">
-        <p className="text-[12px] text-text-400 flex items-start gap-1.5">
-          <HelpCircle className="w-3.5 h-3.5 mt-px shrink-0" />
-          {question}
-        </p>
-        {answer ? (
-          <p className="mt-1 text-[13px] text-text-100 flex items-start gap-1.5">
-            <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-accent" />
-            {answer}
-          </p>
-        ) : (
-          <p className="mt-1 text-[13px] text-text-400 italic">Not answered</p>
-        )}
-      </div>
-    )
-  }
 
   const rowCount = choices.length + (freeText ? 1 : 0)
 

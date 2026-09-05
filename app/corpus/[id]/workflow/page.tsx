@@ -7,7 +7,12 @@ import { Briefcase, FileText, Library, MessageSquare } from "lucide-react"
 
 import Sidebar from "@/components/layout/sidebar"
 import Navbar from "@/components/layout/navbar"
-import { N8nWorkflowBlock } from "@/components/ui/n8n-workflow-block-shadcnui"
+import {
+  N8nWorkflowBlock,
+  type WorkflowConnection,
+  type WorkflowNode,
+} from "@/components/ui/n8n-workflow-block-shadcnui"
+import { layoutNodes } from "@/features/ai-workflow/workflow-serialize"
 import {
   initialWorkflowConnections,
   initialWorkflowNodes,
@@ -23,6 +28,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { isLoaded, isSignedIn } = useUser()
   const { corpora, setActiveCorpusId } = useAiChat()
   const [documentCount, setDocumentCount] = useState<number | null>(null)
+  const [saved, setSaved] = useState<{
+    nodes: WorkflowNode[]
+    connections: WorkflowConnection[]
+  } | null>(null)
 
   const corpus = corpora.find((c) => c.id === id) ?? null
 
@@ -36,6 +45,19 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
     fetch(`/api/corpus/${id}/documents`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setDocumentCount((d.documents ?? []).length))
+      .catch(() => {})
+  }, [id])
+
+  // The matter's own workflow, where one has been built or generated. The
+  // starter chain is only a placeholder for a corpus that has none yet.
+  useEffect(() => {
+    fetch(`/api/corpus/${id}/workflow`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const workflow = d?.workflow
+        if (!workflow?.nodes?.length) return
+        setSaved({ nodes: layoutNodes(workflow.nodes), connections: workflow.connections ?? [] })
+      })
       .catch(() => {})
   }, [id])
 
@@ -112,9 +134,12 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           </div>
 
           <N8nWorkflowBlock
+            // Seeds its node state at mount, so the saved workflow arriving
+            // after the first render only shows if the block is remounted.
+            key={saved ? "saved" : "starter"}
             label={corpus ? `${corpus.name} Workflow` : "Corpus Workflow"}
-            nodes={initialWorkflowNodes}
-            connections={initialWorkflowConnections}
+            nodes={saved?.nodes ?? initialWorkflowNodes}
+            connections={saved?.connections ?? initialWorkflowConnections}
             templates={legalNodeTemplates}
             className="bg-white dark:bg-card border-gray-200 dark:border-border"
           />

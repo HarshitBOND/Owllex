@@ -99,6 +99,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       wordCount: draft.wordCount,
       version: draft.version,
       chatMessages: draft.chatMessages,
+      revisions: draft.revisions,
       updatedAt: draft.updatedAt,
     },
     template: templateInfo,

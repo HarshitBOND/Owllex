@@ -5,25 +5,18 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { useChat } from "@ai-sdk/react"
 import {
-  DefaultChatTransport,
   getToolName,
   isToolUIPart,
   type FileUIPart,
   type UIDataTypes,
-  type UIMessage,
   type UIMessagePart,
   type UITools,
 } from "ai"
 import { AlertTriangle, ArrowDown, Check, Gavel, Library, Search, Shuffle, Users } from "lucide-react"
 import { AnswerCard } from "@/features/dashboard/answer/AnswerCard"
-import {
-  CLARIFY_TOOL,
-  clarifyPartsOf,
-  isClarifyPart,
-  pendingClarify,
-} from "@/features/dashboard/answer/ClarifyingQuestion"
+import { isClarifyPart } from "@/features/dashboard/answer/ClarifyingQuestion"
+import { isActionPart } from "@/features/dashboard/answer/ActionProposal"
 import { sourcesOf, textOf as answerTextOf } from "@/features/dashboard/answer/answer-meta"
 import {
   ClaudeChatInput,
@@ -31,7 +24,7 @@ import {
   type ClaudeChatInputSubmission,
 } from "@/components/ui/claude-style-chat-input"
 import { DraftPanel, RevisionsPanel } from "./components/AiModePanels"
-import { useAiChat } from "@/contexts/AiChatContext"
+import { useAiChat, useChatThread } from "@/contexts/AiChatContext"
 import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
 import { useAllowedModels } from "@/hooks/useAllowedModels"
 
@@ -191,104 +184,44 @@ const renderThinkingPart = (part: ChatPart, key: string | number) => {
 export function AiChatHome() {
   const { user } = useUser()
   const router = useRouter()
-  const { activeId, conversations, loaded, refresh, corpora, activeCorpusId, setActiveCorpusId } = useAiChat()
+  const { activeId, corpora, activeCorpusId, setActiveCorpusId } = useAiChat()
   const reduceMotion = useReducedMotion()
 
-  const [model, setModel] = useState<string>("fast")
   const allowedModels = useAllowedModels()
   const [atBottom, setAtBottom] = useState(true)
-  const [loadingHistory, setLoadingHistory] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
   const composerRef = useRef<ClaudeChatInputHandle>(null)
   const [starterPage, setStarterPage] = useState(0)
 
-  // Messages already seen for a conversation, so switching back is instant instead of
-  // blanking to the greeting screen while a refetch is in flight.
-  const cacheRef = useRef(new Map<string, { messages: UIMessage[]; partial: boolean }>())
-  const conversationsRef = useRef(conversations)
-  conversationsRef.current = conversations
-  const loadedRef = useRef(loaded)
-  loadedRef.current = loaded
+  // The conversation itself lives above this page, so approving a step that
+  // navigates away doesn't end the thread.
+  const {
+    messages,
+    sendMessage,
+    setMessages,
+    status,
+    stop,
+    regenerate,
+    error,
+    clearError,
+    busy,
+    model,
+    setModel,
+    loadingHistory,
+    answerQuestion,
+    skipQuestion,
+    approveAction,
+    declineAction,
+    settleBeforeSend,
+  } = useChatThread()
 
-  const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/ai/chat", body: { model, corpusId: activeCorpusId } }),
-    [model, activeCorpusId]
-  )
-
-  // Set when a typed message is what settles a pending question, so the turn
-  // goes out as that message rather than as a bare auto-continuation.
-  const answeredByTyping = useRef(false)
-
-  const { messages, sendMessage, setMessages, status, stop, regenerate, error, clearError, addToolResult } =
-    useChat({
-      id: activeId,
-      transport,
-      onFinish: () => refresh(),
-      // Answering the question is the whole turn: the model asked and stopped,
-      // so the answer has to go straight back without the advocate also having
-      // to send something. Scoped to this one tool -- the retrieval tools run
-      // server-side inside the same request and must never trigger a resend.
-      sendAutomaticallyWhen: ({ messages: current }) => {
-        if (answeredByTyping.current) return false
-        const last = current[current.length - 1]
-        if (!last || last.role !== "assistant") return false
-        const asks = clarifyPartsOf(last)
-        return asks.length > 0 && asks.every((part) => part.output !== undefined)
-      },
-    })
-
-  const busy = status === "submitted" || status === "streaming"
-
+  // Switching conversations starts at the newest turn, whatever the scroll
+  // position was in the one before it.
   useEffect(() => {
-    if (!messages.length) return
-    cacheRef.current.set(activeId, { messages, partial: busy })
-  }, [activeId, messages, busy])
-
-  // Runs only when the conversation actually changes. Refreshing the sidebar list must
-  // never reach in here and wipe a live thread.
-  useEffect(() => {
-    const id = activeId
-    const cached = cacheRef.current.get(id)
-    const known = conversationsRef.current.some((c) => c.id === id)
-
     setAtBottom(true)
     atBottomRef.current = true
-    setMessages(cached ? cached.messages : [])
-
-    // A locally created id that is not in the list is a brand new chat: nothing to load.
-    if (!cached && loadedRef.current && !known) {
-      setLoadingHistory(false)
-      return
-    }
-    if (cached && !cached.partial) {
-      setLoadingHistory(false)
-      return
-    }
-
-    const controller = new AbortController()
-    let aborted = false
-    setLoadingHistory(!cached)
-
-    fetch(`/api/ai/conversations/${id}`, { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const stored = d?.conversation?.messages
-        if (Array.isArray(stored) && stored.length) {
-          cacheRef.current.set(id, { messages: stored, partial: false })
-          setMessages(stored)
-        }
-        setLoadingHistory(false)
-      })
-      .catch(() => {
-        if (!aborted) setLoadingHistory(false)
-      })
-
-    return () => {
-      aborted = true
-      controller.abort()
-    }
-  }, [activeId, setMessages])
+  }, [activeId])
 
   useEffect(() => {
     if (!atBottomRef.current) return
@@ -335,37 +268,11 @@ export function AiChatHome() {
       }))
     )
 
-    // Typing is a legitimate way to answer a question card -- "or reply in the
-    // message box". Settling the call with what they typed keeps the card in
-    // step with the thread, and keeps the model from being owed a result it
-    // never gets.
-    const pending = pendingClarify(messages)
-    if (pending && text) {
-      answeredByTyping.current = true
-      await addToolResult({
-        tool: CLARIFY_TOOL,
-        toolCallId: pending.toolCallId,
-        output: { answer: text },
-      })
-    }
+    await settleBeforeSend(text)
 
     setAtBottom(true)
     atBottomRef.current = true
     sendMessage({ text: text + pasted, files: files.length ? files : undefined })
-  }
-
-  const answerQuestion = (toolCallId: string, answer: string) => {
-    answeredByTyping.current = false
-    addToolResult({ tool: CLARIFY_TOOL, toolCallId, output: { answer } })
-  }
-
-  const skipQuestion = (toolCallId: string) => {
-    answeredByTyping.current = false
-    addToolResult({
-      tool: CLARIFY_TOOL,
-      toolCallId,
-      output: { skipped: true, note: "The advocate skipped this. Answer on a stated assumption instead." },
-    })
   }
 
   /**
@@ -462,10 +369,11 @@ export function AiChatHome() {
                 )
               }
 
-              // The question is the turn, not a step on the way to it, so it
-              // stays out of the collapsed trail and renders as its own card.
+              // The question, and the action put up for approval, are the turn
+              // rather than steps on the way to it, so both stay out of the
+              // collapsed trail and render as their own cards.
               const thinkingParts = m.parts.filter(
-                (p) => p.type === "reasoning" || (isToolUIPart(p) && !isClarifyPart(p))
+                (p) => p.type === "reasoning" || (isToolUIPart(p) && !isClarifyPart(p) && !isActionPart(p))
               ) as ChatPart[]
               const thinkingOpen = index === messages.length - 1 && busy && !textContent
 
@@ -485,6 +393,8 @@ export function AiChatHome() {
                   onPickFollowUp={(q) => composerRef.current?.setMessage(q)}
                   onAnswerQuestion={answerQuestion}
                   onSkipQuestion={skipQuestion}
+                  onApproveAction={approveAction}
+                  onDeclineAction={declineAction}
                 />
               )
             })}
@@ -560,14 +470,12 @@ export function AiChatHome() {
               className="w-full max-w-4xl mb-8 text-center"
             >
               <div className="w-16 h-16 mx-auto mb-5 flex items-center justify-center rounded-2xl bg-accent/10">
-                <Image src="/logo.png" alt="" width={32} height={32} className="w-8 h-8 object-contain" />
+                <Image src="/logo.png" alt="" width={500} height={500} className="h-8 w-8 object-contain" />
               </div>
               <h1 className="font-serif text-3xl sm:text-4xl font-light text-text-100 mb-2 tracking-tight">
                 {greeting}, {user?.firstName || "Counselor"}
               </h1>
-              <p className="text-text-300 text-sm sm:text-base">
-                Ask about your cases, draft documents, or get quick legal guidance.
-              </p>
+              
             </motion.div>
           )}
         </AnimatePresence>

@@ -1,14 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import type { Editor } from "@tiptap/react"
 import type { UIMessage } from "ai"
 import { AlertTriangle, FileQuestion } from "lucide-react"
 import DocumentEditorPanel from "./DocumentEditorPanel"
-import AiAssistantPanel from "./AiAssistantPanel"
+import DraftRail from "./DraftRail"
 import TemplateVersionBanner from "./TemplateVersionBanner"
 import { useDraftAutosave } from "../hooks/useDraftAutosave"
+import { useRevisions, type Revision } from "@/hooks/useRevisions"
+import { useEditorSelection } from "@/hooks/useEditorSelection"
 
 type Draft = {
   id: string
@@ -21,6 +23,8 @@ type Draft = {
   templateId: string | null
   fieldsVersion: number
   fieldValues: Record<string, unknown>
+  fieldProvenance: Record<string, { source: string; documentId?: string; quote?: string }>
+  revisions: Revision[]
 }
 
 /** Resolved against the snapshot the draft is pinned to, never the latest. */
@@ -41,6 +45,11 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
   const [title, setTitle] = useState("")
   const [typography, setTypography] = useState({ fontFamily: "Georgia", fontSizePt: 12 })
   const [assistantOpen, setAssistantOpen] = useState(true)
+  const [showEdits, setShowEdits] = useState(false)
+  const editorSelection = useEditorSelection()
+  // Mirrors the editor so the redline has a live base to diff against;
+  // draft.contentHtml is only ever the document as first loaded.
+  const [contentHtml, setContentHtml] = useState("")
 
   const { status, conflict, queue, flush, retry } = useDraftAutosave(draftId, draft?.version ?? 0)
 
@@ -55,6 +64,7 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
           return
         }
         setDraft(data.draft)
+        setContentHtml(data.draft.contentHtml ?? "")
         setTemplateInfo(data.template ?? null)
         setTitle(data.draft.title)
         setTypography(data.draft.typography ?? { fontFamily: "Georgia", fontSizePt: 12 })
@@ -112,11 +122,73 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
   const applyProposal = useCallback(
     (html: string) => {
       editorRef.current?.commands.setContent(html)
+      setContentHtml(html)
       const words = editorRef.current?.storage.characterCount.words() ?? 0
       queue({ contentHtml: html, wordCount: words })
     },
     [queue]
   )
+
+  /**
+   * Puts a finished revision into the editor.
+   *
+   * No autosave queue here, unlike applyProposal: the revise route already
+   * wrote contentHtml and bumped version server-side, so a PATCH of the same
+   * text would only race its own write.
+   */
+  const applyRevision = useCallback((html: string, nextRevisions: Revision[]) => {
+    editorRef.current?.commands.setContent(html)
+    setContentHtml(html)
+    setDraft((prev) => (prev ? { ...prev, version: prev.version + 1 } : prev))
+    setShowEdits(nextRevisions.length > 0)
+  }, [])
+
+  const revisionsApi = useRevisions(draftId, "/api/draft-documents", {
+    currentHtml: contentHtml,
+    onApplied: applyRevision,
+  })
+
+  const { setRevisions } = revisionsApi
+  // Seeded from the loaded draft rather than inside the fetch itself, which
+  // would reference the hook above before it exists.
+  useEffect(() => {
+    if (draft) setRevisions(draft.revisions ?? [])
+  }, [draft, setRevisions])
+
+  /**
+   * Sources card contents, from the provenance the drafting flow already
+   * records per field.
+   *
+   * A draft has no uploaded PDF to cite pages of, but it does know which case
+   * and which corpus documents its facts came from -- which is the thing worth
+   * showing. Values the advocate typed are omitted: "user" is not a source.
+   */
+  const draftSources = useMemo(() => {
+    if (!draft) return []
+    const labels = templateInfo
+      ? Object.fromEntries(templateInfo.fields.map((field) => [field.key, field.label]))
+      : {}
+
+    const seen = new Map<string, { label: string; sublabel?: string }>()
+    for (const [key, entry] of Object.entries(draft.fieldProvenance ?? {})) {
+      if (!entry || entry.source === "user") continue
+      const label =
+        entry.source === "case"
+          ? "Linked case"
+          : entry.source === "corpusDoc"
+            ? (entry.documentId ?? "Corpus document")
+            : entry.source === "corpusFact"
+              ? "Corpus"
+              : "AI-filled"
+      const fieldLabel = labels[key] ?? key
+      const existing = seen.get(label)
+      seen.set(label, {
+        label,
+        sublabel: existing?.sublabel ? `${existing.sublabel}, ${fieldLabel}` : fieldLabel,
+      })
+    }
+    return [...seen.values()]
+  }, [draft, templateInfo])
 
   if (loadState === "loading") {
     return (
@@ -200,9 +272,13 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
           }}
           saveStatus={status}
           onRetrySave={retry}
-          onContentChange={(html, words) => queue({ contentHtml: html, wordCount: words })}
+          onContentChange={(html, words) => {
+            setContentHtml(html)
+            queue({ contentHtml: html, wordCount: words })
+          }}
           onEditorReady={(editor) => {
             editorRef.current = editor
+            editorSelection.attach(editor)
           }}
           beforeExport={flush}
           templateId={templateInfo?.id ?? null}
@@ -210,10 +286,12 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
           hasSourcePdf={templateInfo?.hasSourcePdf}
           assistantOpen={assistantOpen}
           onOpenAssistant={() => setAssistantOpen(true)}
+          showEdits={showEdits}
+          redlineHtml={revisionsApi.redlineHtml}
         />
 
         {assistantOpen && (
-          <AiAssistantPanel
+          <DraftRail
             draftId={draftId}
             initialMessages={draft.chatMessages ?? []}
             seedPrompt={draft.seedPrompt}
@@ -226,6 +304,16 @@ export default function DraftWorkspace({ draftId }: { draftId: string }) {
                 : undefined
             }
             onClose={() => setAssistantOpen(false)}
+            revisions={revisionsApi.revisions}
+            pendingInstruction={revisionsApi.pendingInstruction}
+            revisionError={revisionsApi.error}
+            onAddRevision={(instruction) => revisionsApi.addRevision(instruction, editorSelection.selection)}
+            onCancelRevision={revisionsApi.cancel}
+            onRevert={revisionsApi.revert}
+            showEdits={showEdits}
+            onShowEditsChange={setShowEdits}
+            selection={editorSelection.selection}
+            sources={draftSources}
           />
         )}
       </div>

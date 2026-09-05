@@ -10,7 +10,10 @@ import { AnswerActions, type Feedback } from "./AnswerActions"
 import { FollowUps } from "./FollowUps"
 import { SourcesDisclosure, SourcesRail, sourceRowId } from "./SourcesRail"
 import { ClarifyingQuestion, clarifyPartsOf } from "./ClarifyingQuestion"
+import { ActionProposal, actionPartsOf } from "./ActionProposal"
+import { WorkCard } from "./WorkCard"
 import { formatAnswerDate, metaOf, sourcesOf, textOf, titleOf } from "./answer-meta"
+import type { AgentAction } from "@/lib/ai/actions"
 
 /**
  * One assistant turn, presented as a document rather than a chat bubble: what
@@ -30,6 +33,8 @@ export function AnswerCard({
   onPickFollowUp,
   onAnswerQuestion,
   onSkipQuestion,
+  onApproveAction,
+  onDeclineAction,
 }: {
   message: UIMessage
   chatId: string
@@ -46,6 +51,8 @@ export function AnswerCard({
   onPickFollowUp: (question: string) => void
   onAnswerQuestion: (toolCallId: string, answer: string) => void
   onSkipQuestion: (toolCallId: string) => void
+  onApproveAction: (toolCallId: string, action: AgentAction) => Promise<void>
+  onDeclineAction: (toolCallId: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -55,7 +62,11 @@ export function AnswerCard({
   const text = textOf(message)
   const sources = sourcesOf(message)
   const meta = metaOf(message)
-  const questions = clarifyPartsOf(message)
+  // Once a question is answered it has nothing left to say -- the answer that
+  // follows speaks for it. Keeping it around would just be a Q&A card trailing
+  // behind every turn that needed to ask something first.
+  const questions = clarifyPartsOf(message).filter((p) => p.output === undefined)
+  const proposals = actionPartsOf(message)
   const title = useMemo(() => titleOf(message), [message])
   const created = useMemo(
     () => formatAnswerDate((message as any).createdAt ? new Date((message as any).createdAt) : new Date()),
@@ -123,6 +134,9 @@ export function AnswerCard({
     setExporting(false)
   }
 
+  // A turn that only asked a question, now answered, has nothing left to show.
+  if (!text && !questions.length && !proposals.length && !thinkingParts.length) return null
+
   return (
     <motion.div
       initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
@@ -188,12 +202,38 @@ export function AnswerCard({
                 question={part.input.question}
                 options={part.input.options}
                 allowFreeText={part.input.allowFreeText}
-                answer={part.output?.answer}
-                skipped={part.output !== undefined && part.output.answer === undefined}
                 disabled={streaming}
                 onAnswer={(answer) => onAnswerQuestion(part.toolCallId, answer)}
                 onSkip={() => onSkipQuestion(part.toolCallId)}
               />
+            </div>
+          ) : null
+        )}
+
+        {/* Outside the article for the same reason as the questions above: a
+            turn that only proposes a step has no answer text to sit inside. */}
+        {proposals.map((part) =>
+          part.input?.action && part.input.label && part.input.rationale ? (
+            <div key={part.toolCallId} className={text || questions.length ? "mt-3" : undefined}>
+              <ActionProposal
+                label={part.input.label}
+                rationale={part.input.rationale}
+                action={part.input.action as AgentAction}
+                output={part.output}
+                disabled={streaming}
+                onApprove={(action) => onApproveAction(part.toolCallId, action)}
+                onDecline={() => onDeclineAction(part.toolCallId)}
+              />
+              {/* The document the advocate was taken away to write, kept
+                  reachable from the thread that decided to write it. */}
+              {part.output?.approved && typeof (part.output as any).data?.draftId === "string" && (
+                <div className="mt-2">
+                  <WorkCard
+                    draftId={(part.output as any).data.draftId}
+                    title={String((part.output as any).data.title ?? "Document")}
+                  />
+                </div>
+              )}
             </div>
           ) : null
         )}

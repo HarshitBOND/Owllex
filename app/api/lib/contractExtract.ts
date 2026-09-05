@@ -8,6 +8,13 @@ const EXTRACT_TIMEOUT_MS = 240_000
 export type ExtractResult = {
   success: true
   text: string
+  /**
+   * One entry per page, joined by the backend into `text`.
+   *
+   * Optional on purpose: an older backend that predates this field still works,
+   * callers just lose page provenance rather than failing.
+   */
+  pages?: string[]
 }
 
 /**

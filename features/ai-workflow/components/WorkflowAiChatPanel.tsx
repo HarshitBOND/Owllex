@@ -19,7 +19,12 @@ import {
   type WorkflowNode,
   type WorkflowNodeTemplate,
 } from "@/components/ui/n8n-workflow-block-shadcnui"
-import { WORKFLOW_ICON_MAP, iconKeyFor, type WorkflowIconKey } from "@/lib/workflow-icon-registry"
+import { WORKFLOW_ICON_MAP, type WorkflowIconKey } from "@/lib/workflow-icon-registry"
+import {
+  layoutNodes,
+  serializeNodes,
+  type SerializedWorkflowNode,
+} from "@/features/ai-workflow/workflow-serialize"
 import { MODELS, DEFAULT_MODEL, type ModelKey } from "@/lib/ai/models"
 import { useAllowedModels } from "@/hooks/useAllowedModels"
 
@@ -29,35 +34,13 @@ const QUICK_ACTIONS = [
   "Add approval step before final response",
 ]
 
-const NODE_WIDTH = 200
-const NODE_GAP = 50
-
-type ProposedNode = {
-  id: string
-  type: "trigger" | "action" | "condition"
-  title: string
-  description: string
-  icon: string
-  color: string
-}
+type ProposedNode = SerializedWorkflowNode
 
 type ProposeWorkflowInput = {
   nodes?: ProposedNode[]
   connections?: { from: string; to: string }[]
   summary?: string
   suggestions?: string[]
-}
-
-function layoutNodes(nodes: ProposedNode[]): WorkflowNode[] {
-  return nodes.map((n, i) => ({
-    id: n.id,
-    type: n.type,
-    title: n.title,
-    description: n.description,
-    icon: WORKFLOW_ICON_MAP[n.icon as WorkflowIconKey] ?? WORKFLOW_ICON_MAP.sparkles,
-    color: n.color,
-    position: { x: i * (NODE_WIDTH + NODE_GAP), y: 100 },
-  }))
 }
 
 function WorkflowPreviewChain({ nodes }: { nodes: ProposedNode[] }) {
@@ -97,6 +80,8 @@ interface WorkflowAiChatPanelProps {
   pinned?: boolean
   onTogglePin?: () => void
   onClose?: () => void
+  /** A brief to start building from, sent once when the panel opens. */
+  seedPrompt?: string
 }
 
 export interface WorkflowAiChatPanelHandle {
@@ -112,7 +97,9 @@ const WorkflowAiChatPanel = forwardRef<WorkflowAiChatPanelHandle, WorkflowAiChat
   pinned = false,
   onTogglePin,
   onClose,
+  seedPrompt,
 }, ref) {
+  const seeded = useRef(false)
   const [value, setValue] = useState("")
   const [tab, setTab] = useState<"assistant" | "library">("assistant")
   const [model, setModel] = useState<ModelKey>(DEFAULT_MODEL)
@@ -156,14 +143,7 @@ const WorkflowAiChatPanel = forwardRef<WorkflowAiChatPanelHandle, WorkflowAiChat
           body: {
             model,
             workflow: {
-              nodes: wf.nodes.map((n) => ({
-                id: n.id,
-                type: n.type,
-                title: n.title,
-                description: n.description,
-                icon: iconKeyFor(n.icon),
-                color: n.color,
-              })),
+              nodes: serializeNodes(wf.nodes),
               connections: wf.connections,
             },
           },
@@ -176,6 +156,16 @@ const WorkflowAiChatPanel = forwardRef<WorkflowAiChatPanelHandle, WorkflowAiChat
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
   }, [messages, status])
+
+  // Arriving from an approved "build the workflow" step: the brief that was
+  // agreed in chat starts the build here, once, so the advocate lands on a
+  // canvas already working rather than an empty prompt box. Mirrors how a
+  // seeded draft starts itself in the document editor.
+  useEffect(() => {
+    if (seeded.current || !seedPrompt || busy || messages.length > 0) return
+    seeded.current = true
+    send(seedPrompt)
+  }, [seedPrompt, busy, messages.length, send])
 
   // Auto-apply a workflow the moment the model finishes proposing it there is
   // nothing destructive here (unlike a document redline), so no accept step.

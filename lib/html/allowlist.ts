@@ -7,7 +7,10 @@ export const ALLOWED_TAGS: string[] = [
 
 // `style` survives only so TipTap's TextAlign has a serialisation; both
 // sanitizers narrow it to a single text-align declaration and drop the rest.
-export const ALLOWED_ATTR: string[] = ["href", "target", "rel", "colspan", "rowspan", "style"]
+// `data-page` records which page of the uploaded file a block came from; it is
+// inert data with no href or script surface, and the citation chips are lost
+// the moment a sanitiser pass strips it.
+export const ALLOWED_ATTR: string[] = ["href", "target", "rel", "colspan", "rowspan", "style", "data-page"]
 
 export const ALLOWED_HREF = /^(?:https?:|mailto:|tel:|#|\/)/i
 

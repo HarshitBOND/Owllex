@@ -142,6 +142,65 @@ export async function recordFacts(opts: {
 }
 
 /**
+ * Records facts the assistant established in conversation and the advocate
+ * approved, rather than ones typed into a form.
+ *
+ * Kept separate from recordFacts because that one starts from a template's
+ * fields and flattens their values; there is no template here, just keyed facts
+ * the advocate accepted by approving the action. The supersession rule is the
+ * same and matters for the same reason: changing an answer must leave the old
+ * one readable rather than overwrite it.
+ *
+ * These land with sourceType "ai". That is deliberately distinguishable in the
+ * corpus UI from a value a human typed -- the advocate approved the action, but
+ * the wording came from a model, and a reader deserves to know which is which.
+ */
+export async function recordAgentFacts(opts: {
+  clerkUid: string
+  corpusId: string
+  facts: { key: string; label: string; value: string }[]
+}): Promise<{ written: number; skipped: number }> {
+  const { clerkUid, corpusId } = opts
+
+  let written = 0
+  let skipped = 0
+
+  for (const fact of opts.facts) {
+    const key = fact.key.trim()
+    const value = fact.value.trim()
+    if (!key || !value) {
+      skipped++
+      continue
+    }
+
+    const current = await CorpusFact.findOne({ clerkUid, corpusId, key, supersededAt: null })
+
+    if (current) {
+      if (current.value === value) continue
+      current.supersededAt = new Date()
+      await current.save()
+    }
+
+    await CorpusFact.create({
+      clerkUid,
+      corpusId,
+      key,
+      label: fact.label?.trim() || key,
+      value,
+      valueType: "text",
+      sourceType: "ai",
+      sourceDraftId: null,
+      sourceTemplateId: null,
+      sourceTemplateVersion: 0,
+      confidence: 1,
+    })
+    written++
+  }
+
+  return { written, skipped }
+}
+
+/**
  * Exact-match lookup used before any retrieval or model call.
  *
  * On a corpus that has been used before, this alone answers most of a repeat

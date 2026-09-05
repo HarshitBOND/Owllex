@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { REVISIONS_FIELD, type RevisionDoc } from "./revision"
 
 export type IssueSeverity = "critical" | "warning" | "suggestion" | "info"
 
@@ -26,6 +27,9 @@ export interface ContractReviewDoc {
   issues: ContractIssueDoc[]
   summary: { riskLevel: "Low" | "Medium" | "High"; summary: string; recommendations: string[] } | null
   chatMessages: unknown[]
+  /** Pages in the uploaded original; 0 when the backend reported none. */
+  pageCount: number
+  revisions: RevisionDoc[]
   version: number
   createdAt: Date
   updatedAt: Date
@@ -75,6 +79,8 @@ const ContractReviewSchema = new mongoose.Schema(
       default: null,
     },
     chatMessages: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    pageCount: { type: Number, default: 0 },
+    revisions: REVISIONS_FIELD,
     version: { type: Number, default: 0 },
   },
   { timestamps: true },
@@ -82,7 +88,22 @@ const ContractReviewSchema = new mongoose.Schema(
 
 ContractReviewSchema.index({ clerkUid: 1, updatedAt: -1 })
 
-const ContractReview = (mongoose.models["ContractReview"] ||
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const existingContractReviewModel = mongoose.models["ContractReview"] as mongoose.Model<any> | undefined
+
+// Dev hot reload keeps the previously compiled schema, so a newly added path is
+// missing until the process restarts -- and a `revisions` write would silently
+// vanish. Same guard the other models use.
+if (existingContractReviewModel) {
+  if (!existingContractReviewModel.schema.path("revisions")) {
+    existingContractReviewModel.schema.add({ revisions: REVISIONS_FIELD })
+  }
+  if (!existingContractReviewModel.schema.path("pageCount")) {
+    existingContractReviewModel.schema.add({ pageCount: { type: Number, default: 0 } })
+  }
+}
+
+const ContractReview = (existingContractReviewModel ||
   mongoose.model("ContractReview", ContractReviewSchema)) as mongoose.Model<ContractReviewDoc>
 
 export default ContractReview

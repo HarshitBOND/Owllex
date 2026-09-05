@@ -57,23 +57,40 @@ interface AiAssistantPanelProps {
   /** Field key to the form's own wording, so values are labelled the way the court does. */
   fieldLabels?: Record<string, string>
   onClose: () => void
+  /**
+   * Set when the panel is rendered inside DraftRail: the rail owns the card
+   * chrome and the width, so the panel must not paint a second border or
+   * fight it over how wide the column is.
+   */
+  embedded?: boolean
+  /** Lifted so an embedded parent can size itself to the expanded state. */
+  expanded?: boolean
+  onExpandedChange?: (next: boolean) => void
 }
 
-export default function AiAssistantPanel({
-  draftId,
-  initialMessages,
-  seedPrompt,
-  getDocumentHtml,
-  onApply,
-  onApplyFields,
-  fieldLabels,
-  onClose,
-}: AiAssistantPanelProps) {
+export default function AiAssistantPanel(props: AiAssistantPanelProps) {
+  const {
+    draftId,
+    initialMessages,
+    seedPrompt,
+    getDocumentHtml,
+    onApply,
+    onApplyFields,
+    fieldLabels,
+    onClose,
+  } = props
   const router = useRouter()
   const [value, setValue] = useState("")
   const [model, setModel] = useState<ModelKey>(DEFAULT_MODEL)
   const allowedModels = useAllowedModels()
-  const [expanded, setExpanded] = useState(false)
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false)
+  // Controlled when a parent passes `expanded`, self-managed otherwise, so the
+  // standalone usage keeps working untouched.
+  const expanded = props.expanded ?? uncontrolledExpanded
+  const setExpanded = (next: boolean) => {
+    setUncontrolledExpanded(next)
+    props.onExpandedChange?.(next)
+  }
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [applied, setApplied] = useState<Record<string, "applied" | "discarded">>({})
   const [otherDrafts, setOtherDrafts] = useState<{ id: string; title: string }[]>([])
@@ -207,8 +224,13 @@ export default function AiAssistantPanel({
   return (
     <div
       className={cn(
-        "w-full shrink-0 h-[70vh] lg:h-full flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden transition-all duration-300",
-        expanded ? "lg:w-[720px]" : "lg:w-[400px] xl:w-[430px]"
+        "w-full flex flex-col overflow-hidden",
+        props.embedded
+          ? "h-full"
+          : cn(
+              "shrink-0 h-[70vh] lg:h-full rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card transition-all duration-300",
+              expanded ? "lg:w-[720px]" : "lg:w-[400px] xl:w-[430px]"
+            )
       )}
     >
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200 dark:border-border shrink-0">
@@ -251,7 +273,7 @@ export default function AiAssistantPanel({
           <button
             type="button"
             title={expanded ? "Shrink panel" : "Expand panel"}
-            onClick={() => setExpanded((e) => !e)}
+            onClick={() => setExpanded(!expanded)}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-gray-100 dark:hover:bg-secondary transition-colors"
           >
             {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}

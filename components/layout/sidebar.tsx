@@ -249,7 +249,7 @@ const Sidebar = () => {
                 <div className="flex items-center min-w-0 flex-shrink-0">
                     {isMobile || isOpen ? (
                         <Image
-                            className="h-10 w-auto max-w-[168px] flex-shrink-0 object-contain object-left"
+                            className="h-16 w-auto max-w-[230px] flex-shrink-0 object-contain object-left"
                             src="/ravenslaw.png"
                             alt="Logo"
                             width={519}
@@ -259,11 +259,11 @@ const Sidebar = () => {
                         />
                     ) : (
                         <Image
-                            className="h-8 w-8 min-h-8 min-w-8 flex-shrink-0 object-contain"
-                            src="/logo.png"
+                            className="h-10 w-auto max-w-[90px] flex-shrink-0 object-contain object-left"
+                            src="/ravenslaw.png"
                             alt="Logo"
-                            width={32}
-                            height={32}
+                            width={519}
+                            height={151}
                             priority
                             loading="eager"
                         />

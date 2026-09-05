@@ -692,3 +692,84 @@
 .dark textarea {
   color-scheme: dark;
 }
+
+/*
+ * Tracked-changes redline (components/common/revisions/RedlineView.tsx).
+ * <ins>/<del> appear only in that read-only view -- they are not in the
+ * document allowlist and never reach saved content or an export.
+ */
+.redline-view del {
+  color: var(--color-red-600);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.redline-view ins {
+  color: var(--color-blue-600);
+  text-decoration: none;
+  background-color: color-mix(in oklab, var(--color-blue-600) 10%, transparent);
+}
+
+.dark .redline-view del {
+  color: var(--color-red-400);
+}
+
+.dark .redline-view ins {
+  color: var(--color-blue-400);
+  background-color: color-mix(in oklab, var(--color-blue-400) 15%, transparent);
+}
+
+.redline-view h1,
+.redline-view h2,
+.redline-view h3 {
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+}
+
+.redline-view p,
+.redline-view ul,
+.redline-view ol {
+  margin: 0.75em 0;
+}
+
+.redline-view ul,
+.redline-view ol {
+  padding-left: 1.5rem;
+}
+
+.redline-view ul {
+  list-style: disc;
+}
+
+.redline-view ol {
+  list-style: decimal;
+}
+
+/*
+ * Page citation chips (features/contract-review/components/pageAnchorExtension.ts).
+ * Rendered as ProseMirror widget decorations, so they sit in the document flow
+ * without being part of the document.
+ */
+.page-anchor-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  margin-right: 0.35rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.625rem;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+}
+
+.page-anchor-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

@@ -281,18 +281,21 @@ async def extract_document_text(
             f.write(content)
 
         try:
-            from rag.app.ingest.loader import load_text
+            from rag.app.ingest.loader import load_pages
         except ImportError:
             raise HTTPException(
                 status_code=503,
                 detail="RAG dependencies are not installed on this instance (run: uv sync --extra rag)",
             )
 
-        text = await run_in_threadpool(load_text, temp_path, ocr_mode)
+        pages = await run_in_threadpool(load_pages, temp_path, ocr_mode)
+        text = "\n\n".join(pages)
         if not text or not text.strip():
             raise HTTPException(status_code=422, detail="Nothing extractable in this document")
 
-        result = {"success": True, "text": text}
+        # `pages` is additive: callers that only read `text` are unaffected, and
+        # contract review uses it to tag each block with the page it came from.
+        result = {"success": True, "text": text, "pages": pages}
 
         # The caller can hand us the private-bucket key it wants this file stored
         # under. Doing the write here rather than in Next is what puts uploaded

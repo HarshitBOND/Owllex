@@ -62,7 +62,7 @@ def _ocr_pil_image(pil_image) -> str:
     return "\n".join(result.txts) if result and result.txts else ""
 
 
-def _load_pdf_text(path: Path, mode: ExtractionMode = "auto") -> str:
+def _load_pdf_pages(path: Path, mode: ExtractionMode = "auto") -> list[str]:
     """Extract a PDF page by page: its embedded text layer where one exists,
     OCR only for the pages that don't have one.
 
@@ -103,9 +103,29 @@ def _load_pdf_text(path: Path, mode: ExtractionMode = "auto") -> str:
 
             pages_text.append(text)
             page.close()
-        return "\n\n".join(pages_text)
+        return pages_text
     finally:
         pdf.close()
+
+
+def load_pages(path, mode: ExtractionMode = "auto") -> list[str]:
+    """Return the document as one string per page.
+
+    Only PDFs really have pages; every other format comes back as a single
+    element so callers can treat the shape uniformly. Contract review uses this
+    to tag each block of the extracted document with the page it came from,
+    which is what lets a citation chip open the original at the right place.
+    """
+    path = Path(path)
+    if path.suffix.lower() in PLAIN_TEXT_SUFFIXES:
+        return [path.read_text(encoding="utf-8", errors="replace")]
+    if path.suffix.lower() in IMAGE_SUFFIXES:
+        _normalize_image_orientation(path)
+        from PIL import Image
+
+        with Image.open(path) as img:
+            return [_ocr_pil_image(img)]
+    return _load_pdf_pages(path, mode)
 
 
 def load_text(path, mode: ExtractionMode = "auto"):
@@ -115,16 +135,7 @@ def load_text(path, mode: ExtractionMode = "auto"):
     alternative to OCR -- plain text is always read as-is, and images always
     need OCR since they have no embedded text layer to fall back to.
     """
-    path = Path(path)
-    if path.suffix.lower() in PLAIN_TEXT_SUFFIXES:
-        return path.read_text(encoding="utf-8", errors="replace")
-    if path.suffix.lower() in IMAGE_SUFFIXES:
-        _normalize_image_orientation(path)
-        from PIL import Image
-
-        with Image.open(path) as img:
-            return _ocr_pil_image(img)
-    return _load_pdf_text(path, mode)
+    return "\n\n".join(load_pages(path, mode))
 
 
 if __name__ == "__main__":

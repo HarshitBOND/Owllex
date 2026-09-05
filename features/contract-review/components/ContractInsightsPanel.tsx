@@ -65,8 +65,10 @@ export default function ContractInsightsPanel({
     { label: "Info", value: counts.info, style: severityStyles.info },
   ]
 
+  // Chrome (border, radius, background) belongs to ContractReviewRail now --
+  // this panel sits inside a tab there, and owning it twice double-borders.
   return (
-    <div className="w-full h-full flex flex-col rounded-xl border border-gray-200 dark:border-border bg-white dark:bg-card overflow-hidden">
+    <div className="w-full h-full flex flex-col overflow-hidden">
       <div className="border-b border-gray-200 dark:border-border shrink-0">
         <button
           type="button"

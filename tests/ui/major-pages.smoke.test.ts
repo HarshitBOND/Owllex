@@ -11,6 +11,7 @@ const mockState = vi.hoisted(() => ({
   useAuth: vi.fn(),
   useSidebar: vi.fn(),
   useAiChat: vi.fn(),
+  useChatThread: vi.fn(),
 }))
 
 vi.mock("next/dynamic", () => ({
@@ -34,6 +35,7 @@ vi.mock("@/contexts/SidebarContext", () => ({
 
 vi.mock("@/contexts/AiChatContext", () => ({
   useAiChat: mockState.useAiChat,
+  useChatThread: mockState.useChatThread,
 }))
 
 vi.mock("@/components/layout/sidebar", () => ({
@@ -101,6 +103,7 @@ import AdminDashboardPage from "@/app/admin/dashboard/page"
 import SupportDashboardPage from "@/app/support/dashboard/page"
 import CorpusPage from "@/app/corpus/page"
 import AiWorkflowPage from "@/app/ai-workflow/page"
+import ContractReviewPage from "@/app/contract-review/page"
 
 describe("major page smoke tests", () => {
   beforeEach(() => {
@@ -109,6 +112,7 @@ describe("major page smoke tests", () => {
     mockState.useUser.mockReset()
     mockState.useSidebar.mockReset()
     mockState.useAiChat.mockReset()
+    mockState.useChatThread.mockReset()
 
     mockState.useSidebar.mockReturnValue({ isOpen: true })
     mockState.useUser.mockReturnValue({
@@ -134,8 +138,36 @@ describe("major page smoke tests", () => {
       activeCorpusId: null,
       setActiveCorpusId: vi.fn(),
     })
+    mockState.useChatThread.mockReturnValue({
+      messages: [],
+      sendMessage: vi.fn(),
+      setMessages: vi.fn(),
+      status: "ready",
+      stop: vi.fn(),
+      regenerate: vi.fn(),
+      error: null,
+      clearError: vi.fn(),
+      busy: false,
+      model: "balanced",
+      setModel: vi.fn(),
+      loadingHistory: false,
+      answerQuestion: vi.fn(),
+      skipQuestion: vi.fn(),
+      approveAction: vi.fn(),
+      declineAction: vi.fn(),
+      settleBeforeSend: vi.fn(),
+    })
     mockState.redirect.mockImplementation(() => null)
     mockState.useAuth.mockReturnValue({ getToken: vi.fn().mockResolvedValue("test-token") })
+  })
+
+  it("renders contract review page shell", () => {
+    const markup = renderToString(React.createElement(ContractReviewPage))
+
+    // Navbar and Sidebar are mocked above, so the shell is all that is
+    // assertable here -- enough to catch the page failing to render at all.
+    expect(markup).toContain("navbar-mock")
+    expect(markup).toContain("sidebar-mock")
   })
 
   it("renders landing page layout", () => {

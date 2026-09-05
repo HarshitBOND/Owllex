@@ -1,5 +1,6 @@
 import { tool, type UIMessageStreamWriter } from "ai"
 import { z } from "zod"
+import { proposeActionInputSchema } from "./actions"
 import { findCases, findClients } from "./corpus-match"
 import { formatNumberedPassage, type SourceRegistry } from "./sources"
 import { searchCorpus } from "@/app/api/lib/corpusBackend"
@@ -100,6 +101,16 @@ export function legalTools(clerkUid: string, corpusId?: string | null, sink?: So
       }),
       // No execute, by design: the run stops on this call and the advocate's
       // answer, added from the UI, is what resumes it.
+    }),
+
+    proposeAction: tool({
+      description:
+        "Offer to carry out the next step of the matter in the app: remember it as a corpus, draft an instrument, build the workflow, print a draft, or email one out. This renders as a card the advocate approves in a click, and the app then does the work and takes them to it. Propose one action, only once you have the facts it needs, and say nothing else in the same turn -- their decision comes back before you continue. Never propose printing or emailing a document that has not been drafted in this conversation.",
+      inputSchema: proposeActionInputSchema,
+      // No execute, by design, and for a stronger reason than the question
+      // above: these actions create records, write into the workspace and send
+      // mail. The run stops here and the advocate's approval is what resumes it,
+      // so nothing outward-facing ever happens on the model's say-so alone.
     }),
 
     ...(corpusId

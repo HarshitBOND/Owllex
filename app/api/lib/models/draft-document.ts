@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { DOCUMENT_CATEGORIES, type DocumentCategory } from "@/lib/document-categories";
+import { REVISIONS_FIELD, type RevisionDoc } from "./revision";
 
 /**
  * fieldValues is the document's real content; contentHtml is what that renders
@@ -30,6 +31,7 @@ export interface DraftDocumentDoc {
   category: DocumentCategory | null;
   seedPrompt: string;
   chatMessages: unknown[];
+  revisions: RevisionDoc[];
   typography: { fontFamily: string; fontSizePt: number };
   wordCount: number;
   version: number;
@@ -59,6 +61,7 @@ const DraftDocumentSchema = new mongoose.Schema(
     category: { type: String, enum: [...DOCUMENT_CATEGORIES, null], default: null },
     seedPrompt: { type: String, default: "", maxlength: 2000 },
     chatMessages: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    revisions: REVISIONS_FIELD,
     typography: {
       fontFamily: { type: String, default: "Georgia" },
       fontSizePt: { type: Number, default: 12, min: 8, max: 24 },
@@ -72,7 +75,16 @@ const DraftDocumentSchema = new mongoose.Schema(
 DraftDocumentSchema.index({ clerkUid: 1, updatedAt: -1 });
 DraftDocumentSchema.index({ clerkUid: 1, status: 1, updatedAt: -1 });
 
-const DraftDocument = (mongoose.models["DraftDocument"] ||
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const existingDraftDocumentModel = mongoose.models["DraftDocument"] as mongoose.Model<any> | undefined;
+
+// See the note in contract-review.ts: hot reload keeps the old schema, so a new
+// path has to be added onto it explicitly or writes to it are dropped.
+if (existingDraftDocumentModel && !existingDraftDocumentModel.schema.path("revisions")) {
+  existingDraftDocumentModel.schema.add({ revisions: REVISIONS_FIELD });
+}
+
+const DraftDocument = (existingDraftDocumentModel ||
   mongoose.model("DraftDocument", DraftDocumentSchema)) as mongoose.Model<DraftDocumentDoc>;
 
 export default DraftDocument;

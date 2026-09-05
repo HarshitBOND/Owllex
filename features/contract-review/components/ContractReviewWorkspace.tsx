@@ -6,9 +6,12 @@ import { FileText } from "lucide-react"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import ContractUploadState from "./ContractUploadState"
 import ContractDocumentPanel from "./ContractDocumentPanel"
-import ContractInsightsPanel from "./ContractInsightsPanel"
+import ContractReviewRail from "./ContractReviewRail"
 import ContractFixWithAiPanel from "./ContractFixWithAiPanel"
 import { useDraftAutosave } from "@/features/draft-documents/hooks/useDraftAutosave"
+import { useRevisions } from "@/hooks/useRevisions"
+import { useEditorSelection } from "@/hooks/useEditorSelection"
+import type { Revision } from "@/hooks/useRevisions"
 import {
   DEFAULT_TYPOGRAPHY,
   type ContractFileMeta,
@@ -78,6 +81,7 @@ interface UploadResponse {
   id: string
   contentHtml: string
   typography: typeof DEFAULT_TYPOGRAPHY
+  pageCount: number
   version: number
   fileMeta: ContractFileMeta
 }
@@ -89,9 +93,36 @@ interface AnalyzeResponse {
   summary: ContractSummary
 }
 
+interface ReviewResponse {
+  success: boolean
+  error?: string
+  review: {
+    id: string
+    fileName: string
+    size: number
+    contentHtml: string
+    typography: typeof DEFAULT_TYPOGRAPHY
+    status: Status
+    errorMessage: string
+    issues: ContractIssue[]
+    summary: ContractSummary | null
+    revisions: Revision[]
+    pageCount: number
+    version: number
+  }
+}
+
+export interface ContractReviewMeta {
+  revisionCount: number
+  sourceCount: number
+  createdAt: string
+}
+
 interface ContractReviewWorkspaceProps {
   onStatusChange?: (status: "idle" | "analyzing" | "ready") => void
   onReviewIdChange?: (reviewId: string | null) => void
+  /** Feeds the header's "Draft · N revisions · 1 source · Created …" line. */
+  onMetaChange?: (meta: ContractReviewMeta | null) => void
 }
 
 /** Panels only split side-by-side at the same `xl` breakpoint the rest of this layout uses. */
@@ -107,7 +138,11 @@ function useIsWideScreen() {
   return isWide
 }
 
-export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChange }: ContractReviewWorkspaceProps) {
+export default function ContractReviewWorkspace({
+  onStatusChange,
+  onReviewIdChange,
+  onMetaChange,
+}: ContractReviewWorkspaceProps) {
   const editorRef = useRef<Editor | null>(null)
   const isWideScreen = useIsWideScreen()
 
@@ -119,13 +154,35 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
   const [contentHtml, setContentHtml] = useState("")
   const [typography, setTypography] = useState(DEFAULT_TYPOGRAPHY)
   const [version, setVersion] = useState(0)
+  const [pageCount, setPageCount] = useState(0)
   const [issues, setIssues] = useState<ContractIssue[]>([])
   const [summary, setSummary] = useState<ContractSummary | null>(null)
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
   const [resolvedIssueIds, setResolvedIssueIds] = useState<Set<string>>(new Set())
   const [chatOpen, setChatOpen] = useState(false)
+  const [showEdits, setShowEdits] = useState(false)
+  const editorSelection = useEditorSelection()
 
   const autosave = useDraftAutosave(reviewId ?? "pending", version, "/api/contract-review")
+
+  /**
+   * Puts a finished revision into the editor.
+   *
+   * The server has already written contentHtml and bumped version, so this
+   * syncs local state to that rather than queueing another save -- autosaving
+   * the same text back would just lose the race with its own PATCH.
+   */
+  const applyRevision = (html: string, nextRevisions: Revision[]) => {
+    editorRef.current?.commands.setContent(html)
+    setContentHtml(html)
+    setVersion((current) => current + 1)
+    setShowEdits(nextRevisions.length > 0)
+  }
+
+  const revisionsApi = useRevisions(reviewId, "/api/contract-review", {
+    currentHtml: contentHtml,
+    onApplied: applyRevision,
+  })
 
   useEffect(() => {
     const uiStatus = status === "idle" ? "idle" : status === "ready" ? "ready" : "analyzing"
@@ -135,6 +192,74 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
   useEffect(() => {
     onReviewIdChange?.(reviewId)
   }, [reviewId, onReviewIdChange])
+
+  useEffect(() => {
+    if (!fileMeta) {
+      onMetaChange?.(null)
+      return
+    }
+    onMetaChange?.({
+      revisionCount: revisionsApi.revisions.length,
+      sourceCount: 1,
+      createdAt: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+    })
+  }, [fileMeta, revisionsApi.revisions.length, onMetaChange])
+
+  // Puts the review in the URL so a refresh (or a shared link) reopens it.
+  // replaceState rather than a router push: this is the same page, and a back
+  // button that walked through every upload would be noise.
+  useEffect(() => {
+    if (!reviewId) return
+    const url = new URL(window.location.href)
+    if (url.searchParams.get("id") === reviewId) return
+    url.searchParams.set("id", reviewId)
+    window.history.replaceState(null, "", url.toString())
+  }, [reviewId])
+
+  /**
+   * Reopens the review named in ?id= .
+   *
+   * Until now the workspace only ever held the review created in this session:
+   * the GET route existed but nothing called it, so a refresh dropped the
+   * document, the issues and the chat history. Revisions would have gone the
+   * same way, and a timeline that vanishes on reload is worse than none.
+   */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id")
+    if (!id) return
+
+    let cancelled = false
+    setStatus("extracting")
+    ;(async () => {
+      const result = await callRoute<ReviewResponse>(`/api/contract-review/${id}`, { method: "GET" })
+      if (cancelled) return
+
+      if (!result.ok || !result.data.success) {
+        setUploadError(result.ok ? result.data.error || "Couldn't open that review" : result.message)
+        setStatus("idle")
+        return
+      }
+
+      const { review } = result.data
+      setReviewId(review.id)
+      setContentHtml(review.contentHtml)
+      setTypography(review.typography)
+      setVersion(review.version)
+      setPageCount(review.pageCount ?? 0)
+      setIssues(review.issues)
+      setSummary(review.summary)
+      setFileMeta({ name: review.fileName, size: review.size, uploadedLabel: "Saved review" })
+      revisionsApi.setRevisions(review.revisions ?? [])
+      setStatus(review.status === "error" ? "error" : "ready")
+      if (review.status === "error") setAnalyzeError(review.errorMessage)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+    // Runs once on mount: the id comes from the URL, not from state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const runAnalyze = async (id: string) => {
     setStatus("analyzing")
@@ -186,6 +311,7 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
     setContentHtml(data.contentHtml)
     setTypography(data.typography)
     setVersion(data.version)
+    setPageCount(data.pageCount ?? 0)
     setFileMeta(data.fileMeta)
 
     await runAnalyze(data.id)
@@ -198,6 +324,7 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
     setContentHtml("")
     setTypography(DEFAULT_TYPOGRAPHY)
     setVersion(0)
+    setPageCount(0)
     setIssues([])
     setSummary(null)
     setSelectedIssueId(null)
@@ -205,6 +332,12 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
     setUploadError(null)
     setAnalyzeError(null)
     setChatOpen(false)
+    setShowEdits(false)
+    revisionsApi.setRevisions([])
+
+    const url = new URL(window.location.href)
+    url.searchParams.delete("id")
+    window.history.replaceState(null, "", url.toString())
   }
 
   const handleRerun = () => {
@@ -273,6 +406,7 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
             onContentChange={handleContentChange}
             onEditorReady={(editor) => {
               editorRef.current = editor
+              editorSelection.attach(editor)
             }}
             saveStatus={autosave.status}
             onRetrySave={autosave.retry}
@@ -283,6 +417,8 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
             onReupload={handleReupload}
             onRerun={handleRerun}
             isReanalyzing={status === "analyzing"}
+            showEdits={showEdits}
+            redlineHtml={revisionsApi.redlineHtml}
           />
         </Panel>
         <PanelResizeHandle
@@ -301,9 +437,9 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
           />
         </PanelResizeHandle>
         <Panel defaultSize={30} minSize={22}>
-          <ContractInsightsPanel
+          <ContractReviewRail
             isAnalyzing={status === "analyzing"}
-            error={status === "error" ? analyzeError : null}
+            analyzeError={status === "error" ? analyzeError : null}
             issues={issues}
             summary={summary}
             selectedIssueId={selectedIssueId}
@@ -311,6 +447,25 @@ export default function ContractReviewWorkspace({ onStatusChange, onReviewIdChan
             resolvedIssueIds={resolvedIssueIds}
             onToggleResolved={toggleResolved}
             onOpenChat={() => setChatOpen(true)}
+            revisions={revisionsApi.revisions}
+            pendingInstruction={revisionsApi.pendingInstruction}
+            revisionError={revisionsApi.error}
+            onAddRevision={(instruction) => revisionsApi.addRevision(instruction, editorSelection.selection)}
+            onCancelRevision={revisionsApi.cancel}
+            onRevert={revisionsApi.revert}
+            showEdits={showEdits}
+            onShowEditsChange={setShowEdits}
+            selection={editorSelection.selection}
+            sources={
+              fileMeta
+                ? [
+                    {
+                      label: fileMeta.name,
+                      sublabel: pageCount ? `${pageCount} page${pageCount === 1 ? "" : "s"}` : "Original upload",
+                    },
+                  ]
+                : []
+            }
           />
         </Panel>
       </PanelGroup>
