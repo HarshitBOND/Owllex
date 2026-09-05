@@ -17,16 +17,21 @@ export function useRagIngestData() {
     setStatusError(null)
     try {
       const res = await fetch("/api/admin/rag/status")
-      const data = await res.json()
+      let data: RagStatus & { success?: boolean; error?: string }
+      try {
+        data = await res.json()
+      } catch {
+        throw new Error(`Server returned an invalid response (status ${res.status})`)
+      }
       if (data.success) {
         setStatus(data)
       } else {
         setStatus(null)
         setStatusError(data.error || "Could not read RAG status")
       }
-    } catch {
+    } catch (err) {
       setStatus(null)
-      setStatusError("Network error while reading RAG status")
+      setStatusError(err instanceof Error ? err.message : "Network error while reading RAG status")
     } finally {
       setStatusLoading(false)
     }

@@ -34,7 +34,16 @@ const RATE_LIMIT_MAX = 60; // 60 requests per minute
 export async function requireAdmin(
   request?: NextRequest
 ): Promise<AdminUser | NextResponse> {
-  const { userId } = await auth();
+  let userId: string | null;
+  try {
+    ({ userId } = await auth());
+  } catch (error) {
+    console.error("Admin auth check failed:", error);
+    return NextResponse.json(
+      { success: false, error: "Authentication service unavailable" },
+      { status: 503 }
+    );
+  }
 
   if (!userId) {
     logSecurityEvent({
@@ -71,12 +80,21 @@ export async function requireAdmin(
     );
   }
 
-  const clerkUser = await currentUser();
-  const clerkEmail =
-    clerkUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || "";
+  let user: unknown;
+  let clerkEmail = "";
+  try {
+    const clerkUser = await currentUser();
+    clerkEmail = clerkUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || "";
 
-  await connectMongoWithRetry();
-  const user = await User.findOne({ clerkUid: userId }).lean();
+    await connectMongoWithRetry();
+    user = await User.findOne({ clerkUid: userId }).lean();
+  } catch (error) {
+    console.error("Admin user lookup failed:", error);
+    return NextResponse.json(
+      { success: false, error: "Database unavailable" },
+      { status: 503 }
+    );
+  }
 
   if (!user) {
     logSecurityEvent({

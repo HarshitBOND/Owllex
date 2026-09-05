@@ -74,8 +74,12 @@ export function renderPdf(
       }
 
       if (block.kind === "paragraph") {
+        // Ragged-right reads as a draft; a typeset note -- the LaTeX look this
+        // is meant to match -- justifies running prose. Headings and list
+        // markers keep their own alignment below, where justify would just
+        // stretch a single short line.
         writeRuns(block.runs, base, {
-          align: block.align,
+          align: block.align === "left" ? "justify" : block.align,
           lineGap: 3,
           indent: block.quote ? 24 : 0,
           width: block.quote ? width - 24 : width,

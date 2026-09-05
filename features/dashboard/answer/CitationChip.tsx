@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { ChatSource } from "@/lib/ai/sources"
 
@@ -17,10 +18,20 @@ export function CitationChip({
   source?: ChatSource
   onSelect?: (n: number) => void
 }) {
+  // A long answer can carry dozens of citation markers, and each Popover mounts
+  // its own Radix PopperAnchor. Mounting them all up front makes them all fire
+  // their anchor-position effect in the same commit, which trips React's
+  // nested-update-depth check as a false-positive infinite loop. Deferring the
+  // Popover to the first hover/focus keeps only the ones actually in use live.
+  const [ready, setReady] = useState(false)
+  const activate = () => setReady(true)
+
   const chip = (
     <button
       type="button"
       onClick={() => onSelect?.(n)}
+      onMouseEnter={activate}
+      onFocus={activate}
       aria-label={source ? `Source ${n}: ${source.title}` : `Source ${n}`}
       className="inline-flex items-center justify-center align-super mx-0.5 min-w-[1.15rem] h-[1.15rem] px-1 rounded text-[10px] font-medium tabular-nums bg-accent/12 text-accent hover:bg-accent/25 transition-colors cursor-pointer"
     >
@@ -28,7 +39,7 @@ export function CitationChip({
     </button>
   )
 
-  if (!source) return chip
+  if (!source || !ready) return chip
 
   return (
     <Popover>

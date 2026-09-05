@@ -67,7 +67,10 @@ export async function renderDocx(
       children.push(
         new Paragraph({
           children: childrenOf(block.runs, size),
-          alignment: alignmentOf(block.align),
+          // Justify running prose (unset alignment) so the export reads like a
+          // typeset note rather than a ragged-right chat dump; an explicit
+          // center/right from the source still wins.
+          alignment: block.align === "left" ? AlignmentType.JUSTIFIED : alignmentOf(block.align),
           spacing: { after: 160 },
           indent: block.quote ? { left: 480 } : undefined,
         })

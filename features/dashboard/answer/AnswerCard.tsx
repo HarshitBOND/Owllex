@@ -104,16 +104,21 @@ export function AnswerCard({
       const res = await fetch(
         `/api/ai/conversations/${chatId}/export?format=${format}&messageId=${encodeURIComponent(message.id)}`
       )
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.error || `Export failed (${res.status})`)
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement("a")
       anchor.href = url
       anchor.download = `${title.replace(/[^\w\s-]+/g, "").trim().slice(0, 60) || "answer"}.${format}`
+      document.body.appendChild(anchor)
       anchor.click()
+      anchor.remove()
       URL.revokeObjectURL(url)
-    } catch {
-      toast.error("Couldn't export that answer.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't export that answer.")
     }
     setExporting(false)
   }

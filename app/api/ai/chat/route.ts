@@ -18,8 +18,8 @@ import CorpusDocument from "@/app/api/lib/models/corpus-document"
 import Case from "@/app/api/lib/models/case"
 import Client from "@/app/api/lib/models/client"
 import { modelFor } from "@/lib/ai/provider"
-import { resolveModel } from "@/lib/ai/models"
-import { CHAT_SYSTEM_PROMPT, corpusContextBlock } from "@/lib/ai/prompts"
+import { MODELS, resolveModel } from "@/lib/ai/models"
+import { ANSWER_LENGTH_RULES, CHAT_SYSTEM_PROMPT, corpusContextBlock } from "@/lib/ai/prompts"
 import { CASE_FIELDS, CLIENT_FIELDS } from "@/lib/ai/corpus-match"
 import { legalTools } from "@/lib/ai/tools"
 import { createSourceRegistry } from "@/lib/ai/sources"
@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
       settleDanglingToolCalls(stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[]))
     )),
     ...(corpusContext ? [{ role: "user" as const, content: corpusContext }] : []),
+    { role: "user" as const, content: ANSWER_LENGTH_RULES[modelKey] },
   ]
 
   const stream = createUIMessageStream<UIMessage>({
@@ -136,7 +137,8 @@ export async function POST(request: NextRequest) {
         system,
         messages: modelMessages,
         tools: legalTools(userContext.clerkUid, activeCorpusId, { registry, writer }),
-        stopWhen: stepCountIs(6),
+        stopWhen: stepCountIs(MODELS[modelKey].maxSteps),
+        maxOutputTokens: MODELS[modelKey].maxOutputTokens,
         experimental_transform: smoothStream({ chunking: "word" }),
         providerOptions: {
           openai: { reasoningSummary: "auto" },
