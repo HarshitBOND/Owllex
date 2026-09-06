@@ -45,7 +45,7 @@ export function BillingPanel({
       <RowGroup title="Plan">
         <Row label="Current plan">
           <div className="flex items-center gap-2">
-            <Pill tone="brand">{subscription?.plan || "free"}</Pill>
+            <Pill tone="brand">{subscription?.plan || "trial"}</Pill>
             <Pill tone={subscription?.status === "active" ? "neutral" : "warn"}>
               {subscription?.status || "active"}
             </Pill>

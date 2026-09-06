@@ -118,7 +118,7 @@ const Dashboard = () => {
 
   const stats = data?.stats || { totalCases: 0, totalClients: 0, pendingTasks: 0, completedTasks: 0, upcomingHearings: 0 }
   const subscription = data?.subscription || {
-    plan: "free",
+    plan: "trial",
     status: "active",
     billingCycle: "monthly",
     caseLimit: 10,

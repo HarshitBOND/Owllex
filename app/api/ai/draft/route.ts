@@ -12,7 +12,7 @@ import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import { renderTemplate, missingRequired } from "@/lib/templates/render"
 import type { TemplateField } from "@/lib/templates/fields"
 import { modelFor } from "@/lib/ai/provider"
-import { resolveModel } from "@/lib/ai/models"
+import { resolveModel, OUTPUT_CAPS, AI_MAX_RETRIES } from "@/lib/ai/models"
 import {
   DRAFTING_SYSTEM_PROMPT,
   DRAFT_TOOL_RULES,
@@ -275,21 +275,33 @@ export async function POST(request: NextRequest) {
             }),
           }
         : {}),
-      // No execute here either: the questions render to the advocate, who answers
-      // in their next message rather than resolving a tool result.
-      askClarification: tool({
+      // No execute, by design: the run stops on this call and the advocate's
+      // answer, added from the UI, is what resumes it -- the same contract as
+      // the askClarifyingQuestion tool in main chat and contract review.
+      askClarifyingQuestion: tool({
         description:
-          "Ask the advocate for facts you need before you can draft a document that's actually usable, instead of guessing them. Use this only when a missing fact would make the draft wrong — who the parties are, what the document covers, a specific date or amount — never for a stylistic or boilerplate choice you can reasonably default.",
+          "Ask the advocate the one fact you need before you can draft a document that's actually usable, instead of guessing it. Use this only when a missing fact would make the draft wrong — who the parties are, what the document covers, a specific date or amount — never for a stylistic or boilerplate choice you can reasonably default. This renders as a card they answer in a click, so use it instead of putting the question in your reply. Give options when the answer is one of a known set, and leave them out when it is a fact you cannot enumerate. Ask one question at a time, never ask for something they have already told you, and say nothing else in the same turn -- the answer comes back before you continue.",
         inputSchema: z.object({
-          questions: z
-            .array(z.string().min(1).max(200))
-            .min(1)
-            .max(4)
-            .describe("Short, specific questions, one per missing fact."),
+          question: z.string().min(1).max(300).describe("The question, in one line, as counsel would put it"),
+          options: z
+            .array(z.string().min(1).max(80))
+            .min(2)
+            .max(5)
+            .optional()
+            .describe("2-5 short answer choices, where the answer is one of a known set. Omit for an open fact such as a name, a date or an amount."),
+          allowFreeText: z
+            .boolean()
+            .optional()
+            .describe("True where the real answer may not be among the options, or where no options are given."),
         }),
       }),
     },
     stopWhen: stepCountIs(3),
+    // proposeDocument returns the whole document, so this is headroom against a
+    // runaway rather than a saving: a cap that truncates would be written back
+    // as if it were the finished draft.
+    maxOutputTokens: OUTPUT_CAPS.draftDocument,
+    maxRetries: AI_MAX_RETRIES,
     experimental_transform: smoothStream({ chunking: "word" }),
     onFinish: async ({ totalUsage }) => {
       await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "draft", modelKey, usage: totalUsage })

@@ -1,6 +1,6 @@
 import {
   Activity, CheckCircle2, CreditCard, FileSearch, FileStack, FileText,
-  Gavel, LayoutDashboard, Loader2, RefreshCw, Shield, UploadCloud, Users, XCircle,
+  Gavel, LayoutDashboard, Loader2, RefreshCw, Shield, TrendingUp, UploadCloud, Users, XCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { TabDefinition } from "./types"
@@ -15,6 +15,7 @@ export const tabs: TabDefinition[] = [
   { id: "causelist", label: "Cause List Parser", icon: FileSearch },
   { id: "rag", label: "Knowledge Base", icon: UploadCloud },
   { id: "sci-scraper", label: "SC Judgment Scraper", icon: Gavel },
+  { id: "ai-usage", label: "AI Spend", icon: TrendingUp },
 ]
 
 export function formatDate(iso: string) {

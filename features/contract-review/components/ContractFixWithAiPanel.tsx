@@ -12,12 +12,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { DEFAULT_MODEL, MODELS, type ModelKey } from "@/lib/ai/models"
+import { DEFAULT_MODEL, MODELS, GENERIC_MODEL_KEYS, type ModelKey } from "@/lib/ai/models"
 import { sanitizeDraftHtml } from "@/lib/html/sanitize-draft"
 import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
 import { useAllowedModels } from "@/hooks/useAllowedModels"
 import { severityStyles, type ContractIssue } from "../data"
-import ClarifyingQuestionCard from "./ClarifyingQuestionCard"
+import { CLARIFY_TOOL, ClarifyingQuestion, clarifyPartsOf, pendingClarify } from "@/components/ai/ClarifyingQuestion"
 
 interface ContractFixWithAiPanelProps {
   reviewId: string
@@ -58,6 +58,15 @@ export default function ContractFixWithAiPanel({
   const { messages, sendMessage, status, addToolResult, error, clearError } = useChat({
     id: reviewId,
     transport,
+    // Answering a clarifying question is the advocate's whole turn -- the
+    // model put something to them and stopped, so the answer has to go
+    // straight back without them also having to send a message.
+    sendAutomaticallyWhen: ({ messages: current }) => {
+      const last = current[current.length - 1]
+      if (!last || last.role !== "assistant") return false
+      const halts = clarifyPartsOf(last)
+      return halts.length > 0 && halts.every((part) => part.output !== undefined)
+    },
   })
 
   const busy = status === "submitted" || status === "streaming"
@@ -68,9 +77,36 @@ export default function ContractFixWithAiPanel({
     (text: string) => {
       const trimmed = text.trim()
       if (!trimmed || busy) return
+
+      // Typing is a legitimate way to answer a question card -- settle it as
+      // the answer instead of sending a message the model isn't expecting.
+      const pending = pendingClarify(messages)
+      if (pending) {
+        addToolResult({ tool: CLARIFY_TOOL, toolCallId: pending.toolCallId, output: { answer: trimmed } })
+        return
+      }
+
       sendMessage({ text: trimmed }, { body: { documentHtml: getDocumentHtml() } })
     },
-    [busy, getDocumentHtml, sendMessage],
+    [busy, getDocumentHtml, sendMessage, messages, addToolResult],
+  )
+
+  const answerQuestion = useCallback(
+    (toolCallId: string, answer: string) => {
+      addToolResult({ tool: CLARIFY_TOOL, toolCallId, output: { answer } })
+    },
+    [addToolResult],
+  )
+
+  const skipQuestion = useCallback(
+    (toolCallId: string) => {
+      addToolResult({
+        tool: CLARIFY_TOOL,
+        toolCallId,
+        output: { skipped: true, note: "The user skipped this. Answer on a stated assumption instead." },
+      })
+    },
+    [addToolResult],
   )
 
   useEffect(() => {
@@ -102,7 +138,7 @@ export default function ContractFixWithAiPanel({
       return
     }
 
-    const clarifying = lastMsg.parts.find((p) => isToolUIPart(p) && getToolName(p) === "askClarifyingQuestion")
+    const clarifying = lastMsg.parts.find((p) => isToolUIPart(p) && getToolName(p) === CLARIFY_TOOL)
     if (clarifying) {
       autoApplyRef.current = false
       onOpenChange(true)
@@ -229,14 +265,7 @@ export default function ContractFixWithAiPanel({
                 | { toolCallId: string; state: string; input?: { html?: string; summary?: string } }
                 | undefined
 
-              const clarifyingParts = msg.parts.filter(
-                (p) => isToolUIPart(p) && getToolName(p) === "askClarifyingQuestion",
-              ) as Array<{
-                toolCallId: string
-                state: string
-                input?: { question?: string; options?: string[]; allowFreeText?: boolean }
-                output?: { answer: string }
-              }>
+              const clarifyingParts = clarifyPartsOf(msg).filter((p) => p.output === undefined)
 
               return (
                 <div key={msg.id} className="flex flex-col items-start">
@@ -303,19 +332,14 @@ export default function ContractFixWithAiPanel({
 
                   {clarifyingParts.map((part) =>
                     part.input?.question ? (
-                      <ClarifyingQuestionCard
+                      <ClarifyingQuestion
                         key={part.toolCallId}
                         question={part.input.question}
                         options={part.input.options}
                         allowFreeText={part.input.allowFreeText}
-                        answer={part.output?.answer}
-                        onAnswer={(answer) => {
-                          addToolResult({
-                            tool: "askClarifyingQuestion",
-                            toolCallId: part.toolCallId,
-                            output: { answer },
-                          })
-                        }}
+                        disabled={busy}
+                        onAnswer={(answer) => answerQuestion(part.toolCallId, answer)}
+                        onSkip={() => skipQuestion(part.toolCallId)}
                       />
                     ) : null,
                   )}
@@ -373,7 +397,7 @@ export default function ContractFixWithAiPanel({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {(Object.keys(MODELS) as ModelKey[]).map((key) => {
+                  {GENERIC_MODEL_KEYS.map((key) => {
                     const locked = allowedModels ? !allowedModels.includes(key) : false
                     return (
                       <DropdownMenuItem

@@ -6,6 +6,10 @@ const DEFAULT_RATES: Record<ModelKey, { input: number; output: number; cachedInp
   fast: { input: 2100, output: 16800, cachedInput: 210 },
   balanced: { input: 10500, output: 84000, cachedInput: 1050 },
   capable: { input: 25200, output: 201600, cachedInput: 2520 },
+  // Deep Research never bills usage against this key directly -- the pipeline
+  // records each of its calls under the real tier that ran (fast/balanced/
+  // capable). Present only so this rate table still covers every ModelKey.
+  research: { input: 25200, output: 201600, cachedInput: 2520 },
 }
 
 export const EMBEDDING_RATE_PAISE_PER_M = 168

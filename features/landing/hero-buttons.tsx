@@ -13,7 +13,7 @@ export function HeroButtons() {
             <SignedOut>
                 <Link href="/sign-up" className="w-full sm:w-auto">
                     <Button size="lg" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground sm:w-auto">
-                        Get Started Free
+                        Start 7-Day Free Trial
                         <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                 </Link>

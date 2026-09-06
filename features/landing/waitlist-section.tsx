@@ -38,7 +38,7 @@ export function WaitlistSection() {
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4 mb-12 text-sm font-medium text-primary-foreground/80">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-secondary" />
-              Free plan, no credit card required
+              7-day free trial, no credit card required
             </div>
             <div className="flex items-center gap-2">
               <Scale className="h-4 w-4 text-secondary" />

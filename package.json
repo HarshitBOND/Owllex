@@ -21,7 +21,8 @@
     "r2:sweep": "node scripts/r2-orphan-sweep.mjs",
     "vault:recompress": "tsx scripts/vault-recompress.ts",
     "seed:court-forms": "tsx scripts/seed-court-form-templates.ts",
-    "backfill:template-versions": "tsx scripts/backfill-template-versions.ts"
+    "backfill:template-versions": "tsx scripts/backfill-template-versions.ts",
+    "migrate:free-to-trial": "tsx scripts/migrate-free-plan-to-trial.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.52",

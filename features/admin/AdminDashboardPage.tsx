@@ -25,6 +25,7 @@ import { UsersTab } from "./components/UsersTab"
 import { TransactionsTab } from "./components/TransactionsTab"
 import { DocumentsTab } from "./components/DocumentsTab"
 import { DocumentTemplatesTab } from "./components/DocumentTemplatesTab"
+import { AiUsageTab } from "./components/AiUsageTab"
 import { LogsTab } from "./components/LogsTab"
 import { CauseListTab } from "./components/CauseListTab"
 import { RagIngestTab } from "./components/RagIngestTab"
@@ -200,6 +201,7 @@ export default function AdminDashboardPage() {
               />
             )}
             {activeTab === "templates" && <DocumentTemplatesTab data={templatesData} />}
+            {activeTab === "ai-usage" && <AiUsageTab />}
             {activeTab === "logs" && (
               <LogsTab
                 logs={logsData.logs}

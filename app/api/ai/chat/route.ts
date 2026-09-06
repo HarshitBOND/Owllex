@@ -18,23 +18,29 @@ import CorpusDocument from "@/app/api/lib/models/corpus-document"
 import Case from "@/app/api/lib/models/case"
 import Client from "@/app/api/lib/models/client"
 import { modelFor } from "@/lib/ai/provider"
-import { MODELS, resolveModel } from "@/lib/ai/models"
-import { ANSWER_LENGTH_RULES, CHAT_SYSTEM_PROMPT, corpusContextBlock } from "@/lib/ai/prompts"
+import { MODELS, resolveModel, OUTPUT_CAPS, AI_MAX_RETRIES } from "@/lib/ai/models"
+import { ANSWER_LENGTH_RULES, CHAT_SYSTEM_PROMPT, corpusContextBlock, ANSWER_META_PROMPT } from "@/lib/ai/prompts"
 import { CASE_FIELDS, CLIENT_FIELDS } from "@/lib/ai/corpus-match"
 import { legalTools } from "@/lib/ai/tools"
 import { ACTION_TOOL } from "@/lib/ai/actions"
 import { createSourceRegistry } from "@/lib/ai/sources"
-import { ANSWER_META_PROMPT } from "@/lib/ai/prompts"
 import {
   messagesForStorage,
   settleDanglingToolCalls,
   stripEphemeralParts,
   MAX_STORED_MESSAGES,
 } from "@/lib/ai/message-trim"
-import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
+import {
+  checkAiAllowance,
+  checkAndCountResearchRun,
+  aiLimitResponse,
+  recordAiUsage,
+} from "@/app/api/lib/services/aiUsage"
+import { runDeepResearchPipeline } from "@/app/api/lib/services/deepResearch"
 
-// The answer itself gets 60s; the title-and-follow-ups epilogue runs after it.
-export const maxDuration = 90
+// Deep Research's understand -> search -> draft -> verify -> rewrite pipeline
+// can run well past the 90s the other three tiers need.
+export const maxDuration = 300
 
 const bodySchema = z.object({
   id: z.string().min(1).max(64),
@@ -54,6 +60,34 @@ const bodySchema = z.object({
 
 const textOf = (m: { parts: any[] }) =>
   m.parts.filter((p) => p?.type === "text").map((p) => p.text).join(" ").trim()
+
+/**
+ * A title and follow-ups for the answer card, written as a `data-answer-meta`
+ * part. Best-effort: losing them must never cost the advocate the answer
+ * they are already reading, so a failure here is swallowed, not thrown.
+ */
+async function writeAnswerMeta(writer: { write: (chunk: any) => void }, clerkUid: string, query: string, answerText: string) {
+  try {
+    const meta = await generateObject({
+      model: modelFor("fast"),
+      schema: z.object({
+        title: z.string().max(70).describe("A short noun-phrase title for this answer, no trailing full stop"),
+        followUps: z
+          .array(z.string().max(160))
+          .max(4)
+          .describe("Questions the advocate would realistically ask next about this same matter"),
+      }),
+      system: ANSWER_META_PROMPT,
+      prompt: `Question:\n${query}\n\nAnswer:\n${answerText.slice(0, 6000)}`,
+      maxOutputTokens: OUTPUT_CAPS.chatAnswerMeta,
+      maxRetries: AI_MAX_RETRIES,
+    })
+    await recordAiUsage({ clerkUid, feature: "chat", modelKey: "fast", usage: meta.usage })
+    writer.write({ type: "data-answer-meta", id: "meta", data: meta.object })
+  } catch (error) {
+    console.error("[CHAT] answer metadata failed:", error)
+  }
+}
 
 export async function POST(request: NextRequest) {
   const userContext = await requireUserContext(request)
@@ -81,6 +115,13 @@ export async function POST(request: NextRequest) {
   const gate = await checkAiAllowance(userContext.clerkUid)
   if (!gate.allowed) return aiLimitResponse(gate)
   const modelKey = resolveModel(gate.snapshot.plan, model, "fast")
+
+  // Deep Research spends its own monthly run budget on top of the ordinary
+  // credit caps just checked above -- a started run is a spent run.
+  if (modelKey === "research") {
+    const runGate = await checkAndCountResearchRun(userContext.clerkUid, gate.snapshot)
+    if (!runGate.allowed) return aiLimitResponse(runGate)
+  }
 
   // Byte-identical on every request from every user, so OpenAI can serve it
   // (and the tool definitions and history behind it) from the prefix cache at a
@@ -114,21 +155,43 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const modelMessages = [
-    // settleDanglingToolCalls before conversion: askClarifyingQuestion has no
-    // execute, so a question the advocate answered by typing instead of
-    // clicking would otherwise reach convertToModelMessages as a call with no
-    // result, and take the whole conversation down with AI_MissingToolResultsError.
-    ...(await convertToModelMessages(
-      settleDanglingToolCalls(stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[]))
-    )),
-    ...(corpusContext ? [{ role: "user" as const, content: corpusContext }] : []),
-    { role: "user" as const, content: ANSWER_LENGTH_RULES[modelKey] },
-  ]
-
   const stream = createUIMessageStream<UIMessage>({
     originalMessages: messages as UIMessage[],
     execute: async ({ writer }) => {
+      // Deep Research doesn't run the tool-calling loop below at all -- it's
+      // the understand -> search -> draft -> verify -> rewrite pipeline,
+      // shared with the standalone Deep Research page, revealed here as one
+      // chat turn instead of its own screen.
+      if (modelKey === "research") {
+        const lastUser = [...messages].reverse().find((m) => m.role === "user")
+        const query = lastUser ? textOf(lastUser) : ""
+        if (!query.trim()) return
+
+        const research = await runDeepResearchPipeline({
+          writer,
+          clerkUid: userContext.clerkUid,
+          plan: gate.snapshot.plan,
+          corpusId: activeCorpusId,
+          query,
+        })
+        if (!research.text.trim()) return
+
+        await writeAnswerMeta(writer, userContext.clerkUid, query, research.text)
+        return
+      }
+
+      const modelMessages = [
+        // settleDanglingToolCalls before conversion: askClarifyingQuestion has no
+        // execute, so a question the advocate answered by typing instead of
+        // clicking would otherwise reach convertToModelMessages as a call with no
+        // result, and take the whole conversation down with AI_MissingToolResultsError.
+        ...(await convertToModelMessages(
+          settleDanglingToolCalls(stripEphemeralParts(messages.slice(-MAX_STORED_MESSAGES) as UIMessage[]))
+        )),
+        ...(corpusContext ? [{ role: "user" as const, content: corpusContext }] : []),
+        { role: "user" as const, content: ANSWER_LENGTH_RULES[modelKey] },
+      ]
+
       // One registry per request: it hands the retrieval tools the numbers the
       // model cites with, and the same numbers reach the UI as `data-sources`.
       const registry = createSourceRegistry()
@@ -140,6 +203,7 @@ export async function POST(request: NextRequest) {
         tools: legalTools(userContext.clerkUid, activeCorpusId, { registry, writer }),
         stopWhen: stepCountIs(MODELS[modelKey].maxSteps),
         maxOutputTokens: MODELS[modelKey].maxOutputTokens,
+        maxRetries: AI_MAX_RETRIES,
         experimental_transform: smoothStream({ chunking: "word" }),
         providerOptions: {
           openai: { reasoningSummary: "auto" },
@@ -166,27 +230,8 @@ export async function POST(request: NextRequest) {
       )
       if (pending) return
 
-      // A title and follow-ups for the answer card. Best-effort: losing them
-      // must never cost the advocate the answer they are already reading.
-      try {
-        const lastUser = [...messages].reverse().find((m) => m.role === "user")
-        const meta = await generateObject({
-          model: modelFor("fast"),
-          schema: z.object({
-            title: z.string().max(70).describe("A short noun-phrase title for this answer, no trailing full stop"),
-            followUps: z
-              .array(z.string().max(160))
-              .max(4)
-              .describe("Questions the advocate would realistically ask next about this same matter"),
-          }),
-          system: ANSWER_META_PROMPT,
-          prompt: `Question:\n${lastUser ? textOf(lastUser) : ""}\n\nAnswer:\n${answer.slice(0, 6000)}`,
-        })
-        await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "chat", modelKey: "fast", usage: meta.usage })
-        writer.write({ type: "data-answer-meta", id: "meta", data: meta.object })
-      } catch (error) {
-        console.error("[CHAT] answer metadata failed:", error)
-      }
+      const lastUser = [...messages].reverse().find((m) => m.role === "user")
+      await writeAnswerMeta(writer, userContext.clerkUid, lastUser ? textOf(lastUser) : "", answer)
     },
     onEnd: async ({ messages: finalMessages, isAborted }) => {
       if (isAborted) return

@@ -72,8 +72,8 @@ describe("costPaise", () => {
 })
 
 describe("resolveModel", () => {
-  it("clamps free users to fast even when they ask for capable", () => {
-    expect(resolveModel("free", "capable", "balanced")).toBe("fast")
+  it("clamps trial users to fast even when they ask for capable", () => {
+    expect(resolveModel("trial", "capable", "balanced")).toBe("fast")
   })
 
   it("lets starter use balanced but not capable", () => {

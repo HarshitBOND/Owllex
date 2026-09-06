@@ -18,7 +18,8 @@ import { searchCorpus } from "@/app/api/lib/corpusBackend"
 import { factsForFields, factsToValues } from "@/app/api/lib/services/corpusFacts"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 import { modelFor } from "@/lib/ai/provider"
-import { resolveModel } from "@/lib/ai/models"
+import { cachedGenerate, hashForCache, CACHE_TTL } from "@/lib/ai/response-cache"
+import { resolveModel, OUTPUT_CAPS, AI_MAX_RETRIES_TIMED } from "@/lib/ai/models"
 import { resolveCaseSources } from "@/lib/templates/case-source"
 import type { TemplateField } from "@/lib/templates/fields"
 
@@ -269,31 +270,50 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   for (const r of results) if (r.title) docTitles.set(r.document_id, r.title)
 
   let filled: z.infer<typeof fillSchema>["values"] = []
+  const fillPrompt = [
+    `FORM: ${template.title}`,
+    "",
+    "FIELDS TO FILL:",
+    ...askedFor.map((f) => `- ${f.key} (${f.type}): ${f.label}`),
+    "",
+    "EXCERPTS FROM THIS MATTER'S DOCUMENTS:",
+    ...results.map(
+      (r, i) => `--- excerpt ${i + 1}, documentId=${r.document_id} ---\n${r.text}`
+    ),
+  ].join("\n")
+
   try {
-    const { object, usage } = await generateObject({
-      model: modelFor(modelKey),
-      system: FILL_PROMPT,
-      schema: fillSchema,
-      prompt: [
-        `FORM: ${template.title}`,
-        "",
-        "FIELDS TO FILL:",
-        ...askedFor.map((f) => `- ${f.key} (${f.type}): ${f.label}`),
-        "",
-        "EXCERPTS FROM THIS MATTER'S DOCUMENTS:",
-        ...results.map(
-          (r, i) => `--- excerpt ${i + 1}, documentId=${r.document_id} ---\n${r.text}`
-        ),
-      ].join("\n"),
-      abortSignal: AbortSignal.timeout(45_000),
-    })
+    // This route is called from a useEffect on the new-document page, so every
+    // page load and every browser refresh used to run a fresh `balanced` call
+    // for a byte-identical answer. The key is the prompt itself, which already
+    // contains the form's fields and the retrieved excerpts -- so any change to
+    // the form, the case record or the indexed documents produces a different
+    // key rather than a stale answer. Scoped to the advocate: the excerpts come
+    // from their own private corpus.
+    const { value: object, hit } = await cachedGenerate(
+      `prefill:${userContext.clerkUid}:${modelKey}:${hashForCache(fillPrompt)}`,
+      CACHE_TTL.prefill,
+      async () => {
+        const { object, usage } = await generateObject({
+          model: modelFor(modelKey),
+          system: FILL_PROMPT,
+          schema: fillSchema,
+          prompt: fillPrompt,
+          maxOutputTokens: OUTPUT_CAPS.prefill,
+          maxRetries: AI_MAX_RETRIES_TIMED,
+          abortSignal: AbortSignal.timeout(45_000),
+        })
+        await recordAiUsage({
+          clerkUid: userContext.clerkUid,
+          feature: "corpus-fill",
+          modelKey,
+          usage,
+        })
+        return object
+      }
+    )
+    if (hit) console.log("[PREFILL] served from cache, no model call")
     filled = object.values
-    await recordAiUsage({
-      clerkUid: userContext.clerkUid,
-      feature: "corpus-fill",
-      modelKey,
-      usage,
-    })
   } catch {
     return NextResponse.json({
       success: true,

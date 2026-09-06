@@ -9,7 +9,7 @@ const linkGroups = [
       { label: "Contract Review", href: "/contract-review" },
       { label: "Legal Research", href: "/legal-research" },
       { label: "Case Tracking", href: "/case-tracking" },
-      { label: "Get Started", href: "/sign-up" },
+      { label: "Free Trial", href: "/trial" },
     ],
   },
   {

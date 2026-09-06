@@ -12,7 +12,7 @@ type SubscriptionGateState = {
 }
 
 // Renders wherever <Sidebar /> mounts (every authenticated page), so it blocks the whole
-// app once a free-plan user's 7-day trial has ended. The route guard (requireUserContext)
+// app once a trial-plan user's 7-day trial has ended. The route guard (requireUserContext)
 // is the real enforcement — this is just the UI so users see a clear paywall instead of
 // a wall of failed API requests.
 export function TrialPaywallGate() {

@@ -17,6 +17,10 @@ const dataPart = <T,>(message: UIMessage, type: string): T | null => {
 export const sourcesOf = (message: UIMessage): ChatSource[] =>
   dataPart<{ sources?: ChatSource[] }>(message, "data-sources")?.sources ?? []
 
+/** Only present on a Deep Research turn -- null for every ordinary chat answer. */
+export const verifiedOf = (message: UIMessage): boolean | null =>
+  dataPart<{ verified?: boolean }>(message, "data-verified")?.verified ?? null
+
 export const metaOf = (message: UIMessage): AnswerMeta => dataPart<AnswerMeta>(message, "data-answer-meta") ?? {}
 
 export const textOf = (message: UIMessage): string =>

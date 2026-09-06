@@ -13,18 +13,19 @@ const PAYMENT_FREQUENCIES = ["monthly", "yearly"]
 // Keep in sync with PLAN_CONFIG in app/api/lib/services/subscription.ts
 const TIERS: PricingTier[] = [
   {
-    id: "free",
-    name: "Free",
-    price: { monthly: "Free", yearly: "Free" },
-    description: "Try Ravenslaw on a single matter",
+    id: "trial",
+    name: "7-Day Trial",
+    price: { monthly: "7 days free", yearly: "7 days free" },
+    description: "Try Ravenslaw on a single matter, no credit card required",
     features: [
       "Up to 3 active cases",
       "Fast AI model only",
       "₹100 of AI usage every month",
       "Index up to 5 documents",
       "Cause-list lookup",
+      "Full access for 7 days, then choose a plan",
     ],
-    cta: "Start free",
+    cta: "Start 7-day trial",
     href: "/sign-up",
   },
   {
@@ -111,7 +112,7 @@ export default function PricingPage() {
         </div>
         <PricingSection
           title="Simple Pricing"
-          subtitle="Choose the plan that fits your practice. Cancel anytime."
+          subtitle="Every account starts with a free 7-day trial. Choose the plan that fits your practice after that."
           frequencies={PAYMENT_FREQUENCIES}
           tiers={TIERS}
           currency="INR"

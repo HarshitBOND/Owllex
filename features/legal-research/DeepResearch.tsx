@@ -18,7 +18,7 @@ const STAGES = [
   { id: "done", label: "Done" },
 ]
 
-type Source = { n: number; title: string; sourceUrl: string | null }
+type Source = { n: number; title: string; url: string | null }
 
 export default function DeepResearch() {
   const { corpora } = useCorpora()
@@ -237,8 +237,8 @@ export default function DeepResearch() {
                   <div key={s.n} className="flex items-center gap-2 text-[13px] text-text-200">
                     <FileText className="w-3.5 h-3.5 text-text-400 shrink-0" />
                     <span className="text-text-400">[{s.n}]</span>
-                    {s.sourceUrl ? (
-                      <a href={s.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                    {s.url ? (
+                      <a href={s.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
                         {s.title}
                       </a>
                     ) : (

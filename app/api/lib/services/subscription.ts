@@ -1,6 +1,6 @@
 import User from "@/app/api/lib/models/user"
 
-export const SUBSCRIPTION_PLANS = ["free", "starter", "professional", "enterprise"] as const
+export const SUBSCRIPTION_PLANS = ["trial", "starter", "professional", "enterprise"] as const
 export const SUBSCRIPTION_STATUSES = ["active", "cancelled", "expired", "past_due", "trial"] as const
 export const SUBSCRIPTION_BILLING_CYCLES = ["monthly", "yearly"] as const
 
@@ -30,7 +30,7 @@ type PlanConfig = {
 }
 
 const DEFAULT_SUBSCRIPTION = {
-  plan: "free" as SubscriptionPlan,
+  plan: "trial" as SubscriptionPlan,
   status: "active" as SubscriptionStatus,
   billingCycle: "monthly" as SubscriptionBillingCycle,
   currentPeriodStart: new Date(),
@@ -48,7 +48,7 @@ const DEFAULT_SUBSCRIPTION = {
 // Selling prices live in RAZORPAY_AMOUNT_<PLAN>_<CYCLE> env vars:
 // starter ₹2,000/mo, professional ₹4,999/mo, enterprise ₹11,999/mo (yearly = 10x).
 const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
-  free: {
+  trial: {
     caseLimit: 10,
     features: {
       parserUpload: false,
@@ -116,19 +116,19 @@ const PLAN_CONFIG: Record<SubscriptionPlan, PlanConfig> = {
 
 const ACTIVE_STATUSES = new Set<SubscriptionStatus>(["active", "trial", "past_due"])
 
-// The free plan is a 7-day trial. The clock is anchored to `signupDate`, which is stamped
+// The trial plan lasts 7 days. The clock is anchored to `signupDate`, which is stamped
 // once at account creation (Clerk webhook / ensureUser) and never touched by any subscription
 // mutation (renew/change-plan/etc), so it can't be reset by re-invoking those actions.
-export const FREE_TRIAL_DURATION_DAYS = 7
+export const TRIAL_DURATION_DAYS = 7
 
 const getTrialEndDate = (signupDate: Date) => {
   const end = new Date(signupDate)
-  end.setDate(end.getDate() + FREE_TRIAL_DURATION_DAYS)
+  end.setDate(end.getDate() + TRIAL_DURATION_DAYS)
   return end
 }
 
 const computeTrialState = (plan: SubscriptionPlan, signupDate: Date) => {
-  if (plan !== "free") {
+  if (plan !== "trial") {
     return { trialEndsAt: null as Date | null, isTrialExpired: false }
   }
 
@@ -248,7 +248,7 @@ export function buildSubscriptionSummaryFromUserRecord(
     casesUsed,
     casesRemaining,
     canCreateCase,
-    isPaidPlan: normalized.plan !== "free",
+    isPaidPlan: normalized.plan !== "trial",
     isActive,
     features: planConfig.features,
     aiCaps: planConfig.aiCaps,

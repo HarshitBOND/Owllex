@@ -79,7 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         success: false,
         error:
           usage.caps.corpusDocsPerMonth === 0
-            ? "Document indexing is not available on the free plan. Upgrade to use it."
+            ? "Document indexing is not available during the trial. Upgrade to use it."
             : `You've indexed ${usage.corpusDocsUsed} of ${usage.caps.corpusDocsPerMonth} documents allowed this month. Upgrade for more.`,
       },
       { status: 429 }

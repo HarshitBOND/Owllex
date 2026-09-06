@@ -99,13 +99,21 @@ export default function DraftDocumentsHome() {
   }
 
   const remove = async (draft: Draft) => {
-    const res = await fetch(`/api/draft-documents/${draft.id}`, { method: "DELETE" })
-    const data = await res.json()
-    if (data.success) {
-      toast.success("Document deleted")
-      loadDrafts(showAll ? 50 : 6)
-    } else {
-      toast.error(data.error || "Could not delete the document")
+    setDrafts((prev) => prev.filter((d) => d.id !== draft.id))
+
+    try {
+      const res = await fetch(`/api/draft-documents/${draft.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (data.success || res.status === 404) {
+        toast.success("Document deleted")
+      } else {
+        setDrafts((prev) => (prev.some((d) => d.id === draft.id) ? prev : [...prev, draft]))
+        toast.error(data.error || "Could not delete the document")
+      }
+    } catch (err) {
+      console.error("Delete document error:", err)
+      setDrafts((prev) => (prev.some((d) => d.id === draft.id) ? prev : [...prev, draft]))
+      toast.error("Could not delete the document")
     }
   }
 

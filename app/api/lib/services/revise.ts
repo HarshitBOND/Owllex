@@ -1,7 +1,7 @@
 import { streamText, smoothStream } from "ai"
 import type mongoose from "mongoose"
 import { modelFor } from "@/lib/ai/provider"
-import { MODELS, type ModelKey } from "@/lib/ai/models"
+import { MODELS, type ModelKey, AI_MAX_RETRIES } from "@/lib/ai/models"
 import { trimDocumentForPrompt } from "@/lib/ai/document-context"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import { recordAiUsage } from "@/app/api/lib/services/aiUsage"
@@ -129,10 +129,34 @@ export function streamRevision({
     system: systemPrompt,
     prompt: buildPrompt(baseHtml, instruction, selection),
     maxOutputTokens: MODELS[modelKey].maxOutputTokens,
+    maxRetries: AI_MAX_RETRIES,
     experimental_transform: smoothStream({ chunking: "word" }),
-    onFinish: async ({ text, usage }) => {
+    onFinish: async ({ text, usage, finishReason }) => {
       const answer = stripFences(text)
       if (!answer) return
+
+      // The prompt asks for the complete revised document, but the tier cap is
+      // a token budget -- on Fast that is 700 tokens, which a long document
+      // runs past. Saving a response that stopped for length would overwrite
+      // the document with a copy truncated mid-sentence, and the advocate would
+      // have no way to tell that was what happened. Record it as a failed
+      // revision and leave contentHtml alone.
+      if (finishReason === "length") {
+        doc.revisions.push({
+          id: revisionId,
+          instruction,
+          status: "error",
+          errorMessage:
+            "The revision was cut short by the model's length limit, so it wasn't applied. Try a more capable model, or revise a selected passage instead of the whole document.",
+          scope: { selectedText: selection?.text ?? "", from: selection?.from ?? 0, to: selection?.to ?? 0 },
+          contentHtmlBefore: "",
+          modelKey,
+          createdAt: new Date(),
+        })
+        await doc.save()
+        await recordAiUsage({ clerkUid, feature, modelKey, usage })
+        return
+      }
 
       const nextHtml = selection?.text
         ? spliceSelection(baseHtml, selection.text, answer)

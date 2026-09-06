@@ -6,6 +6,8 @@ import { objectIdSchema, parseAndValidateJson } from "@/app/api/lib/routeGuards"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import DocumentTemplate from "@/app/api/lib/models/document-template"
 import { modelFor } from "@/lib/ai/provider"
+import { OUTPUT_CAPS, AI_MAX_RETRIES_TIMED } from "@/lib/ai/models"
+import { recordAiUsage } from "@/app/api/lib/services/aiUsage"
 import { diffLines, fieldKeyOverlap, plainTextOf, textSimilarity } from "@/lib/templates/similarity"
 import type { TemplateField } from "@/lib/templates/fields"
 
@@ -108,7 +110,7 @@ export async function POST(request: NextRequest) {
   let verdictError: string | null = null
 
   try {
-    const { object } = await generateObject({
+    const { object, usage } = await generateObject({
       model: modelFor("balanced"),
       system: DEDUPE_PROMPT,
       schema: verdictSchema,
@@ -123,9 +125,19 @@ export async function POST(request: NextRequest) {
             plainTextOf(row.candidate.bodyHtml).slice(0, 4000)
         ),
       ].join("\n"),
+      maxOutputTokens: OUTPUT_CAPS.templateDedupe,
+      maxRetries: AI_MAX_RETRIES_TIMED,
       abortSignal: AbortSignal.timeout(45_000),
     })
     verdicts = object.verdicts
+    // This call used to record nothing, so its spend never reached the
+    // breakdown at all.
+    await recordAiUsage({
+      clerkUid: admin.userId,
+      feature: "template-dedupe",
+      modelKey: "balanced",
+      usage,
+    })
   } catch (error) {
     // The structural scores are still worth showing. An admin can compare two
     // forms perfectly well without a model's opinion; losing it must not lose

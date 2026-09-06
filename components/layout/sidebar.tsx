@@ -38,7 +38,6 @@ const isNavAction = (item: NavLeaf): item is NavAction => "action" in item
 const aiGroupItems: NavLeaf[] = [
     { name: "New Chat", icon: <CirclePlus size={16} />, action: "new-chat" },
     { name: "Chat History", icon: <History size={16} />, action: "chat-history" },
-    { name: "Deep Research", icon: <FileSearch size={16} />, href: "/legal-research" },
     { name: "Vault", icon: <Lock size={16} />, href: "/vault" },
     { name: "Corpus", icon: <Library size={16} />, href: "/corpus" },
     { name: "Draft Documents", icon: <FileEdit size={16} />, href: "/draft-documents" },

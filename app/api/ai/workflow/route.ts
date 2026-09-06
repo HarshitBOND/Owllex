@@ -3,7 +3,7 @@ import { streamText, convertToModelMessages, stepCountIs, smoothStream, tool, ty
 import { z } from "zod"
 import { enforceRateLimit, parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards"
 import { modelFor } from "@/lib/ai/provider"
-import { resolveModel } from "@/lib/ai/models"
+import { resolveModel, OUTPUT_CAPS, AI_MAX_RETRIES } from "@/lib/ai/models"
 import { WORKFLOW_SYSTEM_PROMPT, WORKFLOW_TOOL_RULES } from "@/lib/ai/prompts"
 import { WORKFLOW_ICON_KEYS, WORKFLOW_COLOR_KEYS } from "@/lib/workflow-icon-registry"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
@@ -70,21 +70,29 @@ export async function POST(request: NextRequest) {
   const currentWorkflow =
     workflow && workflow.nodes.length > 0 ? JSON.stringify(workflow, null, 2) : "(The canvas is empty.)"
 
+  // Byte-identical on every request, so OpenAI serves it -- and the tool
+  // definitions and history behind it -- from the prefix cache at a tenth of the
+  // input rate. The canvas state used to be spliced in here, which changed the
+  // string on every turn and so missed the cache on the entire prefix; it goes
+  // out as a trailing message below instead, exactly as the chat and contract
+  // chat routes already do.
   const system = `${WORKFLOW_SYSTEM_PROMPT}
 
 ${WORKFLOW_TOOL_RULES}
 
 Allowed icon keys: ${WORKFLOW_ICON_KEYS.join(", ")}
-Allowed color keys: ${WORKFLOW_COLOR_KEYS.join(", ")}
-
-<current_workflow>
-${currentWorkflow}
-</current_workflow>`
+Allowed color keys: ${WORKFLOW_COLOR_KEYS.join(", ")}`
 
   const result = streamText({
     model: modelFor(modelKey),
     system,
-    messages: await convertToModelMessages(messages.slice(-40) as UIMessage[]),
+    messages: [
+      ...(await convertToModelMessages(messages.slice(-40) as UIMessage[])),
+      {
+        role: "user" as const,
+        content: `<current_workflow>\n${currentWorkflow}\n</current_workflow>`,
+      },
+    ],
     tools: {
       // No execute: this streams to the client and the canvas applies it once
       // rendered, same pattern as the drafting assistant's proposeDocument.
@@ -115,6 +123,8 @@ ${currentWorkflow}
       }),
     },
     stopWhen: stepCountIs(3),
+    maxOutputTokens: OUTPUT_CAPS.workflow,
+    maxRetries: AI_MAX_RETRIES,
     experimental_transform: smoothStream({ chunking: "word" }),
     onFinish: async ({ totalUsage }) => {
       await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "workflow", modelKey, usage: totalUsage })

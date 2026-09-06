@@ -14,6 +14,7 @@ import { extractTemplateFromText } from "@/app/api/lib/services/templateExtracti
 import { seedFirstVersion } from "@/app/api/lib/services/templateVersions"
 import { slugify } from "@/app/api/lib/documentTemplates"
 import { validateTokenParity } from "@/lib/templates/fields"
+import { recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 /**
  * Turns one uploaded court PDF into a draft template.
@@ -174,6 +175,18 @@ export async function POST(request: NextRequest) {
       modelKey: "capable",
     })
     extracted = result.template
+    // This is the single most expensive call in the app -- the capable model
+    // over a whole PDF -- and its usage used to be dropped on the floor here,
+    // so none of it reached the spend breakdown. `usage` is null on a cache
+    // hit, where nothing was actually spent.
+    if (result.usage) {
+      await recordAiUsage({
+        clerkUid: admin.userId,
+        feature: "template-extraction",
+        modelKey: "capable",
+        usage: result.usage,
+      })
+    }
   } catch (error) {
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
     return NextResponse.json(

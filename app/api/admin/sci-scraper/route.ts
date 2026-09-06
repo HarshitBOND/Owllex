@@ -99,6 +99,17 @@ export async function POST(request: NextRequest) {
   });
   currentChild = child;
 
+  // A spawn failure (e.g. tsx missing because this is a deployed/production build
+  // without devDependencies) surfaces as both an "error" event and then a "close"
+  // event whose code is the raw negative errno (-2 for ENOENT) rather than a normal
+  // exit code. Capture the real reason here so "close" doesn't overwrite it with
+  // a bare "-2" that means nothing to whoever is looking at the job.
+  let spawnFailureMessage: string | null = null;
+  const NOT_LOCAL_MESSAGE =
+    "Could not start the scraper (tsx not found). This tool spawns a real, human-visible " +
+    "Chromium window to solve the site's captcha, so it only works on a local dev server " +
+    "with devDependencies installed -- it cannot run on a deployed/production instance.";
+
   const onData = (chunk: Buffer) => {
     for (const line of chunk.toString("utf8").split("\n")) {
       if (line.trim()) handleLine(job, line.trim());
@@ -109,11 +120,11 @@ export async function POST(request: NextRequest) {
 
   child.on("close", (code) => {
     job.finishedAt = new Date().toISOString();
-    if (code === 0) {
+    if (code === 0 && !spawnFailureMessage) {
       job.status = "completed";
     } else {
       job.status = "failed";
-      job.error = `Scraper exited with code ${code}`;
+      job.error = spawnFailureMessage ?? (code === -2 ? NOT_LOCAL_MESSAGE : `Scraper exited with code ${code}`);
     }
     currentChild = null;
     logAdminAction(admin.dbUserId, "sci_scraper_run", undefined, {
@@ -122,9 +133,10 @@ export async function POST(request: NextRequest) {
     });
   });
 
-  child.on("error", (err) => {
+  child.on("error", (err: NodeJS.ErrnoException) => {
+    spawnFailureMessage = err.code === "ENOENT" ? NOT_LOCAL_MESSAGE : err.message;
     job.status = "failed";
-    job.error = err.message;
+    job.error = spawnFailureMessage;
     job.finishedAt = new Date().toISOString();
     currentChild = null;
   });

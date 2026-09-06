@@ -15,7 +15,7 @@ import {
 } from "@/app/api/lib/services/razorpay"
 
 const isSubscriptionPlan = (value: unknown): value is SubscriptionPlan =>
-  value === "free" || value === "starter" || value === "professional" || value === "enterprise"
+  value === "trial" || value === "starter" || value === "professional" || value === "enterprise"
 
 const isBillingCycle = (value: unknown): value is SubscriptionBillingCycle =>
   value === "monthly" || value === "yearly"

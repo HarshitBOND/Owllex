@@ -23,7 +23,7 @@ interface Env {
 // shard by session or user.
 const INSTANCE_NAME = "singleton";
 
-// Non-secret defaults -- mirrors the envVars block in ../../render.yaml.
+// Non-secret defaults.
 const NON_SECRET_ENV = {
   RAVENSLAW_DEBUG: "false",
   RAVENSLAW_WARM_DOCUMENT_CONVERTER: "true",

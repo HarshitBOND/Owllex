@@ -13,9 +13,9 @@ export interface DashboardStats {
   pendingTransactions: number
 }
 
-export type SubscriptionPlan = "free" | "starter" | "professional" | "enterprise"
+export type SubscriptionPlan = "trial" | "starter" | "professional" | "enterprise"
 
-export const SUBSCRIPTION_PLAN_OPTIONS: SubscriptionPlan[] = ["free", "starter", "professional", "enterprise"]
+export const SUBSCRIPTION_PLAN_OPTIONS: SubscriptionPlan[] = ["trial", "starter", "professional", "enterprise"]
 
 export interface UserRecord {
   _id: string
@@ -102,6 +102,7 @@ export type Tab =
   | "causelist"
   | "rag"
   | "sci-scraper"
+  | "ai-usage"
 
 export interface TabDefinition {
   id: Tab

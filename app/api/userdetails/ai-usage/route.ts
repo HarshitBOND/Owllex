@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     success: true,
     plan: snapshot.plan,
     isActive: snapshot.isActive,
-    allowedModels: PLAN_MODELS[snapshot.plan] ?? PLAN_MODELS.free,
+    allowedModels: PLAN_MODELS[snapshot.plan] ?? PLAN_MODELS.trial,
     windows: {
       window5h: window(snapshot.window5h.usedPaise, snapshot.caps.window5hPaise, snapshot.window5h.resetAt),
       daily: window(snapshot.daily.usedPaise, snapshot.caps.dailyPaise, snapshot.daily.resetAt),

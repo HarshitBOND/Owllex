@@ -97,7 +97,7 @@ All settings via environment variables (see `.env.example`):
 |----------|---------|-------------|
 | `RAVENSLAW_HOST` | `0.0.0.0` | Server bind host |
 | `RAVENSLAW_PORT` | `8000` | Server port |
-| `PORT` | *(empty)* | Platform-injected runtime port (Render/Heroku style) |
+| `PORT` | *(empty)* | Platform-injected runtime port |
 | `RAVENSLAW_DEBUG` | `false` | Enable debug mode + auto-reload |
 | `ENABLE_SCRAPER_SCHEDULER` | `false` | Enable scheduler only on one dedicated instance |
 | `RAVENSLAW_UPLOAD_DIR` | `./uploads` | Temp PDF upload directory |
@@ -105,7 +105,7 @@ All settings via environment variables (see `.env.example`):
 | `MONGODB_URI` | *(empty)* | MongoDB connection string (optional) |
 | `MONGODB_DB` | `cause_list_db` | MongoDB database name |
 | `RAVENSLAW_CORS_ORIGINS` | *(required in production)* | Allowed CORS origins (comma-separated, no wildcard in production) |
-| `RAVENSLAW_TRUSTED_HOSTS` | `localhost,127.0.0.1,*.onrender.com` | Trusted host header values |
+| `RAVENSLAW_TRUSTED_HOSTS` | `localhost,127.0.0.1,*.workers.dev` | Trusted host header values |
 | `RAVENSLAW_RATE_LIMIT_WINDOW_SECONDS` | `60` | Rate limit time window in seconds |
 | `RAVENSLAW_RATE_LIMIT_MAX_REQUESTS` | `120` | Max requests per IP per window |
 | `RAVENSLAW_MAX_CONCURRENT_BULK_IMPORTS` | `1` | Maximum parallel bulk import sessions |

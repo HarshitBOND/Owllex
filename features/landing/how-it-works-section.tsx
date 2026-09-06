@@ -69,7 +69,7 @@ export function HowItWorksSection() {
         <Reveal delay={0.2} className="text-center mt-16">
           <Link href="/sign-up">
             <Button size="lg" className="bg-secondary hover:bg-secondary/90 text-secondary-foreground">
-              Start for Free
+              Start Your 7-Day Trial
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>

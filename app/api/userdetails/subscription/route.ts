@@ -13,7 +13,7 @@ import {
 const subscriptionActionSchema = z
   .object({
     action: z.enum(["cancel", "renew", "change-plan"]),
-    plan: z.enum(["free", "starter", "professional", "enterprise"]).optional(),
+    plan: z.enum(["trial", "starter", "professional", "enterprise"]).optional(),
     billingCycle: z.enum(["monthly", "yearly"]).optional(),
   })
   .strict()
@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest) {
       subscription = await cancelUserSubscription(userId)
     } else if (parsedBody.data.action === "renew") {
       const current = await getUserSubscriptionSummary(userId)
-      if (current?.plan && current.plan !== "free") {
+      if (current?.plan && current.plan !== "trial") {
         return NextResponse.json(
           {
             success: false,
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest) {
         )
       }
 
-      if (parsedBody.data.plan !== "free") {
+      if (parsedBody.data.plan !== "trial") {
         return NextResponse.json(
           {
             success: false,

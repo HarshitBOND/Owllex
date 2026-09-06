@@ -135,7 +135,13 @@ function GuidedFill({
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
+  // Set only for a 404 from the create call -- the template, case or corpus
+  // this wizard was built against is genuinely gone, not something another
+  // click on "Create the document" will fix. Retrying resends the same
+  // answers rather than making the advocate redo the whole form.
+  const [submitFatal, setSubmitFatal] = useState(false)
   const [remember, setRemember] = useState(true)
+  const lastSubmitRef = useRef<{ values: FieldValues; provenance: Provenance } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -192,6 +198,7 @@ function GuidedFill({
 
   const submit = useCallback(
     async (values: FieldValues, provenance: Provenance) => {
+      lastSubmitRef.current = { values, provenance }
       setSubmitting(true)
       setSubmitError("")
       try {
@@ -207,8 +214,16 @@ function GuidedFill({
           }),
         })
         const data = await res.json()
-        if (data.success && data.id) router.replace(`/draft-documents/${data.id}`)
-        else setSubmitError(data.error || "We couldn't create that document.")
+        if (data.success && data.id) {
+          router.replace(`/draft-documents/${data.id}`)
+          return
+        }
+        // A 404 here means the template (or the linked case/corpus) is gone --
+        // the advocate has a fully filled-out form and nowhere for it to go,
+        // which a red line under the button is too easy to miss. Surface it
+        // the same way a load-time failure is surfaced instead.
+        if (res.status === 404) setSubmitFatal(true)
+        setSubmitError(data.error || "We couldn't create that document.")
       } catch {
         setSubmitError("We couldn't reach the server.")
       } finally {
@@ -228,6 +243,19 @@ function GuidedFill({
 
   if (loadError || !template) {
     return <ErrorCard message={loadError || "That form could not be opened."} onRetry={() => window.location.reload()} />
+  }
+
+  if (submitFatal) {
+    return (
+      <ErrorCard
+        message={submitError || "This form is no longer available. Your answers weren't lost -- try again, or start over from the library."}
+        onRetry={() => {
+          setSubmitFatal(false)
+          setSubmitError("")
+          if (lastSubmitRef.current) submit(lastSubmitRef.current.values, lastSubmitRef.current.provenance)
+        }}
+      />
+    )
   }
 
   return (

@@ -244,7 +244,6 @@ export const contractReviewMode: ToolMode = {
 };
 
 const toolLinks: Array<{ name: string; icon: typeof Search; href?: string; mode?: ToolMode }> = [
-    { name: "Legal Research", href: "/legal-research", icon: Search },
     { name: "Contract Review", icon: FileCheck2, mode: contractReviewMode },
     { name: "Legal Summarizer", href: "/legal-summarizer", icon: FileText },
 ];

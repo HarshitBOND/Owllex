@@ -9,10 +9,11 @@ import { AnswerBody } from "./AnswerBody"
 import { AnswerActions, type Feedback } from "./AnswerActions"
 import { FollowUps } from "./FollowUps"
 import { SourcesDisclosure, SourcesRail, sourceRowId } from "./SourcesRail"
-import { ClarifyingQuestion, clarifyPartsOf } from "./ClarifyingQuestion"
+import { ClarifyingQuestion, clarifyPartsOf } from "@/components/ai/ClarifyingQuestion"
 import { ActionProposal, actionPartsOf } from "./ActionProposal"
 import { WorkCard } from "./WorkCard"
-import { formatAnswerDate, metaOf, sourcesOf, textOf, titleOf } from "./answer-meta"
+import { formatAnswerDate, metaOf, sourcesOf, textOf, titleOf, verifiedOf } from "./answer-meta"
+import { BadgeCheck } from "lucide-react"
 import type { AgentAction } from "@/lib/ai/actions"
 
 /**
@@ -62,6 +63,7 @@ export function AnswerCard({
   const text = textOf(message)
   const sources = sourcesOf(message)
   const meta = metaOf(message)
+  const verified = verifiedOf(message)
   // Once a question is answered it has nothing left to say -- the answer that
   // follows speaks for it. Keeping it around would just be a Q&A card trailing
   // behind every turn that needed to ask something first.
@@ -163,6 +165,18 @@ export function AnswerCard({
                 {sources.length > 0 && ` · ${sources.length} ${sources.length === 1 ? "source" : "sources"}`}
                 {` · ${created}`}
               </p>
+              {verified !== null && (
+                <div
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium mt-2 ${
+                    verified
+                      ? "bg-brand-500/10 text-brand-600 border border-brand-500/20"
+                      : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                  }`}
+                >
+                  <BadgeCheck className="w-3.5 h-3.5" />
+                  {verified ? "Citations verified" : "Verification incomplete — check citations before relying on them"}
+                </div>
+              )}
             </header>
 
             <AnswerBody text={text} sources={sources} onSelectSource={selectSource} />

@@ -6,7 +6,8 @@ import { enforceRateLimit, objectIdSchema, parseAndValidateJson, requireUserCont
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
 import { modelFor } from "@/lib/ai/provider"
-import { resolveModel } from "@/lib/ai/models"
+import { resolveModel, OUTPUT_CAPS, AI_MAX_RETRIES_TIMED } from "@/lib/ai/models"
+import { cachedGenerate, hashForCache, CACHE_TTL } from "@/lib/ai/response-cache"
 import { CONTRACT_REVIEW_SYSTEM_PROMPT } from "@/lib/ai/prompts"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
@@ -90,15 +91,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   await review.save()
 
   try {
-    const { object, usage } = await generateObject({
-      model: modelFor(modelKey),
-      system: CONTRACT_REVIEW_SYSTEM_PROMPT,
-      schema: analysisSchema,
-      prompt: `Review this contract and return every issue you find, plus an overall summary.\n\n<document>\n${trimDocumentForPrompt(review.extractedText)}\n</document>`,
-      abortSignal: AbortSignal.timeout(ANALYSIS_TIMEOUT_MS),
-    })
+    const documentText = trimDocumentForPrompt(review.extractedText)
 
-    await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-analyze", modelKey, usage })
+    // The analysis of a fixed text never changes, and this route is entered
+    // twice over for the same text as a matter of course: it fires
+    // automatically on upload, and the advocate can re-run it by hand from the
+    // workspace. The key is scoped to the advocate on purpose -- two people who
+    // happen to upload the same contract must each get their own analysis
+    // rather than one reading a result produced under the other's account.
+    const { value: object, hit } = await cachedGenerate(
+      `analyze:${userContext.clerkUid}:${modelKey}:${hashForCache(documentText)}`,
+      CACHE_TTL.contractAnalyze,
+      async () => {
+        const { object, usage } = await generateObject({
+          model: modelFor(modelKey),
+          system: CONTRACT_REVIEW_SYSTEM_PROMPT,
+          schema: analysisSchema,
+          prompt: `Review this contract and return every issue you find, plus an overall summary.\n\n<document>\n${documentText}\n</document>`,
+          maxOutputTokens: OUTPUT_CAPS.contractAnalyze,
+          // Already bounded by its own deadline below; a retry after a timeout
+          // mostly buys a second timeout at full price.
+          maxRetries: AI_MAX_RETRIES_TIMED,
+          abortSignal: AbortSignal.timeout(ANALYSIS_TIMEOUT_MS),
+        })
+        await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-analyze", modelKey, usage })
+        return object
+      }
+    )
+    if (hit) console.log("[CONTRACT_ANALYZE] served from cache, no model call")
 
     review.issues = object.issues.map((issue, index) => ({ id: `i${index + 1}`, ...issue }))
     review.summary = object.summary

@@ -54,7 +54,7 @@ export async function PATCH(
   }
 
   const plan = body.plan as (typeof SUBSCRIPTION_PLANS)[number];
-  const previousPlan = targetUser.subscription?.plan || "free";
+  const previousPlan = targetUser.subscription?.plan || "trial";
 
   await changeUserSubscriptionPlan(targetUser.clerkUid, plan);
 

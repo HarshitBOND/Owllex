@@ -8,11 +8,16 @@ import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import { trimDocumentForPrompt } from "@/lib/ai/document-context"
 import { messagesForStorage, stripEphemeralParts, MAX_STORED_MESSAGES } from "@/lib/ai/message-trim"
 import { modelFor } from "@/lib/ai/provider"
-import { resolveModel } from "@/lib/ai/models"
+import { resolveModel, OUTPUT_CAPS, AI_MAX_RETRIES } from "@/lib/ai/models"
 import { CONTRACT_REVIEW_SYSTEM_PROMPT, CONTRACT_CHAT_TOOL_RULES } from "@/lib/ai/prompts"
 import { checkAiAllowance, aiLimitResponse, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 export const maxDuration = 60
+
+// Enough to identify an issue and point at the clause it concerns, which is all
+// the assistant needs to discuss it. The stored issue keeps its full text.
+const ISSUE_DESCRIPTION_CHARS = 400
+const ISSUE_QUOTE_CHARS = 300
 
 const bodySchema = z.object({
   model: z.string().optional(),
@@ -67,9 +72,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const safeDocument = trimDocumentForPrompt(sanitizeDocumentHtml(documentHtml))
+
+  // Each issue gets its own budget here. The analysis schema lets a single
+  // issue carry 2,000 characters of description and another 2,000 of quoted
+  // text, so a document with the full 40 issues built a ~160k-character block
+  // -- four times the budget the document beside it is trimmed to -- and it was
+  // re-sent on every turn and again on each of the five tool steps. The full
+  // text is still in Mongo and on screen; the assistant only needs to know what
+  // was flagged and roughly where.
   const issuesBlock = review.issues.length
     ? review.issues
-        .map((i) => `- [${i.severity}] ${i.title}: ${i.description}${i.quote ? ` (quoting: "${i.quote}")` : ""}`)
+        .map((i) => {
+          const description = i.description.slice(0, ISSUE_DESCRIPTION_CHARS)
+          const quote = i.quote ? ` (quoting: "${i.quote.slice(0, ISSUE_QUOTE_CHARS)}")` : ""
+          return `- [${i.severity}] ${i.title}: ${description}${quote}`
+        })
         .join("\n")
     : "(no issues on file run a review first if you want a starting list)"
 
@@ -118,9 +135,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           options: z
             .array(z.string().min(1).max(80))
             .min(2)
-            .max(4)
+            .max(5)
             .optional()
-            .describe("2-4 short answer choices, if the question has a fixed set of reasonable answers."),
+            .describe("2-5 short answer choices, if the question has a fixed set of reasonable answers."),
           allowFreeText: z
             .boolean()
             .optional()
@@ -129,6 +146,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }),
     },
     stopWhen: stepCountIs(5),
+    // proposeFix returns the entire document, so this is headroom against a
+    // runaway rather than a saving -- a cap that truncates a redline mid-clause
+    // would be worse than no cap at all.
+    maxOutputTokens: OUTPUT_CAPS.contractProposeFix,
+    maxRetries: AI_MAX_RETRIES,
     experimental_transform: smoothStream({ chunking: "word" }),
     onFinish: async ({ totalUsage }) => {
       await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-chat", modelKey, usage: totalUsage })

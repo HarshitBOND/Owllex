@@ -1,7 +1,7 @@
 import Stripe from "stripe"
 import { SubscriptionBillingCycle, SubscriptionPlan } from "@/app/api/lib/services/subscription"
 
-type BillablePlan = Exclude<SubscriptionPlan, "free">
+type BillablePlan = Exclude<SubscriptionPlan, "trial">
 
 const BILLABLE_PLAN_SET = new Set<BillablePlan>(["starter", "professional", "enterprise"])
 

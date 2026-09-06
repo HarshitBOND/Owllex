@@ -1,15 +1,14 @@
 // Cloudflare Containers deployment of the Ravenslaw Python backend (OCR + RAG +
-// scraper), migrated off Render (see ../../render.yaml, kept for reference/rollback).
+// scraper).
 //
-// This runs the same Dockerfile Render used (backend/Dockerfile, default/"ingest"
-// target), as an actual container behind a Worker + Durable Object -- Workers'
-// V8 isolates can't run Ghostscript, onnxruntime, or a gunicorn process directly.
+// This runs backend/Dockerfile (default/"ingest" target) as an actual container
+// behind a Worker + Durable Object -- Workers' V8 isolates can't run Ghostscript,
+// onnxruntime, or a gunicorn process directly.
 //
 // Deploy: from this directory, `npx wrangler deploy` (builds & pushes the image).
-// Secrets: `npx wrangler secret put <NAME>` for each var listed as a secret in
-// ../../render.yaml (MONGODB_URI, OPENAI_API_KEY, R2_*, etc.) -- read by
-// src/index.ts and passed into the container at start time, never baked into
-// this file or the deployed script.
+// Secrets: `npx wrangler secret put <NAME>` for each secret env var read by
+// src/index.ts (MONGODB_URI, OPENAI_API_KEY, R2_*, etc.) and passed into the
+// container at start time, never baked into this file or the deployed script.
 {
   "name": "owllex-backend",
   "main": "src/index.ts",

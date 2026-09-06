@@ -7,6 +7,10 @@ import { ArrowRight, HelpCircle, Pencil } from "lucide-react"
 /**
  * The one chat tool with no server-side execute. The model calls it and the run
  * stops there; the advocate's answer, added in the UI, is what resumes it.
+ *
+ * Shared across every AI surface in the app (main chat, contract review,
+ * draft documents) so a clarifying question always looks and behaves the
+ * same way, however the request that produced it got there.
  */
 export const CLARIFY_TOOL = "askClarifyingQuestion"
 

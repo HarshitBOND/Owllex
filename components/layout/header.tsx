@@ -10,10 +10,11 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 
 const navLinks = [
-  { href: "#services", label: "Services" },
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How It Works" },
-  { href: "#contact", label: "Contact" },
+  { type: "link" as const, href: "/#services", label: "Services" },
+  { type: "link" as const, href: "/#features", label: "Features" },
+  { type: "link" as const, href: "/#how-it-works", label: "How It Works" },
+  { type: "link" as const, href: "/#contact", label: "Contact" },
+  { type: "plans" as const },
 ]
 
 function PlansNavLink({ className, onNavigate }: { className: string; onNavigate?: () => void }) {
@@ -57,18 +58,21 @@ export function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center space-x-6">
-          {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="text-sm font-medium hover:text-primary transition-colors"
-            >
-              {link.label}
-            </a>
-          ))}
-          <ClerkLoaded>
-            <PlansNavLink className="text-sm font-medium hover:text-primary transition-colors" />
-          </ClerkLoaded>
+          {navLinks.map((link) =>
+            link.type === "plans" ? (
+              <ClerkLoaded key="plans">
+                <PlansNavLink className="text-sm font-medium hover:text-primary transition-colors" />
+              </ClerkLoaded>
+            ) : (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium hover:text-primary transition-colors"
+              >
+                {link.label}
+              </a>
+            )
+          )}
         </nav>
 
         <div className="flex items-center gap-1.5 sm:gap-3">
@@ -130,22 +134,25 @@ export function Header() {
       {mobileMenuOpen && (
         <div className="border-t bg-background px-4 py-4 md:hidden">
           <nav className="flex flex-col space-y-1">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="rounded-md px-2 py-2.5 text-sm font-medium hover:bg-muted hover:text-primary transition-colors"
-              >
-                {link.label}
-              </a>
-            ))}
-            <ClerkLoaded>
-              <PlansNavLink
-                className="rounded-md px-2 py-2.5 text-left text-sm font-medium hover:bg-muted hover:text-primary transition-colors"
-                onNavigate={() => setMobileMenuOpen(false)}
-              />
-            </ClerkLoaded>
+            {navLinks.map((link) =>
+              link.type === "plans" ? (
+                <ClerkLoaded key="plans">
+                  <PlansNavLink
+                    className="rounded-md px-2 py-2.5 text-left text-sm font-medium hover:bg-muted hover:text-primary transition-colors"
+                    onNavigate={() => setMobileMenuOpen(false)}
+                  />
+                </ClerkLoaded>
+              ) : (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-md px-2 py-2.5 text-sm font-medium hover:bg-muted hover:text-primary transition-colors"
+                >
+                  {link.label}
+                </a>
+              )
+            )}
           </nav>
 
           <div className="mt-3 flex flex-col gap-2 border-t pt-3">

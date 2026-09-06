@@ -1,6 +1,8 @@
 import { generateObject } from "ai"
 import { z } from "zod"
 import { modelFor } from "@/lib/ai/provider"
+import { OUTPUT_CAPS, AI_MAX_RETRIES_TIMED } from "@/lib/ai/models"
+import { cachedGenerate, hashForCache, CACHE_TTL } from "@/lib/ai/response-cache"
 import { DOCUMENT_CATEGORIES } from "@/lib/document-categories"
 import { ALLOWED_TAGS } from "@/lib/html/allowlist"
 import { CASE_SOURCES } from "@/lib/templates/case-source"
@@ -22,6 +24,13 @@ import { COLUMN_TYPES, FIELD_TYPES, fieldsSchema, type TemplateField } from "@/l
  */
 
 const EXTRACTION_TIMEOUT_MS = 120_000
+
+/** The token counts recordAiUsage needs, as the AI SDK reports them. */
+export type AiCallUsage = {
+  inputTokens?: number
+  outputTokens?: number
+  cachedInputTokens?: number
+}
 
 /**
  * Deliberately looser than the stored schema: optional keys are omitted rather
@@ -122,14 +131,31 @@ export async function extractTemplateFromText(opts: {
   text: string
   filename: string
   modelKey: string
-}): Promise<{ template: ExtractedTemplate; usage: unknown }> {
-  const { object, usage } = await generateObject({
-    model: modelFor(opts.modelKey),
-    system: TEMPLATE_EXTRACTION_PROMPT,
-    schema: extractionSchema,
-    prompt: `Convert this court form into a template.\n\nFile: ${opts.filename}\n\n<form>\n${opts.text}\n</form>`,
-    abortSignal: AbortSignal.timeout(EXTRACTION_TIMEOUT_MS),
-  })
+}): Promise<{ template: ExtractedTemplate; usage: AiCallUsage | null }> {
+  // Keyed on the form's text alone, with no owner in the key. That is
+  // deliberate and is the one place it is safe: these are blank court forms in
+  // the admin corpus, where two admins importing the same form should get the
+  // same template. It also closes the `force=true` re-import path, which
+  // otherwise re-ran the most expensive model in the app over a whole PDF.
+  const { value, hit } = await cachedGenerate(
+    `template-extract:${opts.modelKey}:${hashForCache(opts.text)}`,
+    CACHE_TTL.templateExtraction,
+    async () => {
+      const { object, usage } = await generateObject({
+        model: modelFor(opts.modelKey),
+        system: TEMPLATE_EXTRACTION_PROMPT,
+        schema: extractionSchema,
+        prompt: `Convert this court form into a template.\n\nFile: ${opts.filename}\n\n<form>\n${opts.text}\n</form>`,
+        maxOutputTokens: OUTPUT_CAPS.templateExtraction,
+        maxRetries: AI_MAX_RETRIES_TIMED,
+        abortSignal: AbortSignal.timeout(EXTRACTION_TIMEOUT_MS),
+      })
+      return { object, usage }
+    }
+  )
+  const { object } = value
+  // Nothing was spent on a cache hit, so nothing is charged for one.
+  const usage = hit ? null : value.usage
 
   // fieldsSchema applies the defaults the AI schema deliberately left off, and
   // rejects the structural mistakes worth catching before an admin sees them --

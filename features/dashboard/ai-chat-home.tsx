@@ -15,7 +15,7 @@ import {
 } from "ai"
 import { AlertTriangle, ArrowDown, Check, Gavel, Library, Search, Shuffle, Users } from "lucide-react"
 import { AnswerCard } from "@/features/dashboard/answer/AnswerCard"
-import { isClarifyPart } from "@/features/dashboard/answer/ClarifyingQuestion"
+import { isClarifyPart } from "@/components/ai/ClarifyingQuestion"
 import { isActionPart } from "@/features/dashboard/answer/ActionProposal"
 import { sourcesOf, textOf as answerTextOf } from "@/features/dashboard/answer/answer-meta"
 import {
@@ -23,7 +23,6 @@ import {
   type ClaudeChatInputHandle,
   type ClaudeChatInputSubmission,
 } from "@/components/ui/claude-style-chat-input"
-import { DraftPanel, RevisionsPanel } from "./components/AiModePanels"
 import { useAiChat, useChatThread } from "@/contexts/AiChatContext"
 import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
 import { useAllowedModels } from "@/hooks/useAllowedModels"
@@ -138,6 +137,18 @@ const TOOL_LABELS: Record<string, { running: string; done: string; icon: typeof 
 
 type ChatPart = UIMessagePart<UIDataTypes, UITools>
 
+// Deep Research runs its understand -> search -> draft -> verify -> rewrite
+// pipeline before it has anything to show, so this is what fills the
+// thinking trail in the meantime instead of a tool call or a reasoning line.
+const STAGE_LABELS: Record<string, string> = {
+  understanding: "Understanding the question",
+  searching: "Searching your corpus and cases",
+  drafting: "Drafting with citations",
+  verifying: "Verifying every citation",
+  rewriting: "Fixing flagged claims",
+  done: "Done",
+}
+
 const readAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -174,6 +185,22 @@ const renderThinkingPart = (part: ChatPart, key: string | number) => {
         <span>
           {failed ? `Could not ${meta.running.toLowerCase()}` : done ? meta.done : `${meta.running}…`}
         </span>
+      </div>
+    )
+  }
+
+  if (part.type === "data-stage") {
+    const stage = (part as any).data?.stage as string | undefined
+    const label = (stage && STAGE_LABELS[stage]) || "Researching…"
+    const complete = stage === "done"
+    return (
+      <div key={key} className="flex items-center gap-2 text-[13px] text-text-300 py-1">
+        {complete ? (
+          <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+        ) : (
+          <Search className="w-3.5 h-3.5 animate-pulse shrink-0" />
+        )}
+        <span>{label}</span>
       </div>
     )
   }
@@ -295,17 +322,9 @@ export function AiChatHome() {
     ? { duration: 0 }
     : { type: "spring" as const, stiffness: 260, damping: 30 }
 
-  // Drafting and picking up an unfinished document are the other two things
-  // this screen is for, so they are tabs here rather than a trip to another
-  // route and back.
-  const [mode, setMode] = useState("assistant")
-
   return (
     <div className="flex flex-col h-full min-h-0 relative">
-      {mode === "draft" && <DraftPanel />}
-      {mode === "revisions" && <RevisionsPanel />}
-
-      {mode === "assistant" && showThread && (
+      {showThread && (
         <div
           ref={scrollRef}
           onScroll={(e) => {
@@ -373,7 +392,10 @@ export function AiChatHome() {
               // rather than steps on the way to it, so both stay out of the
               // collapsed trail and render as their own cards.
               const thinkingParts = m.parts.filter(
-                (p) => p.type === "reasoning" || (isToolUIPart(p) && !isClarifyPart(p) && !isActionPart(p))
+                (p) =>
+                  p.type === "reasoning" ||
+                  p.type === "data-stage" ||
+                  (isToolUIPart(p) && !isClarifyPart(p) && !isActionPart(p))
               ) as ChatPart[]
               const thinkingOpen = index === messages.length - 1 && busy && !textContent
 
@@ -435,7 +457,7 @@ export function AiChatHome() {
         </div>
       )}
 
-      {mode === "assistant" && showThread && !atBottom && (
+      {showThread && !atBottom && (
         <button
           onClick={() => {
             atBottomRef.current = true
@@ -449,7 +471,6 @@ export function AiChatHome() {
         </button>
       )}
 
-      {mode === "assistant" && (
       <motion.div
         layout={!reduceMotion}
         transition={spring}
@@ -570,7 +591,6 @@ export function AiChatHome() {
           )}
         </AnimatePresence>
       </motion.div>
-      )}
 
       <div aria-live="polite" className="sr-only">
         {loadingHistory && "Loading conversation"}

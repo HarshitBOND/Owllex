@@ -25,7 +25,7 @@ import {
   serializeNodes,
   type SerializedWorkflowNode,
 } from "@/features/ai-workflow/workflow-serialize"
-import { MODELS, DEFAULT_MODEL, type ModelKey } from "@/lib/ai/models"
+import { MODELS, DEFAULT_MODEL, GENERIC_MODEL_KEYS, type ModelKey } from "@/lib/ai/models"
 import { useAllowedModels } from "@/hooks/useAllowedModels"
 
 const QUICK_ACTIONS = [
@@ -351,7 +351,8 @@ const WorkflowAiChatPanel = forwardRef<WorkflowAiChatPanelHandle, WorkflowAiChat
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="top">
-                  {(Object.entries(MODELS) as [ModelKey, (typeof MODELS)[ModelKey]][]).map(([key, m]) => {
+                  {GENERIC_MODEL_KEYS.map((key) => {
+                    const m = MODELS[key]
                     const locked = allowedModels ? !allowedModels.includes(key) : false
                     return (
                       <DropdownMenuItem

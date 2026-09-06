@@ -23,10 +23,24 @@ export default function ChatReasoning({
   className?: string;
 }) {
   const [value, setValue] = React.useState<string | undefined>(defaultValue);
+  const isReasoning = defaultValue === "reasoning";
+
+  const startRef = React.useRef<number | null>(null);
+  const [elapsed, setElapsed] = React.useState(0);
 
   React.useEffect(() => {
     setValue(defaultValue);
   }, [defaultValue]);
+
+  React.useEffect(() => {
+    if (!isReasoning) return;
+    if (startRef.current === null) startRef.current = Date.now();
+    const tick = () =>
+      setElapsed(Math.floor((Date.now() - startRef.current!) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isReasoning]);
 
   return (
     <Accordion
@@ -38,7 +52,14 @@ export default function ChatReasoning({
     >
       <AccordionItem value="reasoning" className="w-full">
         <AccordionTrigger className="text-md text-muted-foreground hover:no-underline hover:opacity-70 py-2 w-full">
-          {defaultValue === "reasoning" ? "Reasoning..." : `Done reasoning.`}
+          <span className="flex flex-1 items-center justify-between pr-2">
+            <span>{isReasoning ? "Reasoning..." : "Done reasoning."}</span>
+            {(isReasoning || elapsed > 0) && (
+              <span className="text-xs tabular-nums text-muted-foreground/60">
+                {elapsed}s
+              </span>
+            )}
+          </span>
         </AccordionTrigger>
         <AccordionContent className="p-0 -mt-1">
           <div className="flex flex-col gap-0">

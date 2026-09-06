@@ -27,10 +27,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { DEFAULT_MODEL, MODELS, type ModelKey } from "@/lib/ai/models"
+import { DEFAULT_MODEL, MODELS, GENERIC_MODEL_KEYS, type ModelKey } from "@/lib/ai/models"
 import { sanitizeDraftHtml } from "@/lib/html/sanitize-draft"
 import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
 import { useAllowedModels } from "@/hooks/useAllowedModels"
+import { CLARIFY_TOOL, ClarifyingQuestion, clarifyPartsOf, pendingClarify } from "@/components/ai/ClarifyingQuestion"
 
 const quickActions = [
   "Add a dispute resolution clause",
@@ -43,7 +44,7 @@ const quickActions = [
 const TOOL_STATUS: Record<string, { label: string; icon: typeof FileEdit }> = {
   proposeDocument: { label: "Drafting the document", icon: FileEdit },
   setFields: { label: "Filling in the form", icon: ListChecks },
-  askClarification: { label: "Checking what's missing", icon: HelpCircle },
+  [CLARIFY_TOOL]: { label: "Checking what's missing", icon: HelpCircle },
 }
 
 interface AiAssistantPanelProps {
@@ -106,6 +107,15 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
     id: draftId,
     transport,
     messages: initialMessages,
+    // Answering a clarifying question is the advocate's whole turn -- the
+    // model put something to them and stopped, so the answer has to go
+    // straight back without them also having to send a message.
+    sendAutomaticallyWhen: ({ messages: current }) => {
+      const last = current[current.length - 1]
+      if (!last || last.role !== "assistant") return false
+      const halts = clarifyPartsOf(last)
+      return halts.length > 0 && halts.every((part) => part.output !== undefined)
+    },
   })
 
   const busy = status === "submitted" || status === "streaming"
@@ -114,24 +124,50 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
     (text: string) => {
       const trimmed = text.trim()
       if (!trimmed || busy) return
+
+      // Typing is a legitimate way to answer a question card -- settle it as
+      // the answer instead of sending a message the model isn't expecting.
+      const pending = pendingClarify(messages)
+      if (pending) {
+        addToolResult({ tool: CLARIFY_TOOL, toolCallId: pending.toolCallId, output: { answer: trimmed } })
+        return
+      }
+
       sendMessage({ text: trimmed }, { body: { documentHtml: getDocumentHtml() } })
     },
-    [busy, getDocumentHtml, sendMessage]
+    [busy, getDocumentHtml, sendMessage, messages, addToolResult]
+  )
+
+  const answerQuestion = useCallback(
+    (toolCallId: string, answer: string) => {
+      addToolResult({ tool: CLARIFY_TOOL, toolCallId, output: { answer } })
+    },
+    [addToolResult]
+  )
+
+  const skipQuestion = useCallback(
+    (toolCallId: string) => {
+      addToolResult({
+        tool: CLARIFY_TOOL,
+        toolCallId,
+        output: { skipped: true, note: "The advocate skipped this. Draft on a stated assumption instead." },
+      })
+    },
+    [addToolResult]
   )
 
   /**
    * Closes off tool calls nothing else will answer.
    *
-   * None of these tools has an `execute`: they stream to the advocate and wait.
-   * askClarification waits for prose, and proposeDocument/setFields wait for a
-   * button. But the model's turn is only complete once every call it made has a
-   * result, so a question the advocate simply answers by typing would leave a
-   * dangling call -- and the NEXT request then dies with
-   * AI_MissingToolResultsError, permanently breaking the conversation.
-   *
-   * askClarification is resolved the moment it renders, because showing the
-   * questions IS its result. The two that need a decision are resolved as
-   * "not accepted" only once the advocate has moved past them.
+   * proposeDocument and setFields have no `execute`: they stream to the
+   * advocate and wait for a button. But the model's turn is only complete
+   * once every call it made has a result, so a proposal the advocate simply
+   * moves past (by sending a new message rather than clicking Apply or
+   * Discard) would leave a dangling call -- and the NEXT request then dies
+   * with AI_MissingToolResultsError, permanently breaking the conversation.
+   * They're resolved as "not accepted" once a later message shows the
+   * advocate has moved on. askClarifyingQuestion is *not* settled here -- it
+   * waits for the advocate's actual answer or Skip, the same as main chat.
    */
   useEffect(() => {
     if (busy) return
@@ -139,6 +175,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
     messages.forEach((msg, index) => {
       if (msg.role !== "assistant") return
       const isLastMessage = index === messages.length - 1
+      if (isLastMessage) return
 
       for (const part of msg.parts) {
         if (!isToolUIPart(part)) continue
@@ -150,12 +187,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
         const toolCallId = (part as { toolCallId: string }).toolCallId
         const name = getToolName(part)
 
-        if (name === "askClarification") {
-          addToolResult({ tool: "askClarification", toolCallId, output: { asked: true } })
-          continue
-        }
-
-        if ((name === "proposeDocument" || name === "setFields") && !isLastMessage) {
+        if (name === "proposeDocument" || name === "setFields") {
           addToolResult({ tool: name, toolCallId, output: { accepted: false } })
           setApplied((prev) => (prev[toolCallId] ? prev : { ...prev, [toolCallId]: "discarded" }))
         }
@@ -336,10 +368,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
             | undefined
           const filledValues = fill?.input?.values?.filter((v) => v?.key && v?.value) ?? []
 
-          const clarification = msg.parts.find(
-            (p) => isToolUIPart(p) && getToolName(p) === "askClarification"
-          ) as { toolCallId: string; state: string; input?: { questions?: string[] } } | undefined
-          const questions = clarification?.input?.questions?.filter(Boolean) ?? []
+          const clarifyingParts = clarifyPartsOf(msg).filter((p) => p.output === undefined)
 
           return (
             <div key={msg.id} className="flex flex-col items-start">
@@ -349,26 +378,18 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
                 </p>
               )}
 
-              {questions.length > 0 && (
-                <div className="w-full rounded-xl border border-accent/25 bg-accent/[0.06] overflow-hidden">
-                  <div className="px-3.5 py-2 border-b border-accent/20 flex items-center gap-2">
-                    <HelpCircle className="w-3.5 h-3.5 text-accent shrink-0" />
-                    <span className="text-[11px] font-semibold text-gray-700 dark:text-foreground">
-                      A few details would help
-                    </span>
-                  </div>
-                  <ol className="p-3.5 space-y-1.5">
-                    {questions.map((q, i) => (
-                      <li
-                        key={i}
-                        className="flex gap-2 text-[13px] leading-relaxed text-gray-800 dark:text-foreground"
-                      >
-                        <span className="text-accent font-medium shrink-0">{i + 1}.</span>
-                        <span>{q}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
+              {clarifyingParts.map((part) =>
+                part.input?.question ? (
+                  <ClarifyingQuestion
+                    key={part.toolCallId}
+                    question={part.input.question}
+                    options={part.input.options}
+                    allowFreeText={part.input.allowFreeText}
+                    disabled={busy}
+                    onAnswer={(answer) => answerQuestion(part.toolCallId, answer)}
+                    onSkip={() => skipQuestion(part.toolCallId)}
+                  />
+                ) : null
               )}
 
               {filledValues.length > 0 && (
@@ -500,7 +521,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
                 </div>
               )}
 
-              {(text || proposal || questions.length > 0) && (
+              {(text || proposal || clarifyingParts.length > 0) && (
                 <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground">
                   <button
                     type="button"
@@ -599,7 +620,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {(Object.keys(MODELS) as ModelKey[]).map((key) => {
+                  {GENERIC_MODEL_KEYS.map((key) => {
                     const locked = allowedModels ? !allowedModels.includes(key) : false
                     return (
                       <DropdownMenuItem

@@ -27,7 +27,7 @@ export async function ensureUser(clerkUserId: string) {
         cases: [],
         clients: [],
         subscription: {
-          plan: "free",
+          plan: "trial",
           status: "active",
           billingCycle: "monthly",
           cancelAtPeriodEnd: false,
@@ -44,7 +44,7 @@ export async function ensureUser(clerkUserId: string) {
         cases: [],
         clients: [],
         subscription: {
-          plan: "free",
+          plan: "trial",
           status: "active",
           billingCycle: "monthly",
           cancelAtPeriodEnd: false,

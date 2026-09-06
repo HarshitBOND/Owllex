@@ -31,7 +31,6 @@ const MobileBottomNav = () => {
     ]
 
     const moreNavItems = [
-        { name: "Deep Research", icon: FileSearch, href: "/legal-research" },
         { name: "Overview", icon: BarChart3, href: "/dashboard/overview" },
         { name: "Help & Support", icon: HelpCircle, href: "/contact-us" },
         // { name: "Calendar", icon: CalendarDays, href: "/calendar" },

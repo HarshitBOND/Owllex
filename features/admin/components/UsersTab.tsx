@@ -111,7 +111,7 @@ export function UsersTab({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <select
-                          value={u.subscription?.plan || "free"}
+                          value={u.subscription?.plan || "trial"}
                           disabled={changingPlanId === u._id}
                           onChange={(e) => onPlanChange(u._id, e.target.value as SubscriptionPlan)}
                           className="px-2 py-1 border-2 border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 disabled:opacity-50"
