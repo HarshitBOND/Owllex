@@ -18,6 +18,7 @@ import { useDocumentTemplatesData } from "./hooks/useDocumentTemplatesData"
 import { useLogsData } from "./hooks/useLogsData"
 import { useCauselistImport } from "./hooks/useCauselistImport"
 import { useRagIngestData } from "./hooks/useRagIngestData"
+import { useSciScraperData } from "./hooks/useSciScraperData"
 import { AdminTabNav } from "./components/AdminTabNav"
 import { DashboardTab } from "./components/DashboardTab"
 import { UsersTab } from "./components/UsersTab"
@@ -27,6 +28,7 @@ import { DocumentTemplatesTab } from "./components/DocumentTemplatesTab"
 import { LogsTab } from "./components/LogsTab"
 import { CauseListTab } from "./components/CauseListTab"
 import { RagIngestTab } from "./components/RagIngestTab"
+import { SciScraperTab } from "./components/SciScraperTab"
 
 export default function AdminDashboardPage() {
   const { isOpen } = useSidebar()
@@ -43,6 +45,7 @@ export default function AdminDashboardPage() {
   const logsData = useLogsData()
   const causelist = useCauselistImport()
   const ragIngest = useRagIngestData()
+  const sciScraper = useSciScraperData(ragIngest.fetchRagStatus)
 
   const refreshActiveTab = () => {
     if (activeTab === "dashboard") dashboard.fetchDashboard()
@@ -53,6 +56,10 @@ export default function AdminDashboardPage() {
     else if (activeTab === "logs") logsData.fetchLogs()
     else if (activeTab === "causelist") causelist.fetchCauselistStatus()
     else if (activeTab === "rag") ragIngest.fetchRagStatus()
+    else if (activeTab === "sci-scraper") {
+      sciScraper.fetchSciScraperStatus()
+      ragIngest.fetchRagStatus()
+    }
   }
 
   useEffect(() => {
@@ -245,6 +252,22 @@ export default function AdminDashboardPage() {
                 searchError={ragIngest.searchError}
                 searching={ragIngest.searching}
                 runSearch={ragIngest.runSearch}
+              />
+            )}
+            {activeTab === "sci-scraper" && (
+              <SciScraperTab
+                count={sciScraper.count}
+                setCount={sciScraper.setCount}
+                job={sciScraper.job}
+                running={sciScraper.running}
+                starting={sciScraper.starting}
+                formError={sciScraper.formError}
+                onStart={sciScraper.handleStartSciScraper}
+                onCancel={sciScraper.handleCancelSciScraper}
+                kbStatus={ragIngest.status}
+                kbStatusLoading={ragIngest.statusLoading}
+                kbStatusError={ragIngest.statusError}
+                onRefreshKb={ragIngest.fetchRagStatus}
               />
             )}
           </div>

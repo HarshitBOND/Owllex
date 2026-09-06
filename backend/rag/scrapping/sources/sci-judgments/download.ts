@@ -10,8 +10,7 @@
 
 import { chromium } from "playwright";
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
-import { createInterface } from "node:readline/promises";
+import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { backupToR2, count, has, put } from "../../hashdb.js";
@@ -20,16 +19,52 @@ import { uploadRawDocument } from "../../storage.js";
 const SEARCH_URL = "https://scr.sci.gov.in/scrsearch/";
 const N = Number(process.argv[2]) || 2; // how many new PDFs to download
 
+const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || "http://localhost:8000";
+
 const SOURCE = "sci";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SOURCE_DIR = join(__dirname, "..", "..", "data", "raw", SOURCE);
 const PDF_DIR = join(SOURCE_DIR, "pdfs");
 const MANIFEST_PATH = join(SOURCE_DIR, "manifest.jsonl");
 
-async function waitForEnter(message: string): Promise<void> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  await rl.question(message);
-  rl.close();
+// Hands a freshly-downloaded PDF straight to the same admin-upload ingest
+// pipeline the RAG Ingest tab uses, so a scrape run doesn't just fill a disk
+// folder -- each judgment is chunked, embedded, and counted in the knowledge
+// base immediately. Never fatal: a scrape that downloaded the PDF correctly
+// should not fail just because ingestion (or its OpenAI/Chroma config) isn't
+// available right now.
+async function ingestIntoKnowledgeBase(filePath: string, filename: string): Promise<number | null> {
+  const token = process.env.BACKEND_INTERNAL_TOKEN;
+  if (!token) {
+    console.warn("  Skipping knowledge base ingestion: BACKEND_INTERNAL_TOKEN is not set");
+    return null;
+  }
+
+  try {
+    const form = new FormData();
+    form.append("files", new Blob([readFileSync(filePath)]), filename);
+
+    const response = await fetch(`${BACKEND_API}/api/v1/rag/ingest`, {
+      method: "POST",
+      headers: { "x-internal-token": token },
+      body: form,
+    });
+
+    if (response.status === 409) {
+      console.log("  Already in knowledge base (duplicate content)");
+      return null;
+    }
+    if (!response.ok) {
+      console.warn(`  Knowledge base ingestion failed (HTTP ${response.status})`);
+      return null;
+    }
+
+    const data = (await response.json()) as { chunk_count?: number };
+    return data.chunk_count ?? 0;
+  } catch (error) {
+    console.warn(`  Knowledge base ingestion error: ${(error as Error).message}`);
+    return null;
+  }
 }
 
 async function main(): Promise<void> {
@@ -43,8 +78,12 @@ async function main(): Promise<void> {
     const page = await context.newPage();
     await page.goto(SEARCH_URL);
 
-    console.log("Solve the captcha and run a search, then come back here.");
-    await waitForEnter("Press Enter when the results are showing... ");
+    console.log("Solve the captcha and run a search in the browser window that just opened.");
+    // No terminal attached when this runs from the admin panel, so watch the DOM
+    // for results instead of waiting on stdin. No timeout: a human takes as long
+    // as they take to clear the captcha.
+    await page.waitForSelector("#report_body tr input#cnr", { timeout: 0 });
+    console.log("Results detected, starting downloads.");
 
     let downloaded = 0;
 
@@ -132,6 +171,11 @@ async function main(): Promise<void> {
 
         appendFileSync(MANIFEST_PATH, JSON.stringify({ cnr, title, listingText, hash, filename }) + "\n");
         console.log(`[${downloaded}/${N}] Downloaded ${cnr}`);
+
+        const chunkCount = await ingestIntoKnowledgeBase(filePath, filename);
+        if (chunkCount !== null) {
+          console.log(`  Added to knowledge base (${chunkCount} chunks)`);
+        }
       }
 
       if (downloaded >= N) break;
@@ -166,7 +210,6 @@ async function main(): Promise<void> {
 
     await backupToR2(true);
     console.log(`Done. Downloaded ${downloaded} new PDF(s). Index now holds ${count()} entries.`);
-    await waitForEnter("Press Enter to close the browser... ");
   } finally {
     await browser.close();
   }

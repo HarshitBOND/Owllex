@@ -101,6 +101,7 @@ export type Tab =
   | "logs"
   | "causelist"
   | "rag"
+  | "sci-scraper"
 
 export interface TabDefinition {
   id: Tab
@@ -176,4 +177,17 @@ export interface RagSearchResult {
   title?: string
   document_type?: string
   date?: string
+}
+
+export type SciScraperStatus = "starting" | "waiting_for_captcha" | "downloading" | "completed" | "failed"
+
+export interface SciScraperJob {
+  status: SciScraperStatus
+  requested: number
+  downloaded: number
+  ingested: number
+  log: string[]
+  error: string | null
+  startedAt: string
+  finishedAt: string | null
 }

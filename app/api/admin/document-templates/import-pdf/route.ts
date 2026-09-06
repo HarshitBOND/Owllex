@@ -195,74 +195,93 @@ export async function POST(request: NextRequest) {
   // parity -- PATCH rejects it -- so a mismatched template cannot reach anyone.
   const parityErrors = validateTokenParity(bodyHtml, extracted.fields)
 
-  const base = slugify(extracted.title)
+  // The extraction model has no length cap on these, but the schema does
+  // (title 160, description 400) -- a verbose court letterhead/citation
+  // must not turn into an uncaught ValidationError this far into the request.
+  const title = extracted.title.slice(0, 160)
+  const description = extracted.description.slice(0, 400)
+
+  const base = slugify(title)
   let slug = base
-  for (let n = 2; await DocumentTemplate.exists({ slug }); n++) {
-    slug = `${base}-${n}`
-    if (n > 50) {
-      slug = `${base}-${Date.now()}`
-      break
+
+  try {
+    for (let n = 2; await DocumentTemplate.exists({ slug }); n++) {
+      slug = `${base}-${n}`
+      if (n > 50) {
+        slug = `${base}-${Date.now()}`
+        break
+      }
     }
-  }
 
-  const sourcePdf = {
-    r2Key: key,
-    filename,
-    sizeBytes: compressed.storedBytes,
-    sha256,
-    pageCount,
-  }
+    const sourcePdf = {
+      r2Key: key,
+      filename,
+      sizeBytes: compressed.storedBytes,
+      sha256,
+      pageCount,
+    }
 
-  const template = await DocumentTemplate.create({
-    title: extracted.title,
-    slug,
-    description: extracted.description,
-    category: extracted.category,
-    bodyHtml,
-    fields: extracted.fields,
-    // Never published on import. This is a language model's reconstruction of a
-    // court document; it reaches an advocate only after a person has put it
-    // beside the original and agreed.
-    status: "draft",
-    latestVersion: 1,
-    createdBy: admin.dbUserId,
-    updatedBy: admin.dbUserId,
-    publishedAt: null,
-  })
-
-  await seedFirstVersion({
-    templateId: template._id,
-    userId: admin.dbUserId,
-    input: {
+    const template = await DocumentTemplate.create({
+      title,
+      slug,
+      description,
+      category: extracted.category,
       bodyHtml,
       fields: extracted.fields,
-      sourcePdf,
-      renderMode: "html",
-      changeNote: `Imported from ${filename}`,
-    },
-  })
+      // Never published on import. This is a language model's reconstruction of a
+      // court document; it reaches an advocate only after a person has put it
+      // beside the original and agreed.
+      status: "draft",
+      latestVersion: 1,
+      createdBy: admin.dbUserId,
+      updatedBy: admin.dbUserId,
+      publishedAt: null,
+    })
 
-  await logAdminAction(admin.dbUserId, "imported_document_template", request, {
-    targetType: "document",
-    targetId: String(template._id),
-    details: `Imported "${extracted.title}" from ${filename} (${extracted.fields.length} fields)`,
-  })
-
-  return NextResponse.json(
-    {
-      success: true,
-      template: {
-        id: String(template._id),
-        title: template.title,
-        description: template.description,
-        category: template.category,
-        status: template.status,
+    await seedFirstVersion({
+      templateId: template._id,
+      userId: admin.dbUserId,
+      input: {
         bodyHtml,
         fields: extracted.fields,
         sourcePdf,
+        renderMode: "html",
+        changeNote: `Imported from ${filename}`,
       },
-      parityErrors,
-    },
-    { status: 201 }
-  )
+    })
+
+    await logAdminAction(admin.dbUserId, "imported_document_template", request, {
+      targetType: "document",
+      targetId: String(template._id),
+      details: `Imported "${title}" from ${filename} (${extracted.fields.length} fields)`,
+    })
+
+    return NextResponse.json(
+      {
+        success: true,
+        template: {
+          id: String(template._id),
+          title: template.title,
+          description: template.description,
+          category: template.category,
+          status: template.status,
+          bodyHtml,
+          fields: extracted.fields,
+          sourcePdf,
+        },
+        parityErrors,
+      },
+      { status: 201 }
+    )
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Could not save the template extracted from "${filename}": ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      },
+      { status: 500 }
+    )
+  }
 }

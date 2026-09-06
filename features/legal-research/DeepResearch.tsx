@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm"
 import { AlertTriangle, BadgeCheck, Check, FileText, Library, Loader2, Search, Sparkles } from "lucide-react"
 import { AiLimitNotice, parseAiLimitError } from "@/components/ui/ai-limit-notice"
 import { useCorpora } from "@/features/corpus/hooks/useCorpora"
+import { markdownComponents as answerMarkdownComponents } from "@/features/dashboard/answer/AnswerBody"
 
 const STAGES = [
   { id: "understanding", label: "Understanding the question" },
@@ -223,8 +224,10 @@ export default function DeepResearch() {
               {verified ? "Citations verified" : "Verification incomplete check citations before relying on them"}
             </div>
           )}
-          <div className="text-sm text-text-100 dark:text-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+          <div className="text-sm text-text-100 dark:text-foreground leading-relaxed max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerMarkdownComponents}>
+              {answer}
+            </ReactMarkdown>
           </div>
           {sources.length > 0 && (
             <div className="mt-4 pt-3 border-t border-gray-100 dark:border-border">

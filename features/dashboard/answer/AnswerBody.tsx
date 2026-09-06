@@ -46,10 +46,10 @@ export function AnswerBody({
   )
 }
 
-const markdownComponents = {
-  h1: (p: any) => <h1 className="text-lg font-semibold text-text-100 mt-4 mb-2 first:mt-0" {...p} />,
-  h2: (p: any) => <h2 className="text-base font-semibold text-text-100 mt-4 mb-2 first:mt-0" {...p} />,
-  h3: (p: any) => <h3 className="text-sm font-semibold text-text-100 mt-3 mb-1.5 first:mt-0" {...p} />,
+export const markdownComponents = {
+  h1: (p: any) => <h1 className="font-serif text-lg font-semibold text-text-100 mt-4 mb-2 first:mt-0" {...p} />,
+  h2: (p: any) => <h2 className="font-serif text-base font-semibold text-text-100 mt-4 mb-2 first:mt-0" {...p} />,
+  h3: (p: any) => <h3 className="font-serif text-sm font-semibold text-text-100 mt-3 mb-1.5 first:mt-0" {...p} />,
   p: (p: any) => <p className="mb-2.5 last:mb-0 leading-relaxed" {...p} />,
   ul: (p: any) => <ul className="list-disc pl-5 mb-2.5 space-y-1" {...p} />,
   ol: (p: any) => <ol className="list-decimal pl-5 mb-2.5 space-y-1" {...p} />,
