@@ -2,7 +2,6 @@
 
 import { use } from "react"
 import dynamic from "next/dynamic"
-import Navbar from "@/components/layout/navbar"
 import { cn } from "@/lib/utils"
 
 const DraftWorkspace = dynamic(() => import("@/features/draft-documents/components/DraftWorkspace"), {
@@ -14,22 +13,22 @@ const DraftWorkspace = dynamic(() => import("@/features/draft-documents/componen
   ssr: false,
 })
 
+/**
+ * The document fills the page: no app navbar, no card, no padding around it.
+ * Everything this screen needs -- where you came from, what the document is,
+ * export -- is in the document's own masthead.
+ */
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
   return (
     <div
       className={cn(
-        "bg-[#F3F5F9] dark:bg-background h-screen w-full transition-all duration-300 flex flex-col pb-20 lg:pb-0",
+        "bg-white dark:bg-background h-screen w-full transition-all duration-300 flex flex-col pb-20 lg:pb-0",
         "lg:ml-[var(--sidebar-offset)]",
       )}
     >
-      <div className="px-3 sm:px-4 md:px-6 pt-3 md:pt-4 shrink-0">
-        <Navbar withBack location="Draft Documents" />
-      </div>
-      <div className="flex-1 min-h-0 px-3 sm:px-4 md:px-6 pb-3 md:pb-4 mt-1">
-        <DraftWorkspace draftId={id} />
-      </div>
+      <DraftWorkspace draftId={id} />
     </div>
   )
 }

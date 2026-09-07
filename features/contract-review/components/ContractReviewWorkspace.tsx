@@ -172,10 +172,13 @@ export default function ContractReviewWorkspace({
    * syncs local state to that rather than queueing another save -- autosaving
    * the same text back would just lose the race with its own PATCH.
    */
-  const applyRevision = (html: string, nextRevisions: Revision[]) => {
+  const applyRevision = (html: string, nextRevisions: Revision[], _wasScoped?: boolean, version?: number) => {
     editorRef.current?.commands.setContent(html)
     setContentHtml(html)
-    setVersion((current) => current + 1)
+    // Adopts the server's version rather than incrementing our own -- see the
+    // matching comment in DraftWorkspace's applyRevision for why guessing
+    // here corrupts the autosave hook's version tracking.
+    setVersion((current) => version ?? current + 1)
     setShowEdits(nextRevisions.length > 0)
   }
 
@@ -363,6 +366,15 @@ export default function ContractReviewWorkspace({
     autosave.queue({ contentHtml: html })
   }
 
+  const addRevision = async (instruction: string) => {
+    // The passage just selected may be text the advocate typed a moment ago
+    // and autosave hasn't reached the server yet -- revising against the
+    // server's stale copy would fail to find it. Flushing first makes sure
+    // the copy the revise route matches against is current.
+    await autosave.flush()
+    await revisionsApi.addRevision(instruction, editorSelection.selection)
+  }
+
   const toggleResolved = (issueId: string) => {
     setResolvedIssueIds((prev) => {
       const next = new Set(prev)
@@ -417,8 +429,13 @@ export default function ContractReviewWorkspace({
             onReupload={handleReupload}
             onRerun={handleRerun}
             isReanalyzing={status === "analyzing"}
-            showEdits={showEdits}
+            showEdits={showEdits || revisionsApi.isGenerating || revisionsApi.hasPendingApproval}
             redlineHtml={revisionsApi.redlineHtml}
+            revisionBusy={revisionsApi.isGenerating}
+            hasPendingApproval={revisionsApi.hasPendingApproval}
+            pendingApprovalInstruction={revisionsApi.awaitingApprovalInstruction}
+            onApproveRevision={revisionsApi.approve}
+            onRejectRevision={revisionsApi.reject}
           />
         </Panel>
         <PanelResizeHandle
@@ -450,12 +467,13 @@ export default function ContractReviewWorkspace({
             revisions={revisionsApi.revisions}
             pendingInstruction={revisionsApi.pendingInstruction}
             revisionError={revisionsApi.error}
-            onAddRevision={(instruction) => revisionsApi.addRevision(instruction, editorSelection.selection)}
+            onAddRevision={addRevision}
             onCancelRevision={revisionsApi.cancel}
             onRevert={revisionsApi.revert}
             showEdits={showEdits}
             onShowEditsChange={setShowEdits}
             selection={editorSelection.selection}
+            disabled={revisionsApi.hasPendingApproval}
             sources={
               fileMeta
                 ? [

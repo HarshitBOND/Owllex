@@ -6,6 +6,7 @@ import { htmlToBlocks } from "@/app/api/lib/export/htmlBlocks"
 import { renderPdf } from "@/app/api/lib/export/pdf"
 import { renderDocx } from "@/app/api/lib/export/docx"
 import { saveBufferToVault } from "@/app/api/lib/vault/copyToVault"
+import { resolveDraftFont } from "@/lib/documents/draftFont";
 
 export const maxDuration = 60
 
@@ -41,8 +42,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const blocks = htmlToBlocks(draft.contentHtml || "")
   const options = {
     title: draft.title || "Document",
-    fontFamily: draft.typography?.fontFamily || "Georgia",
-    fontSizePt: draft.typography?.fontSizePt || 12,
+    fontFamily: resolveDraftFont(draft.typography?.fontFamily),
+    fontSizePt: draft.typography?.fontSizePt || 11,
   }
 
   const buffer = format === "docx" ? await renderDocx(blocks, options) : await renderPdf(blocks, options)

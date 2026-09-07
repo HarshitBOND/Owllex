@@ -6,7 +6,7 @@ import type { Block, Inline } from "./htmlBlocks"
 const SERIF = { normal: "Times-Roman", bold: "Times-Bold", italic: "Times-Italic", boldItalic: "Times-BoldItalic" }
 const SANS = { normal: "Helvetica", bold: "Helvetica-Bold", italic: "Helvetica-Oblique", boldItalic: "Helvetica-BoldOblique" }
 
-const fontFor = (family: string) => (/arial|helvetica|inter|sans/i.test(family) ? SANS : SERIF)
+const fontFor = (family: string) => (/arial|helvetica|inter|poppins|sans/i.test(family) ? SANS : SERIF)
 
 const pick = (set: typeof SERIF, run: Inline) =>
   run.bold && run.italic ? set.boldItalic : run.bold ? set.bold : run.italic ? set.italic : set.normal

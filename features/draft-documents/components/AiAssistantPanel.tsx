@@ -59,7 +59,7 @@ interface AiAssistantPanelProps {
   fieldLabels?: Record<string, string>
   onClose: () => void
   /**
-   * Set when the panel is rendered inside DraftRail: the rail owns the card
+   * Set when the panel is rendered inside the assistant drawer: the drawer owns the card
    * chrome and the width, so the panel must not paint a second border or
    * fight it over how wide the column is.
    */
@@ -98,9 +98,40 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const seeded = useRef(false)
 
+  /**
+   * What every request carries, read at the moment it goes out.
+   *
+   * The document cannot ride on sendMessage alone. When the advocate answers a
+   * question card, `sendAutomaticallyWhen` resumes the turn through the
+   * transport directly -- there is no sendMessage call to hang a body on, so
+   * documentHtml arrived empty and the route told the model "(The document is
+   * empty.)". The model then redrafts from nothing over text the advocate
+   * already has. Same for the model picker: the turn that resumes after an
+   * answer has to use the model showing in the picker, not the one the
+   * transport was built with.
+   */
+  const latestRequest = useRef({ model, getDocumentHtml })
+  useEffect(() => {
+    latestRequest.current = { model, getDocumentHtml }
+  })
+
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/ai/draft", body: { model } }),
-    [model]
+    () =>
+      new DefaultChatTransport({
+        api: "/api/ai/draft",
+        prepareSendMessagesRequest: ({ id, messages: outgoing, trigger, messageId, body }) => ({
+          body: {
+            ...body,
+            id,
+            messages: outgoing,
+            trigger,
+            messageId,
+            model: latestRequest.current.model,
+            documentHtml: latestRequest.current.getDocumentHtml(),
+          },
+        }),
+      }),
+    []
   )
 
   const { messages, sendMessage, status, regenerate, addToolResult, error, clearError } = useChat({
@@ -133,9 +164,12 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
         return
       }
 
-      sendMessage({ text: trimmed }, { body: { documentHtml: getDocumentHtml() } })
+      // documentHtml and model are attached by the transport, so a turn the
+      // advocate starts and a turn resumed by answering a card carry the same
+      // context.
+      sendMessage({ text: trimmed })
     },
-    [busy, getDocumentHtml, sendMessage, messages, addToolResult]
+    [busy, sendMessage, messages, addToolResult]
   )
 
   const answerQuestion = useCallback(
@@ -157,43 +191,55 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
   )
 
   /**
-   * Closes off tool calls nothing else will answer.
+   * Marks a proposal the advocate walked past as discarded.
    *
    * proposeDocument and setFields have no `execute`: they stream to the
-   * advocate and wait for a button. But the model's turn is only complete
-   * once every call it made has a result, so a proposal the advocate simply
-   * moves past (by sending a new message rather than clicking Apply or
-   * Discard) would leave a dangling call -- and the NEXT request then dies
-   * with AI_MissingToolResultsError, permanently breaking the conversation.
-   * They're resolved as "not accepted" once a later message shows the
-   * advocate has moved on. askClarifyingQuestion is *not* settled here -- it
-   * waits for the advocate's actual answer or Skip, the same as main chat.
+   * advocate and wait for a button. Once a later message shows they moved on
+   * without pressing one, the card stops offering Apply and Discard and reads
+   * as discarded instead.
+   *
+   * It must not reach for addToolResult to do that, however tempting. That
+   * only ever rewrites the LAST message (see Chat.addToolOutput in the `ai`
+   * package), so a call sitting in an earlier message is never actually
+   * settled by it -- but the rewrite still publishes a fresh messages array,
+   * which re-runs this effect, which calls it again. That is an unbounded
+   * render loop, and it is what React was killing with error #185 the moment
+   * the advocate typed anything after a proposal. The dangling call is closed
+   * server-side instead, by settleDanglingToolCalls in the draft route, which
+   * repairs the history both on the way to the model and on the way to Mongo.
+   *
+   * askClarifyingQuestion is left alone here -- it waits for the advocate's
+   * actual answer or Skip, the same as main chat.
    */
   useEffect(() => {
     if (busy) return
 
+    const abandoned: string[] = []
     messages.forEach((msg, index) => {
       if (msg.role !== "assistant") return
-      const isLastMessage = index === messages.length - 1
-      if (isLastMessage) return
+      if (index === messages.length - 1) return
 
       for (const part of msg.parts) {
         if (!isToolUIPart(part)) continue
-
         // Only a call that has finished streaming and has no result yet.
-        const state = (part as { state?: string }).state
-        if (state !== "input-available") continue
-
-        const toolCallId = (part as { toolCallId: string }).toolCallId
+        if ((part as { state?: string }).state !== "input-available") continue
         const name = getToolName(part)
-
         if (name === "proposeDocument" || name === "setFields") {
-          addToolResult({ tool: name, toolCallId, output: { accepted: false } })
-          setApplied((prev) => (prev[toolCallId] ? prev : { ...prev, [toolCallId]: "discarded" }))
+          abandoned.push((part as { toolCallId: string }).toolCallId)
         }
       }
     })
-  }, [messages, busy, addToolResult])
+
+    if (abandoned.length === 0) return
+    setApplied((prev) => {
+      const fresh = abandoned.filter((toolCallId) => !prev[toolCallId])
+      // Returning prev unchanged is what stops this from looping.
+      if (fresh.length === 0) return prev
+      const next = { ...prev }
+      for (const toolCallId of fresh) next[toolCallId] = "discarded"
+      return next
+    })
+  }, [messages, busy])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
@@ -346,7 +392,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
           if (msg.role === "user") {
             return (
               <div key={msg.id} className="flex flex-col items-end">
-                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent/10 dark:bg-accent/15 px-3.5 py-2.5 text-[13px] leading-relaxed text-gray-800 dark:text-foreground whitespace-pre-wrap">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent/10 dark:bg-accent/15 px-3.5 py-2.5 text-sm leading-relaxed text-gray-800 dark:text-foreground whitespace-pre-wrap">
                   {text}
                 </div>
               </div>
@@ -373,7 +419,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
           return (
             <div key={msg.id} className="flex flex-col items-start">
               {text && (
-                <p className="text-[13px] leading-relaxed text-gray-800 dark:text-foreground mb-2 whitespace-pre-wrap">
+                <p className="text-sm leading-relaxed text-gray-800 dark:text-foreground mb-2 whitespace-pre-wrap">
                   {text}
                 </p>
               )}
@@ -407,7 +453,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
                   </div>
                   <dl className="p-3.5 space-y-1.5">
                     {filledValues.map((v) => (
-                      <div key={v.key} className="flex gap-2 text-[12.5px] leading-relaxed">
+                      <div key={v.key} className="flex gap-2 text-sm leading-relaxed">
                         <dt className="text-muted-foreground shrink-0">
                           {fieldLabels?.[v.key] ?? v.key}
                         </dt>
@@ -473,7 +519,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
                     )}
                   </div>
                   <div
-                    className="chat-clause max-h-56 overflow-y-auto p-3.5 text-[12.5px] leading-relaxed text-gray-700 dark:text-muted-foreground"
+                    className="chat-clause max-h-56 overflow-y-auto p-3.5 text-sm leading-relaxed text-gray-700 dark:text-muted-foreground"
                     dangerouslySetInnerHTML={{ __html: sanitizeDraftHtml(proposal.input.html) }}
                   />
                   <div className="px-3.5 py-2 border-t border-gray-200 dark:border-border flex items-center gap-2">
@@ -606,7 +652,7 @@ export default function AiAssistantPanel(props: AiAssistantPanelProps) {
             }}
             placeholder="Ask for a document, or a change to this one..."
             rows={1}
-            className="w-full bg-transparent resize-none px-3.5 pt-3 pb-1.5 text-[13px] text-text-100 dark:text-foreground placeholder:text-text-400 outline-none"
+            className="w-full bg-transparent resize-none px-3.5 pt-3 pb-1.5 text-sm text-text-100 dark:text-foreground placeholder:text-text-400 outline-none"
           />
           <div className="flex items-center justify-end px-2 pb-2">
             <div className="flex items-center gap-1.5">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { MAX_REVISIONS, trimRevisionSnapshots } from "@/app/api/lib/models/revision"
-import { revertToRevision, spliceSelection, type RevisableDoc } from "@/app/api/lib/services/revise"
+import { revertToRevision, type RevisableDoc } from "@/app/api/lib/services/revise"
 
 type Row = {
   id: string
@@ -89,16 +89,5 @@ describe("revertToRevision", () => {
     expect(outcome.ok).toBe(false)
     expect(d.contentHtml).toBe("<p>now</p>")
     expect(d.revisions).toHaveLength(1)
-  })
-})
-
-describe("spliceSelection", () => {
-  it("replaces only the selected passage", () => {
-    const out = spliceSelection("<p>one</p><p>two</p>", "<p>two</p>", "<p>TWO</p>")
-    expect(out).toBe("<p>one</p><p>TWO</p>")
-  })
-
-  it("returns null when the selection is gone, rather than corrupting the document", () => {
-    expect(spliceSelection("<p>one</p>", "<p>missing</p>", "<p>new</p>")).toBeNull()
   })
 })

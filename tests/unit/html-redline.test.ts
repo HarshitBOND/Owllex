@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildRedline, closeOpenTags } from "@/lib/diff/htmlRedline"
+import { buildInlineRedline, buildRedline, closeOpenTags } from "@/lib/diff/htmlRedline"
 
 describe("closeOpenTags", () => {
   it("closes what a partial stream left open", () => {
@@ -76,5 +76,61 @@ describe("buildRedline", () => {
     const out = buildRedline(before, partial)
     expect(out).toContain("<del>")
     expect(out).toContain("<ins>")
+  })
+
+  it("numbers a changed paragraph once, not once per word-level run", () => {
+    const out = buildRedline(
+      "<p>The term is five years and rent is one hundred dollars.</p>",
+      "<p>The term is three years and rent is two hundred dollars.</p>",
+    )
+    const markers = out.match(/<sup class="redline-marker/g) ?? []
+    // Two separate word-level edits inside the same paragraph still share
+    // one reference number -- otherwise a lightly-edited paragraph reads
+    // as if it had several distinct changes.
+    expect(markers.length).toBe(1)
+    expect(out).toContain('redline-marker--mixed">1<')
+  })
+
+  it("numbers a pure deletion and a pure insertion independently", () => {
+    const removed = buildRedline("<p>One.</p><p>Two.</p>", "<p>One.</p>")
+    expect(removed).toContain('redline-marker--del">1<')
+    expect(removed).not.toContain("redline-marker--ins")
+
+    const added = buildRedline("<p>One.</p>", "<p>One.</p><p>Two.</p>")
+    expect(added).toContain('redline-marker--ins">1<')
+    expect(added).not.toContain("redline-marker--del")
+  })
+
+  it("does not number an unchanged document", () => {
+    const html = "<h1>Agreement</h1><p>Clause one.</p>"
+    expect(buildRedline(html, html)).not.toContain("redline-marker")
+  })
+})
+
+describe("buildInlineRedline", () => {
+  it("marks the changed words in an inline run with no block wrapper", () => {
+    const out = buildInlineRedline("the rent is five thousand rupees", "the rent is ten thousand rupees")
+    expect(out).toContain("<del>five</del>")
+    expect(out).toContain("<ins>ten</ins>")
+    expect(out).not.toMatch(/^<p>/)
+  })
+
+  it("strips markup from an answer that came back as HTML", () => {
+    const out = buildInlineRedline("five years", "<p>three years</p>")
+    expect(out).toContain("<del>five</del>")
+    expect(out).toContain("<ins>three</ins>")
+    expect(out).not.toContain("<p>")
+  })
+
+  it("copes with an unclosed mid-stream fragment once it has been closed", () => {
+    const partial = closeOpenTags("<strong>ten thousand ru")
+    const out = buildInlineRedline("five thousand rupees", partial)
+    expect(out).toContain("<ins>")
+  })
+
+  it("has nothing to mark when the passage is unchanged", () => {
+    const out = buildInlineRedline("five years", "five years")
+    expect(out).not.toContain("<del>")
+    expect(out).not.toContain("<ins>")
   })
 })

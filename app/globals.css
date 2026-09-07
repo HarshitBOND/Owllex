@@ -427,6 +427,7 @@
 }
 
 .chat-clause h3 {
+  font-family: var(--font-averia-serif-libre), ui-serif, Georgia, serif;
   font-size: 1em;
   font-weight: 700;
   margin-bottom: 0.5em;
@@ -698,25 +699,140 @@
  * <ins>/<del> appear only in that read-only view -- they are not in the
  * document allowlist and never reach saved content or an export.
  */
+/*
+ * Tracked-changes redline (components/common/revisions/RedlineView.tsx).
+ * <ins>/<del> appear only in that read-only view -- they are not in the
+ * document allowlist and never reach saved content or an export.
+ *
+ * Marked the way a marked-up agreement is: struck red for what went, plain
+ * blue for what arrived, with a circled reference number against each changed
+ * paragraph -- one per changed block (lib/diff/htmlRedline.ts), not one per
+ * word-level run, so a paragraph with several small edits still reads as a
+ * single numbered change.
+ *
+ * Set slightly smaller and tighter than the editor it stands in for: a redline
+ * carries more per line (the struck text as well as its replacement), and the
+ * density reads as "marked up" the way a paper redline does.
+ */
+.redline-view {
+  --redline-del: #dc4d4d;
+  --redline-ins: #2563eb;
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+
+.dark .redline-view {
+  --redline-del: #f87171;
+  --redline-ins: #60a5fa;
+}
+
 .redline-view del {
-  color: var(--color-red-600);
+  color: var(--redline-del);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in oklab, var(--redline-del) 80%, transparent);
 }
 
 .redline-view ins {
-  color: var(--color-blue-600);
+  color: var(--redline-ins);
   text-decoration: none;
-  background-color: color-mix(in oklab, var(--color-blue-600) 10%, transparent);
 }
 
-.dark .redline-view del {
-  color: var(--color-red-400);
+/* A citation chip inside a change reads as part of that change. */
+.redline-view del .page-anchor-chip,
+.redline-view ins .page-anchor-chip {
+  color: currentColor;
+  border-color: currentColor;
+  background: transparent;
+  opacity: 0.65;
 }
 
-.dark .redline-view ins {
-  color: var(--color-blue-400);
-  background-color: color-mix(in oklab, var(--color-blue-400) 15%, transparent);
+/*
+ * The per-change reference number (lib/diff/htmlRedline.ts marker()).
+ * A circled digit rather than a footnote-style bracket, sat at the start of
+ * the changed paragraph -- small enough to sit ahead of the sentence it
+ * belongs to without reading as its own word.
+ */
+.redline-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.35em;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 0.62em;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+  vertical-align: middle;
+  position: relative;
+  top: -0.35em;
+  user-select: none;
+}
+
+.redline-marker--del {
+  color: var(--redline-del);
+}
+
+.redline-marker--ins,
+.redline-marker--mixed {
+  color: var(--redline-ins);
+}
+
+/*
+ * A revision arriving.
+ *
+ * The document softens while the model rewrites it and comes back into focus
+ * when the last word lands, so a page rearranging itself reads as one motion
+ * rather than as text flickering.
+ */
+.redline-view.is-streaming {
+  filter: blur(0.45px);
+  opacity: 0.9;
+  transition: filter 240ms ease-out, opacity 240ms ease-out;
+}
+
+.redline-view.is-settled {
+  animation: redline-settle 520ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes redline-settle {
+  from {
+    filter: blur(2px);
+    opacity: 0.55;
+  }
+  to {
+    filter: blur(0);
+    opacity: 1;
+  }
+}
+
+@keyframes redline-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(410%);
+  }
+}
+
+.redline-progress {
+  animation: redline-progress 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redline-view.is-streaming,
+  .redline-view.is-settled {
+    filter: none;
+    opacity: 1;
+    animation: none;
+  }
+
+  .redline-progress {
+    animation: none;
+  }
 }
 
 .redline-view h1,
@@ -729,7 +845,7 @@
 .redline-view p,
 .redline-view ul,
 .redline-view ol {
-  margin: 0.75em 0;
+  margin: 0.6em 0;
 }
 
 .redline-view ul,
@@ -772,4 +888,116 @@
 .page-anchor-chip:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/*
+ * The passage a revision is being written against
+ * (components/common/revisions/selectionPinExtension.ts).
+ *
+ * The browser hides a text selection the moment focus moves into the edit box,
+ * which is exactly when the advocate most needs to see what they picked. This
+ * decoration keeps that passage lit while the instruction is typed.
+ */
+.selection-pin {
+  background-color: color-mix(in oklab, #2563eb 16%, transparent);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in oklab, #2563eb 12%, transparent);
+}
+
+.dark .selection-pin {
+  background-color: color-mix(in oklab, #60a5fa 22%, transparent);
+}
+
+/* Pulses while the model is writing a revision for the passage it covers. */
+.selection-pin--revising {
+  animation: selection-pin-throb 1.3s ease-in-out infinite;
+}
+
+@keyframes selection-pin-throb {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/*
+ * A selection-scoped revision, shown in place of the passage it replaces
+ * (components/common/revisions/revisionOverlayExtension.ts). The passage
+ * itself is hidden -- display:none, so it takes no space -- and this widget
+ * stands in for it, growing or shrinking with the answer exactly as the real
+ * text would.
+ */
+.revision-overlay-hidden {
+  display: none;
+}
+
+.revision-inline-diff {
+  display: inline;
+  border-radius: 2px;
+}
+
+.revision-inline-diff.is-streaming {
+  animation: revision-throb 1.3s ease-in-out infinite;
+}
+
+@keyframes revision-throb {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.revision-inline-diff.is-settled {
+  opacity: 1;
+  filter: none;
+  animation: redline-settle 520ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-pin--revising,
+  .revision-inline-diff.is-streaming {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .revision-inline-diff.is-settled {
+    animation: none;
+  }
+}
+
+.draft-doc-editor ::selection,
+.redline-view ::selection {
+  background-color: color-mix(in oklab, #2563eb 20%, transparent);
+}
+
+/*
+ * The document column (features/draft-documents/components/DocumentSurface.tsx).
+ * The text is the page -- there is no sheet, no border and no toolbar around
+ * it, so the type itself has to carry the reading rhythm.
+ */
+.harvey-doc {
+  color: var(--card-foreground);
+  font-family: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.7;
+  letter-spacing: -0.003em;
+}
+
+.harvey-doc .draft-doc-editor:focus,
+.harvey-doc .draft-doc-editor *:focus {
+  outline: none;
+}
+
+.harvey-doc .draft-doc-editor > *:first-child,
+.harvey-doc .redline-view > *:first-child {
+  margin-top: 0;
+}
+
+.harvey-doc .draft-doc-editor h1 {
+  margin-bottom: 1.25em;
 }

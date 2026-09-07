@@ -31,6 +31,8 @@ interface ContractReviewRailProps {
   onShowEditsChange: (next: boolean) => void
   selection?: RevisionSelection | null
   sources?: RevisionSource[]
+  /** True while a generated revision is awaiting Approve/Reject in the document. */
+  disabled?: boolean
 }
 
 export default function ContractReviewRail(props: ContractReviewRailProps) {
@@ -97,7 +99,7 @@ export default function ContractReviewRail(props: ContractReviewRailProps) {
             onShowEditsChange={props.onShowEditsChange}
             selection={props.selection}
             sources={props.sources}
-            disabled={props.isAnalyzing}
+            disabled={props.isAnalyzing || props.disabled}
           />
         )}
       </div>

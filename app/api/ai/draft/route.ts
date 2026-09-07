@@ -280,9 +280,13 @@ export async function POST(request: NextRequest) {
       // the askClarifyingQuestion tool in main chat and contract review.
       askClarifyingQuestion: tool({
         description:
-          "Ask the advocate the one fact you need before you can draft a document that's actually usable, instead of guessing it. Use this only when a missing fact would make the draft wrong — who the parties are, what the document covers, a specific date or amount — never for a stylistic or boilerplate choice you can reasonably default. This renders as a card they answer in a click, so use it instead of putting the question in your reply. Give options when the answer is one of a known set, and leave them out when it is a fact you cannot enumerate. Ask one question at a time, never ask for something they have already told you, and say nothing else in the same turn -- the answer comes back before you continue.",
+          "Ask the advocate for ONE fact you need before you can draft a document that's actually usable, instead of guessing it or leaving a blank for it. Use this whenever a missing fact would otherwise become a placeholder — a party's name, parentage, age, address, a specific date, period or amount — but never for a stylistic or boilerplate choice you can reasonably default. Exactly one fact per call: a question containing \"and\", or asking for a name and a date together, is wrong — split it and ask the first one now. This renders as a card they answer in a click, so use it instead of putting the question in your reply. Give options only where the answer is genuinely one of a known set; a name, an address or a date has none. Never ask for something they have already told you, and say nothing else in the same turn -- the answer comes back before you continue.",
         inputSchema: z.object({
-          question: z.string().min(1).max(300).describe("The question, in one line, as counsel would put it"),
+          question: z
+            .string()
+            .min(1)
+            .max(300)
+            .describe("The question, in one line, as counsel would put it. One fact only -- if it needs an \"and\", it is two questions."),
           options: z
             .array(z.string().min(1).max(80))
             .min(2)

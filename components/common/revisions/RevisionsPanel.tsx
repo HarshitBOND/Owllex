@@ -44,15 +44,20 @@ interface RevisionsPanelProps {
  */
 function RevisionRowMenu({
   label,
-  restorable,
+  hasSnapshot,
+  blocked,
   onRevert,
 }: {
   label: string
-  restorable: boolean
+  /** Whether this row still carries the document snapshot needed to restore it. */
+  hasSnapshot: boolean
+  /** True while reverting is blocked for a reason that has nothing to do with this row -- a pending approval. */
+  blocked: boolean
   onRevert: () => void
 }) {
   const [ready, setReady] = useState(false)
   const activate = () => setReady(true)
+  const restorable = hasSnapshot && !blocked
 
   const trigger = (
     <button
@@ -74,7 +79,7 @@ function RevisionRowMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuItem disabled={!restorable} onSelect={(event) => { event.preventDefault(); if (restorable) onRevert() }}>
           <RotateCcw className="w-3.5 h-3.5" />
-          {restorable ? "Revert to here" : "Too old to revert"}
+          {!hasSnapshot ? "Too old to revert" : blocked ? "Approve or reject the pending change first" : "Revert to here"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -109,23 +114,31 @@ export default function RevisionsPanel({
   return (
     <div className="w-full h-full flex flex-col overflow-y-auto custom-scrollbar">
       <div className="px-4 py-4 border-b border-gray-200 dark:border-border">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-foreground">Revisions</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Revisions</h2>
+          {revisions.length > 0 && (
+            <span className="rounded-full bg-gray-100 dark:bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {revisions.length}
+            </span>
+          )}
+        </div>
 
-        <ol className="mt-3 space-y-1">
-          <li className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12.5px] text-gray-600 dark:text-muted-foreground">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-border shrink-0" />
+        {/* A single hairline behind the markers turns the list into a timeline,
+            which is what a chain of revisions actually is. */}
+        <ol className="relative mt-3 space-y-0.5 before:absolute before:left-[0.72rem] before:top-3 before:bottom-3 before:w-px before:bg-gray-200 before:content-[''] dark:before:bg-border">
+          <li className="relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[12.5px] text-gray-600 dark:text-muted-foreground">
+            <span className="z-10 w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-border shrink-0 ring-4 ring-white dark:ring-card" />
             Initial draft
           </li>
 
           {revisions.map((revision) => {
-            const restorable = Boolean(revision.contentHtmlBefore)
             return (
               <li
                 key={revision.id}
-                className="group flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-accent/5"
+                className="group relative flex items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-accent/5"
               >
                 <span
-                  className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                  className={`z-10 mt-[0.4rem] w-1.5 h-1.5 rounded-full shrink-0 ring-4 ring-white dark:ring-card group-hover:ring-gray-50 dark:group-hover:ring-card ${
                     revision.status === "error" ? "bg-red-400" : "bg-accent"
                   }`}
                 />
@@ -145,7 +158,8 @@ export default function RevisionsPanel({
 
                 <RevisionRowMenu
                   label={revision.instruction}
-                  restorable={restorable}
+                  hasSnapshot={Boolean(revision.contentHtmlBefore)}
+                  blocked={disabled}
                   // Reverting throws away later revisions, so it gets a
                   // confirmation step rather than firing off a menu click.
                   onRevert={() => setConfirmingRevert(revision.id)}
@@ -155,8 +169,8 @@ export default function RevisionsPanel({
           })}
 
           {pendingInstruction !== null && (
-            <li className="flex items-start gap-2 rounded-lg px-2 py-1.5 bg-accent/5">
-              <Loader2 className="mt-0.5 w-3.5 h-3.5 shrink-0 animate-spin text-accent" />
+            <li className="relative flex items-start gap-2 rounded-lg px-1.5 py-1.5 bg-accent/5">
+              <Loader2 className="z-10 mt-0.5 w-3.5 h-3.5 shrink-0 animate-spin text-accent" />
               <div className="min-w-0 flex-1">
                 <p className="text-[12.5px] leading-snug text-gray-900 dark:text-foreground">Generating revision</p>
                 <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground break-words">
@@ -210,7 +224,13 @@ export default function RevisionsPanel({
 
         {selection?.text ? (
           <p className="mt-3 rounded-lg bg-gray-50 dark:bg-accent/5 px-2.5 py-1.5 text-[11.5px] text-muted-foreground">
-            Editing selection: <span className="text-gray-700 dark:text-foreground">“{selection.text.slice(0, 60)}{selection.text.length > 60 ? "…" : ""}”</span>
+            Editing selection:{" "}
+            <span className="text-gray-700 dark:text-foreground">
+              “{(() => {
+                const flat = selection.text.replace(/\s+/g, " ").trim()
+                return flat.length > 60 ? `${flat.slice(0, 60)}…` : flat
+              })()}”
+            </span>
           </p>
         ) : null}
 
@@ -256,7 +276,7 @@ export default function RevisionsPanel({
             type="button"
             onClick={() => setComposing(true)}
             disabled={disabled || pendingInstruction !== null}
-            className="mt-3 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-gray-300 dark:border-border px-3 py-2 text-[12.5px] text-muted-foreground hover:border-accent hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 dark:border-border px-3 py-2.5 text-[12.5px] font-medium text-muted-foreground hover:border-accent hover:text-accent hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             Add revision
@@ -268,16 +288,23 @@ export default function RevisionsPanel({
         </p>
       </div>
 
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-border">
-        <label htmlFor="show-edits" className="text-[12.5px] text-gray-900 dark:text-foreground cursor-pointer">
-          Show edits
-        </label>
+      <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b border-gray-200 dark:border-border">
+        <div className="min-w-0">
+          <label htmlFor="show-edits" className="text-[12.5px] font-medium text-gray-900 dark:text-foreground cursor-pointer">
+            Show edits
+          </label>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            <span className="text-red-600 dark:text-red-400 line-through">Removed</span> and{" "}
+            <span className="text-blue-600 dark:text-blue-400 underline decoration-blue-400/50">added</span> text, marked
+            in place.
+          </p>
+        </div>
         <Switch id="show-edits" checked={showEdits} onCheckedChange={onShowEditsChange} disabled={revisions.length === 0} />
       </div>
 
       {sources.length > 0 && (
         <div className="px-4 py-4">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-foreground">Sources</h3>
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Sources</h3>
           <ul className="mt-2 space-y-1">
             {sources.map((source) => (
               <li key={`${source.label}-${source.sublabel ?? ""}`}>

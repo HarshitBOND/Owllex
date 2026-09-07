@@ -63,8 +63,8 @@ const DraftDocumentSchema = new mongoose.Schema(
     chatMessages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     revisions: REVISIONS_FIELD,
     typography: {
-      fontFamily: { type: String, default: "Georgia" },
-      fontSizePt: { type: Number, default: 12, min: 8, max: 24 },
+      fontFamily: { type: String, default: "Inter" },
+      fontSizePt: { type: Number, default: 11, min: 8, max: 24 },
     },
     wordCount: { type: Number, default: 0, min: 0 },
     version: { type: Number, default: 0 },

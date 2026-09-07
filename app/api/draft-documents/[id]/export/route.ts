@@ -9,6 +9,7 @@ import { renderDocx } from "@/app/api/lib/export/docx"
 import { renderPdfOverlay, type StampWarning } from "@/app/api/lib/export/pdfOverlay"
 import { getPrivateObject } from "@/app/api/lib/storage/r2"
 import type { TemplateField } from "@/lib/templates/fields"
+import { resolveDraftFont } from "@/lib/documents/draftFont";
 
 export const maxDuration = 60
 
@@ -80,8 +81,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const blocks = htmlToBlocks(draft.contentHtml || "")
     const options = {
       title: draft.title || "Document",
-      fontFamily: draft.typography?.fontFamily || "Georgia",
-      fontSizePt: draft.typography?.fontSizePt || 12,
+      fontFamily: resolveDraftFont(draft.typography?.fontFamily),
+      fontSizePt: draft.typography?.fontSizePt || 11,
     }
     buffer = format === "docx" ? await renderDocx(blocks, options) : await renderPdf(blocks, options)
   }

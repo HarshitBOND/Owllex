@@ -7,6 +7,7 @@ import { resolveModel } from "@/lib/ai/models"
 import { DRAFT_REVISE_SYSTEM_PROMPT } from "@/lib/ai/prompts"
 import { checkAiAllowance, aiLimitResponse } from "@/app/api/lib/services/aiUsage"
 import { streamRevision, type RevisableDoc } from "@/app/api/lib/services/revise"
+import { selectionCrossesTableBoundary } from "@/app/api/lib/html/spliceSelection"
 
 export const maxDuration = 300
 
@@ -61,6 +62,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!draft.contentHtml.trim()) {
     return NextResponse.json(
       { success: false, error: "There is nothing in this document to revise yet" },
+      { status: 400 },
+    )
+  }
+  if (selection?.text && selectionCrossesTableBoundary(draft.contentHtml, selection.text)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "That selection spans more than one table cell, so it can't be revised as one block. Select text within a single cell, or clear the selection to revise the whole document.",
+      },
       { status: 400 },
     )
   }

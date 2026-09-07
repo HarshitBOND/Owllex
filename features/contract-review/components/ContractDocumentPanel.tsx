@@ -45,6 +45,7 @@ import type { SaveStatus } from "@/features/draft-documents/hooks/useDraftAutosa
 import { IssueHighlight, issueHighlightKey } from "./issueHighlightExtension"
 import { PageAnchor, PageAttribute } from "./pageAnchorExtension"
 import RedlineView from "@/components/common/revisions/RedlineView"
+import RedlineApprovalBar from "@/components/common/revisions/RedlineApprovalBar"
 import { fontFamilies, fontSizes, type ContractFileMeta, type ContractIssue } from "../data"
 
 interface ContractDocumentPanelProps {
@@ -67,6 +68,13 @@ interface ContractDocumentPanelProps {
   /** Renders the tracked-changes diff instead of the editor while true. */
   showEdits: boolean
   redlineHtml: string
+  /** True while a revision is still streaming in. */
+  revisionBusy?: boolean
+  /** A generated revision waiting on Approve/Reject before it reaches the document. */
+  hasPendingApproval?: boolean
+  pendingApprovalInstruction?: string | null
+  onApproveRevision?: () => void
+  onRejectRevision?: () => void
 }
 
 const paragraphStyles = [
@@ -129,6 +137,11 @@ export default function ContractDocumentPanel({
   isReanalyzing,
   showEdits,
   redlineHtml,
+  revisionBusy = false,
+  hasPendingApproval = false,
+  pendingApprovalInstruction = null,
+  onApproveRevision,
+  onRejectRevision,
 }: ContractDocumentPanelProps) {
   const [wordCount, setWordCount] = useState(0)
   const [zoom, setZoom] = useState(100)
@@ -531,6 +544,16 @@ export default function ContractDocumentPanel({
           className="mx-auto max-w-[760px] origin-top bg-white dark:bg-card shadow-sm border border-gray-200 dark:border-border"
           style={{ zoom: `${zoom}%` }}
         >
+          {(revisionBusy || hasPendingApproval) && onApproveRevision && onRejectRevision && (
+            <div className="px-12 pt-8">
+              <RedlineApprovalBar
+                generating={revisionBusy}
+                instruction={pendingApprovalInstruction}
+                onApprove={onApproveRevision}
+                onReject={onRejectRevision}
+              />
+            </div>
+          )}
           {showEdits ? (
             <RedlineView
               html={redlineHtml}

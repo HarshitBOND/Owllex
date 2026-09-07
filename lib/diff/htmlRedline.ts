@@ -46,6 +46,19 @@ function escapeHtml(text: string) {
 }
 
 /**
+ * A small circled reference number, one per changed block.
+ *
+ * Placed once at the start of a changed paragraph rather than once per
+ * `<ins>`/`<del>` run: a paragraph with several word-level edits would
+ * otherwise carry a number after nearly every word, which is the outcome the
+ * numbering is meant to avoid. `kind` picks which side of the change the
+ * marker reads as, so it tints with the run it is introducing.
+ */
+function marker(n: number, kind: "del" | "ins" | "mixed") {
+  return `<sup class="redline-marker redline-marker--${kind}">${n}</sup>`
+}
+
+/**
  * Word diff of two plain strings, as <del>/<ins> runs.
  *
  * Diffing the *text* and re-emitting rather than diffing the markup: a word
@@ -101,6 +114,24 @@ export function closeOpenTags(partial: string) {
 }
 
 /**
+ * Word diff of a single passage against whatever the model answered with,
+ * scoped to just that passage rather than the whole document.
+ *
+ * Unlike {@link buildRedline}, `after` is not expected to be block-structured
+ * -- a selection-scoped revision answers with "just the revised selection",
+ * which is as likely to be a bare run of text as a wrapped block, and a
+ * mid-stream answer is guaranteed to be neither. So this diffs flattened text
+ * on both sides, the same way a changed block's *contents* are diffed inside
+ * buildRedline, and returns inline `<del>`/`<ins>` runs with no block wrapper
+ * -- safe to drop at any point inside a paragraph.
+ */
+export function buildInlineRedline(before: string, after: string): string {
+  const beforeText = before.replace(/\s+/g, " ").trim()
+  const afterText = cheerio.load(after, null, false).root().text().replace(/\s+/g, " ").trim()
+  return diffText(beforeText, afterText)
+}
+
+/**
  * Builds the redline of `after` against `before`.
  *
  * Two passes: pair the blocks up by text so whole added and removed paragraphs
@@ -121,6 +152,7 @@ export function buildRedline(before: string, after: string): string {
   const out: string[] = []
   let beforeIndex = 0
   let afterIndex = 0
+  let markerIndex = 0
 
   // diffArrays reports a modified block as a removal immediately followed by an
   // addition. Pairing those back up is what turns "paragraph replaced" into a
@@ -141,16 +173,16 @@ export function buildRedline(before: string, after: string): string {
       for (let n = 0; n < pairs; n++) {
         const from = beforeBlocks[beforeIndex + n]
         const to = afterBlocks[afterIndex + n]
-        out.push(`<${to.tag}>${diffText(from.text, to.text)}</${to.tag}>`)
+        out.push(`<${to.tag}>${marker(++markerIndex, "mixed")}${diffText(from.text, to.text)}</${to.tag}>`)
       }
       // Whatever is left over on either side is a genuine add or delete.
       for (let n = pairs; n < change.count!; n++) {
         const block = beforeBlocks[beforeIndex + n]
-        out.push(`<${block.tag}><del>${escapeHtml(block.text)}</del></${block.tag}>`)
+        out.push(`<${block.tag}>${marker(++markerIndex, "del")}<del>${escapeHtml(block.text)}</del></${block.tag}>`)
       }
       for (let n = pairs; n < next.count!; n++) {
         const block = afterBlocks[afterIndex + n]
-        out.push(`<${block.tag}><ins>${escapeHtml(block.text)}</ins></${block.tag}>`)
+        out.push(`<${block.tag}>${marker(++markerIndex, "ins")}<ins>${escapeHtml(block.text)}</ins></${block.tag}>`)
       }
       beforeIndex += change.count!
       afterIndex += next.count!
@@ -161,7 +193,7 @@ export function buildRedline(before: string, after: string): string {
     if (change.removed) {
       for (let n = 0; n < change.count!; n++) {
         const block = beforeBlocks[beforeIndex + n]
-        out.push(`<${block.tag}><del>${escapeHtml(block.text)}</del></${block.tag}>`)
+        out.push(`<${block.tag}>${marker(++markerIndex, "del")}<del>${escapeHtml(block.text)}</del></${block.tag}>`)
       }
       beforeIndex += change.count!
       continue
@@ -169,7 +201,7 @@ export function buildRedline(before: string, after: string): string {
 
     for (let n = 0; n < change.count!; n++) {
       const block = afterBlocks[afterIndex + n]
-      out.push(`<${block.tag}><ins>${escapeHtml(block.text)}</ins></${block.tag}>`)
+      out.push(`<${block.tag}>${marker(++markerIndex, "ins")}<ins>${escapeHtml(block.text)}</ins></${block.tag}>`)
     }
     afterIndex += change.count!
   }

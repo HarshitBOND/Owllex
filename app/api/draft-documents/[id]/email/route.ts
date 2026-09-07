@@ -7,6 +7,7 @@ import User from "@/app/api/lib/models/user"
 import { htmlToBlocks } from "@/app/api/lib/export/htmlBlocks"
 import { renderPdf } from "@/app/api/lib/export/pdf"
 import { sendMail } from "@/app/api/lib/services/mailer"
+import { resolveDraftFont } from "@/lib/documents/draftFont";
 
 export const maxDuration = 60
 
@@ -58,8 +59,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const title = draft.title || "Document"
   const pdf = await renderPdf(htmlToBlocks(draft.contentHtml || ""), {
     title,
-    fontFamily: draft.typography?.fontFamily || "Georgia",
-    fontSizePt: draft.typography?.fontSizePt || 12,
+    // "Georgia" was the default before drafts were set in the app's chat font.
+    fontFamily: resolveDraftFont(draft.typography?.fontFamily),
+    fontSizePt: draft.typography?.fontSizePt || 11,
   })
 
   // The mail goes out from the product's own verified sender, so without a

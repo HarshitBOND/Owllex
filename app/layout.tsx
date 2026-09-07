@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { headers } from "next/headers"
-import { Averia_Serif_Libre, Inter } from "next/font/google"
+import { Averia_Serif_Libre, Inter, Poppins } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Toaster } from "sonner"
@@ -25,6 +25,14 @@ const inter = Inter({
   display: "swap",
   variable: "--font-inter",
   weight: ["400", "500", "600", "700"],
+})
+
+// The typeface drafted documents are set in.
+const poppins = Poppins({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-poppins",
+  weight: ["300", "400", "500", "600", "700"],
 })
 
 const clerkLocalization = {
@@ -53,7 +61,7 @@ export default async function RootLayout({
   const nonce = requestHeaders.get("x-nonce") || undefined
 
   return (
-    <html lang="en" className={`${averiaSerifLibre.variable} ${inter.variable} antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${averiaSerifLibre.variable} ${inter.variable} ${poppins.variable} antialiased`} suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem nonce={nonce}>
           <ClerkProvider

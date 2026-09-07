@@ -4,6 +4,7 @@ import { modelFor } from "@/lib/ai/provider"
 import { MODELS, type ModelKey, AI_MAX_RETRIES } from "@/lib/ai/models"
 import { trimDocumentForPrompt } from "@/lib/ai/document-context"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
+import { spliceSelection } from "@/app/api/lib/html/spliceSelection"
 import { recordAiUsage } from "@/app/api/lib/services/aiUsage"
 import { MAX_REVISIONS, trimRevisionSnapshots, type RevisionDoc } from "@/app/api/lib/models/revision"
 
@@ -94,22 +95,6 @@ function stripFences(text: string) {
     .replace(/^\s*```(?:html)?\s*\n?/i, "")
     .replace(/\n?```\s*$/i, "")
     .trim()
-}
-
-/**
- * Replaces `selection.text` in the document with what the model returned.
- *
- * Splicing on the editor's `from`/`to` is not possible here -- those are
- * ProseMirror positions over a node tree, and the server only has the HTML
- * string. Matching the selected text is what survives that gap; when the match
- * fails (the user edited during generation, or the selection spanned a tag
- * boundary and came back normalised) the document is left alone rather than
- * corrupted, and the caller reports it.
- */
-export function spliceSelection(contentHtml: string, selectedText: string, replacement: string) {
-  const index = contentHtml.indexOf(selectedText)
-  if (index === -1) return null
-  return contentHtml.slice(0, index) + replacement + contentHtml.slice(index + selectedText.length)
 }
 
 export function streamRevision({
