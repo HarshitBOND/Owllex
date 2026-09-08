@@ -58,6 +58,15 @@ export default function ContractFixWithAiPanel({
   const { messages, sendMessage, status, addToolResult, error, clearError } = useChat({
     id: reviewId,
     transport,
+    // proposeFix streams back the ENTIRE document as one tool argument, so a
+    // long contract arrives as a long run of tiny tool-input-delta chunks --
+    // each one otherwise re-renders this panel immediately. Chunks that land
+    // faster than React settles between them (a fast connection, a provider
+    // that batches tokens) queue updates deeper than React's nested-update
+    // guard allows and crash with "Maximum update depth exceeded". Throttling
+    // how often the stream is flushed to React keeps every chunk without
+    // re-rendering on each one.
+    experimental_throttle: 50,
     // Answering a clarifying question is the advocate's whole turn -- the
     // model put something to them and stopped, so the answer has to go
     // straight back without them also having to send a message.
@@ -124,7 +133,13 @@ export default function ContractFixWithAiPanel({
     const proposal = lastMsg.parts.find((p) => isToolUIPart(p) && getToolName(p) === "proposeFix") as
       | { toolCallId: string; state: string; input?: { html?: string; summary?: string } }
       | undefined
-    if (proposal?.input?.html && !applied[proposal.toolCallId]) {
+    // `input` is populated from a best-effort partial JSON parse while the
+    // tool call is still streaming in, so `input.html` can go truthy long
+    // before the model has finished writing the (possibly huge) document --
+    // applying that fragment overwrites the real document with a truncated
+    // one, and resolves the tool call before the model was actually done.
+    // "input-available" is the state once the full argument has parsed.
+    if (proposal?.state === "input-available" && proposal.input?.html && !applied[proposal.toolCallId]) {
       autoApplyRef.current = false
       const previousHtml = getDocumentHtml()
       const html = sanitizeDraftHtml(proposal.input.html)
@@ -275,7 +290,11 @@ export default function ContractFixWithAiPanel({
                     </p>
                   )}
 
-                  {proposal?.input?.html && (
+                  {/* `input` is a best-effort partial parse while the call is still
+                      streaming, so it can hold a truncated document -- wait for the
+                      full argument (or a settled output) before showing it as a fix
+                      to preview or apply. */}
+                  {proposal?.state !== "input-streaming" && proposal?.input?.html && (
                     <div className="w-full rounded-xl border border-gray-200 dark:border-border bg-gray-50/70 dark:bg-background/40 overflow-hidden">
                       <div className="px-3.5 py-2 border-b border-gray-200 dark:border-border flex items-center gap-2">
                         <span className="text-[11px] font-semibold text-gray-700 dark:text-foreground">Proposed fix</span>

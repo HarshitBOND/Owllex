@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 import { useEditor, EditorContent, type Editor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import TextAlign from "@tiptap/extension-text-align"
-import Underline from "@tiptap/extension-underline"
 import CharacterCount from "@tiptap/extension-character-count"
 import { TableKit } from "@tiptap/extension-table"
 import {
@@ -191,7 +190,6 @@ export default function ContractDocumentPanel({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Underline,
       TableKit.configure({ table: { resizable: false } }),
       CharacterCount,
       PageAttribute,

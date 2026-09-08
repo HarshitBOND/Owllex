@@ -8,11 +8,12 @@ import { contentAddressedKey } from "@/app/api/lib/storage/dedupe"
 import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage"
 import { compressPdf } from "@/app/api/lib/storage/compressPdf"
 import { extractDocumentText } from "@/app/api/lib/contractExtract"
-import { markdownToHtml } from "@/app/api/lib/html/markdownToHtml"
-import { pagedMarkdownToHtml } from "@/app/api/lib/html/pagedMarkdownToHtml"
+import { formatDocumentToHtml } from "@/app/api/lib/ai/formatDocumentHtml"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
+import { resolveModel } from "@/lib/ai/models"
+import { checkAiAllowance, recordAiUsage } from "@/app/api/lib/services/aiUsage"
 
 // Extraction is the long pole: Docling measures ~30s on a 15-page text PDF and
 // far more on a scanned one it has to OCR, before R2 and Mongo are even touched.
@@ -170,11 +171,20 @@ export async function POST(request: NextRequest) {
       // catch below would report to the user as an extraction failure for a
       // document that extracted perfectly -- so trim to fit instead.
       const text = clampToFieldLimit(rawText)
-      // Per-page conversion when the backend reported pages, so each block
-      // carries the page it came from and a citation chip can open the
-      // original there. An older backend omits `pages`; the document is then
-      // converted whole and simply has no chips.
-      const markup = pages?.length ? pagedMarkdownToHtml(pages) : markdownToHtml(text)
+
+      // Restructure the flat extracted text into real headings, clause
+      // numbering, lists and tables before it ever reaches the editor --
+      // gated the same way every other AI call in the app is, so a user who
+      // has exhausted their AI allowance still gets an upload, just with the
+      // older plain-paragraph formatting instead of a hard failure.
+      const gate = await checkAiAllowance(userContext.clerkUid)
+      const modelKey = resolveModel(gate.allowed ? gate.snapshot.plan : "trial", undefined, "balanced")
+      const aiEnabled = Boolean(process.env.OPENAI_API_KEY) && gate.allowed
+
+      const { html: markup, usage } = await formatDocumentToHtml({ text, pages, modelKey, aiEnabled })
+      if (aiEnabled && (usage.inputTokens || usage.outputTokens)) {
+        await recordAiUsage({ clerkUid: userContext.clerkUid, feature: "contract-format", modelKey, usage })
+      }
       const contentHtml = clampToFieldLimit(sanitizeDocumentHtml(markup))
 
       review.extractedText = text

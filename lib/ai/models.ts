@@ -92,6 +92,9 @@ export const OUTPUT_CAPS = {
   contractProposeFix: 12000,
   workflow: 1500,
   contractAnalyze: 12000,
+  // Per page, not per document -- formatDocumentHtml.ts calls this once per
+  // extracted page, so this only has to cover one page's worth of HTML.
+  documentFormat: 4000,
   prefill: 2000,
   templateExtraction: 8000,
   templateDedupe: 500,

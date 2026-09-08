@@ -259,7 +259,7 @@ const Sidebar = () => {
                     ) : (
                         <Image
                             className="h-10 w-auto max-w-[90px] flex-shrink-0 object-contain object-left"
-                            src="/ravenslaw.png"
+                            src="/logo.png"
                             alt="Logo"
                             width={519}
                             height={151}
