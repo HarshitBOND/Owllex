@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { enforceRateLimit, objectIdSchema, requireUserContext } from "@/app/api/lib/routeGuards"
-import { getPrivateSignedUrl } from "@/app/api/lib/storage/r2"
+import { getPrivateSignedUrl } from "@/app/api/lib/storage/hddStorage"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import ContractReview from "@/app/api/lib/models/contract-review"
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 })
   }
 
-  const url = await getPrivateSignedUrl(review.r2Key, SIGNED_URL_TTL_SECONDS)
+  const url = await getPrivateSignedUrl(review.r2Key, SIGNED_URL_TTL_SECONDS, userContext.clerkUid)
 
   return NextResponse.json({
     success: true,

@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { backupToR2, count, has, put } from "./hashdb.js";
+import { backupHashIndex, count, has, put } from "./hashdb.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,7 +54,7 @@ async function main() {
     if (verified !== keys.size) console.log(`${source}: WARNING -- count mismatch, some keys did not land.`);
   }
 
-  await backupToR2(true);
+  await backupHashIndex(true);
   console.log(`Index now holds ${count()} entries.`);
 }
 

@@ -87,6 +87,11 @@ class TestParserAccuracy(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.pdfs = _collect_pdfs()
+        if not cls.pdfs:
+            raise unittest.SkipTest(
+                f"No test PDFs found under {TEST_DIR} or {SRC_DIR}; this fixture "
+                "set is not checked into the repo."
+            )
         cls.all_cases = []
         cls.per_pdf = {}
 

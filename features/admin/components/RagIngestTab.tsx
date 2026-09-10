@@ -58,6 +58,11 @@ function formatBytes(bytes: number) {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }
 
+/** "Qwen/Qwen3-Embedding-8B" -> "Qwen3-Embedding-8B", which is what fits the tile. */
+function shortModelName(model: string) {
+  return model.split("/").pop() || model
+}
+
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
@@ -175,21 +180,22 @@ export function RagIngestTab({
 
         {status && (
           <>
-            {!status.openai_key_configured && (
+            {!status.storage_ready && status.dependencies_installed && (
               <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2 mb-3">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span>
-                  <b>OPENAI_API_KEY is not set.</b> Add it to <code>backend/.env</code> and restart the backend ingestion and
-                  search both return 503 until then.
+                  <b>RAG storage did not start.</b> Check that the data volume is mounted and{" "}
+                  <code>DATA_ROOT</code> is writable on the backend ingestion and search both return
+                  503 until then.
                 </span>
               </div>
             )}
-            {!status.chroma_configured && (
+            {status.disk_free_bytes !== null && status.disk_free_bytes < 10 * 1024 ** 3 && (
               <div className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2 mb-3">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span>
-                  <b>Chroma Cloud is not configured.</b> Add <code>CHROMA_API_KEY</code>, <code>CHROMA_TENANT</code>, and{" "}
-                  <code>CHROMA_DATABASE</code> to <code>backend/.env</code> and restart the backend.
+                  <b>Low disk space:</b> {formatBytes(status.disk_free_bytes)} free on{" "}
+                  <code>{status.data_root}</code>. Ingestion stops working when the volume fills.
                 </span>
               </div>
             )}
@@ -212,7 +218,10 @@ export function RagIngestTab({
               <StatCard label="Documents" value={status.document_count} />
               <StatCard label="Chunks" value={status.chunk_count} />
               <StatCard label="Hashes indexed" value={status.indexed_hashes} />
-              <StatCard label="OpenAI key" value={status.openai_key_configured ? "Set" : "Missing"} />
+              <StatCard
+                label="Embeddings"
+                value={status.embed_model ? shortModelName(status.embed_model) : "—"}
+              />
             </div>
           </>
         )}

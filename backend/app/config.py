@@ -20,8 +20,15 @@ class Settings:
     DEBUG: bool = os.getenv("RAVENSLAW_DEBUG", "false").lower() == "true"
     ENABLE_SCRAPER_SCHEDULER: bool = os.getenv("ENABLE_SCRAPER_SCHEDULER", "false").lower() == "true"
 
-    # PDF upload
-    UPLOAD_DIR: str = os.getenv("RAVENSLAW_UPLOAD_DIR", str(Path(__file__).resolve().parent.parent / "uploads"))
+    # PDF upload staging. Under DATA_ROOT, not next to the code: these are whole
+    # user PDFs, and a 50-document bulk import staged on the boot SSD is both the
+    # wrong disk (see the storage split in rag/core/config.py) and a way to fill
+    # a 40GB root filesystem with files that are deleted seconds later. Resolved
+    # from the environment rather than from __file__ so the code tree can move.
+    UPLOAD_DIR: str = os.getenv(
+        "RAVENSLAW_UPLOAD_DIR",
+        str(Path(os.getenv("DATA_ROOT", "/data").strip() or "/data") / "tmp" / "uploads"),
+    )
     MAX_PDF_SIZE_MB: int = int(os.getenv("RAVENSLAW_MAX_PDF_SIZE_MB", "50"))
 
     # Lossy PDF recompression before archival (see rag/app/ingest/compress.py).
@@ -46,8 +53,10 @@ class Settings:
     # extracts documents.
     WARM_DOCUMENT_CONVERTER: bool = os.getenv("RAVENSLAW_WARM_DOCUMENT_CONVERTER", "true").lower() == "true"
 
-    # OpenAI: embeddings + metadata extraction for the RAG pipeline.
-    # Not validated at boot: the API runs fine without RAG configured.
+    # OpenAI. No longer used for embeddings -- those run locally now (see
+    # rag/core/embeddings.py). The only remaining caller is the optional
+    # metadata refinement pass, which is off unless METADATA_LLM_ENABLED=true.
+    # Leave this empty for a deployment that makes no outbound API calls.
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
     # Internal auth
@@ -110,7 +119,17 @@ class Settings:
         object.__setattr__(self, "TRUSTED_HOSTS", parsed_trusted_hosts)
 
         object.__setattr__(self, "CORS_ORIGINS", parsed_origins)
-        Path(self.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+        try:
+            Path(self.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            # Now that this lives under DATA_ROOT, an unmounted volume would
+            # otherwise turn an import-time mkdir into a process that refuses to
+            # start -- and the /health/storage check that would explain why is in
+            # the process that just failed to boot.
+            raise RuntimeError(
+                f"Cannot create upload directory {self.UPLOAD_DIR}: {exc}. "
+                f"Is DATA_ROOT mounted? Check `findmnt {os.getenv('DATA_ROOT', '/data')}`."
+            ) from exc
 
 
 settings = Settings()

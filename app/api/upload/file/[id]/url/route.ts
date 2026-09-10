@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, objectIdSchema, requireUserContext } from "@/app/api/lib/routeGuards";
-import { getPrivateSignedUrl } from "@/app/api/lib/storage/r2";
+import { getPrivateSignedUrl } from "@/app/api/lib/storage/hddStorage";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import Attachment from "@/app/api/lib/models/attachment";
 
@@ -40,7 +40,7 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const url = await getPrivateSignedUrl(attachment.r2Key, SIGNED_URL_TTL_SECONDS);
+  const url = await getPrivateSignedUrl(attachment.r2Key, SIGNED_URL_TTL_SECONDS, userContext.clerkUid);
 
   return NextResponse.json({
     success: true,

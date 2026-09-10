@@ -161,13 +161,22 @@ export interface RagIngestItem {
 
 export interface RagStatus {
   ready: boolean
-  openai_key_configured: boolean
-  chroma_configured: boolean
+  /** Always "faiss" since the migration off Chroma Cloud. */
+  vector_store: string
+  /** Hugging Face id of the local embedding model, e.g. Qwen/Qwen3-Embedding-8B. */
+  embed_model: string | null
+  embed_dim: number | null
   dependencies_installed: boolean
+  /** SQLite, LMDB and the FAISS indexes all opened and verified at startup. */
+  storage_ready: boolean
   chunk_count: number
   document_count: number
   indexed_hashes: number
-  chroma_database: string | null
+  /** Vector count per FAISS collection, keyed by collection name. */
+  collections: Record<string, number>
+  data_root: string | null
+  /** Free space on the volume backing the archive. Null when unreadable. */
+  disk_free_bytes: number | null
   error: string | null
 }
 

@@ -11,7 +11,6 @@ Usage:
 
 import logging
 import os
-import sys
 import threading
 import time
 from collections import defaultdict, deque
@@ -25,6 +24,9 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from . import __version__
 from .config import settings
+from .document_routes import public_documents_router, user_documents_router
+from .health_routes import dependency_summary, health_router
+from .logging_setup import configure_logging
 from .models import HealthResponse
 from .rag_routes import rag_router
 from .routes import router
@@ -34,12 +36,9 @@ from .userdetails_routes import userdetails_router
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+# stdout (journald) plus a rotating /var/log/owllex/rag.log -- see
+# app/logging_setup.py for why both.
+_LOG_PATH = configure_logging("rag", debug=settings.DEBUG)
 logger = logging.getLogger("ravenslaw")
 _request_buckets = defaultdict(deque)
 
@@ -56,8 +55,11 @@ app = FastAPI(
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    # In-memory per-IP rate limiting for baseline abuse protection.
-    if request.url.path != "/health":
+    # In-memory per-IP rate limiting for baseline abuse protection. The whole
+    # /health tree is exempt: an uptime monitor polling four endpoints every 30s
+    # must never be the thing that trips the limiter and reports an outage it
+    # caused itself.
+    if not request.url.path.startswith("/health"):
         now = time.time()
         client_ip = request.client.host if request.client else "unknown"
         bucket = _request_buckets[client_ip]
@@ -120,6 +122,19 @@ app.include_router(
     dependencies=[Depends(require_internal_token)],
 )
 app.include_router(userdetails_router)
+# Document delivery. Both routers authenticate per request rather than inheriting
+# the internal token the RAG router uses: /api/user-documents derives ownership
+# from a verified Clerk subject, and /api/documents accepts either that or the
+# internal token. Mounting them under the internal-token dependency instead would
+# make every private document readable by anything holding that one shared
+# secret, which is precisely the property this split exists to remove.
+app.include_router(user_documents_router)
+app.include_router(public_documents_router)
+# Deep per-store checks. Unauthenticated on purpose: they are what an uptime
+# monitor and `systemctl` health tooling poll, they expose counts and paths
+# rather than corpus content, and nginx restricts /health/* to the local network
+# in front of this anyway (see deploy/nginx/owllex.conf).
+app.include_router(health_router)
 
 
 # ─── Root ────────────────────────────────────────────────────────────────────
@@ -145,6 +160,16 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
+    """Liveness. 200 whenever this process can serve a request.
+
+    Deliberately not a readiness probe. The Cloudflare container uses this as its
+    ``pingEndpoint`` and lib/backendClient.ts reads only ``response.ok``, so
+    answering 503 for a degraded RAG stack would restart-loop a backend that is
+    still serving the parser, scraper and user-details routes correctly. The
+    per-store detail is in ``dependencies`` here, and in full on
+    /health/sqlite, /health/lmdb, /health/vector and /health/storage -- those
+    return 503 when their dependency is genuinely broken.
+    """
     mongo_status = "not configured"
     if settings.MONGODB_URI:
         try:
@@ -159,6 +184,7 @@ async def health_check():
         status="ok",
         version=__version__,
         mongodb=mongo_status,
+        dependencies=dependency_summary(),
     )
 
 
@@ -192,37 +218,99 @@ def _sweep_stale_uploads(max_age_hours: int = 6) -> None:
 
 
 def _warm_document_converter() -> None:
-    """Build the OCR engine now instead of inside the first upload.
+    """Build the document converter now instead of inside the first upload.
 
-    Constructing it loads the small ONNX detection/recognition weights --
-    under a second on a warm disk, more the first time they have to be
-    fetched. Built lazily, that cost lands on whoever uploads first after a
-    restart: their extraction runs past the frontend's patience and the
-    browser reports a connection failure for a backend that is working fine,
-    just slow to start. Warming it in a daemon thread keeps startup
-    non-blocking -- requests arriving during the warm-up simply wait on the
-    same lazy build they would have triggered themselves.
+    Constructing Docling's converter loads the layout and table-structure
+    models. Built lazily, that cost lands on whoever uploads first after a
+    restart: their extraction runs past the frontend's patience and the browser
+    reports a connection failure for a backend that is working fine, just slow
+    to start. Warming it in a daemon thread keeps startup non-blocking --
+    requests arriving during the warm-up simply wait on the same lazy build they
+    would have triggered themselves.
     """
-    try:
-        from rag.app.ingest.loader import _get_ocr_engine
-    except ImportError:
-        logger.info("RapidOCR not installed; skipping OCR engine warm-up")
-        return
     started = time.time()
     try:
-        _get_ocr_engine()
+        from rag.app.ingest.loader import _get_ocr_engine, get_document_converter
+        from rag.core.config import get_config
+
+        if get_config().parser_backend == "docling":
+            get_document_converter()
+        else:
+            _get_ocr_engine()
+    except ImportError:
+        logger.info("Document parsing dependencies not installed; skipping warm-up")
+        return
     except Exception as e:
         # A failed warm-up must not take the API down -- the first real request
         # retries the same build and surfaces the error to its caller.
-        logger.warning("OCR engine warm-up failed: %s", e)
+        logger.warning("Document converter warm-up failed: %s", e)
     else:
-        logger.info("OCR engine warmed in %.1fs", time.time() - started)
+        logger.info("Document converter warmed in %.1fs", time.time() - started)
+
+
+def _start_rag_stack() -> None:
+    """Create the storage layout, open the stores, load the indexes, verify them.
+
+    Synchronous and before the first request on purpose: a half-open stack that
+    fails on the first search is far harder to diagnose than a process that
+    refuses to start. A failure here is logged rather than raised -- the parser,
+    scraper and user-details routes do not need the RAG stores, and taking the
+    whole API down because a volume is unmounted would be a worse outage than
+    the one it reports.
+    """
+    try:
+        from rag.core.services import get_services
+
+        services = get_services()
+    except ImportError as e:
+        logger.info("RAG dependencies not installed; storage not initialised (%s)", e)
+        return
+    except Exception:
+        logger.exception("RAG storage failed to start -- /api/v1/rag/* will report 503")
+        return
+
+    _schedule_backups(services)
+
+
+def _schedule_backups(services) -> None:
+    """Nightly snapshot of FAISS, SQLite and LMDB. PDFs are not duplicated."""
+    config = services.config
+    if not config.backup_enabled:
+        logger.info("Nightly backups disabled (BACKUP_ENABLED=false)")
+        return
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+
+        from rag.core.backup import run_backup
+    except ImportError:
+        logger.warning("APScheduler not installed -- nightly backups disabled")
+        return
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        func=lambda: run_backup(services),
+        trigger=CronTrigger(hour=config.backup_hour, minute=config.backup_minute),
+        id="nightly_rag_backup",
+        name="Back up FAISS, SQLite and LMDB",
+        replace_existing=True,
+        # A backup that overruns its window must not stack up behind itself.
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.start()
+    app.state.backup_scheduler = scheduler
+    logger.info("Nightly backup scheduled for %02d:%02d", config.backup_hour, config.backup_minute)
 
 
 @app.on_event("startup")
 async def on_startup():
     logger.info("Ravenslaw v%s starting on %s:%s", __version__, settings.HOST, settings.PORT)
+    if _LOG_PATH:
+        logger.info("Logging to %s", _LOG_PATH)
     _sweep_stale_uploads()
+    _start_rag_stack()
 
     if settings.WARM_DOCUMENT_CONVERTER:
         threading.Thread(target=_warm_document_converter, name="docling-warmup", daemon=True).start()
@@ -263,10 +351,25 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    scheduler = getattr(app.state, "scheduler", None)
-    if scheduler:
-        try:
-            scheduler.shutdown(wait=False)
-        except Exception:
-            logger.warning("Scheduler shutdown failed")
+    for attribute in ("scheduler", "backup_scheduler"):
+        scheduler = getattr(app.state, attribute, None)
+        if scheduler:
+            try:
+                scheduler.shutdown(wait=False)
+            except Exception:
+                logger.warning("%s shutdown failed", attribute)
+
+    # Flush the FAISS indexes before the process exits. Vectors added since the
+    # last flush live only in memory; SQLite already has their chunk rows, so
+    # skipping this leaves the index behind the database until a rebuild.
+    try:
+        from rag.core.services import is_started, shutdown as shutdown_rag, get_services
+
+        if is_started():
+            shutdown_rag(get_services())
+    except ImportError:
+        pass
+    except Exception:
+        logger.exception("RAG stack shutdown failed")
+
     logger.info("Ravenslaw shutting down")

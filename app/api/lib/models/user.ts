@@ -119,6 +119,26 @@ const AccountPreferencesSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const AssistantPreferencesSchema = new mongoose.Schema(
+  {
+    // Keyed by the field ids in features/settings/data/assistantSections.ts --
+    // a Map here (rather than one Mongoose field per select/toggle) means
+    // adding a new assistant setting on the client doesn't require a schema
+    // change on the server.
+    choices: {
+      type: Map,
+      of: String,
+      default: () => ({}),
+    },
+    toggles: {
+      type: Map,
+      of: Boolean,
+      default: () => ({}),
+    },
+  },
+  { _id: false },
+);
+
 const UserSchema = new mongoose.Schema(
   {
     clerkUid: {
@@ -199,6 +219,10 @@ const UserSchema = new mongoose.Schema(
     },
     accountPreferences: {
       type: AccountPreferencesSchema,
+      default: () => ({}),
+    },
+    assistantPreferences: {
+      type: AssistantPreferencesSchema,
       default: () => ({}),
     },
   },

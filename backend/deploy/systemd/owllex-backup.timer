@@ -1,0 +1,24 @@
+# Schedules owllex-backup.service.
+#
+#   sudo systemctl enable --now owllex-backup.timer
+#   systemctl list-timers owllex-backup.timer
+
+[Unit]
+Description=Nightly Owllex backup
+Documentation=file:///opt/owllex/backend/deploy/README.md
+
+[Timer]
+# 03:30 local time, matching the BACKUP_HOUR/BACKUP_MINUTE defaults in .env so
+# the two mechanisms describe the same schedule even though only one runs.
+OnCalendar=*-*-* 03:30:00
+
+# Run on boot if the box was off at 03:30. A backup that silently does not
+# happen is the failure mode this whole file exists to prevent.
+Persistent=true
+
+# Spread the start over 15 minutes. Harmless here, but it keeps this box from
+# hitting a shared Storage Box at the same instant as every other one.
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

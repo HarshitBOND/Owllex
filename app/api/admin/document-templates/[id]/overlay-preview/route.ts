@@ -5,7 +5,7 @@ import { objectIdSchema, parseAndValidateJson } from "@/app/api/lib/routeGuards"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import DocumentTemplate from "@/app/api/lib/models/document-template"
 import DocumentTemplateVersion from "@/app/api/lib/models/document-template-version"
-import { getPrivateObject } from "@/app/api/lib/storage/r2"
+import { getPrivateObject } from "@/app/api/lib/storage/hddStorage"
 import { renderPdfOverlay } from "@/app/api/lib/export/pdfOverlay"
 import { fieldsSchema, type TemplateField } from "@/lib/templates/fields"
 

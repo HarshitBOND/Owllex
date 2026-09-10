@@ -1,7 +1,7 @@
 import { createHash } from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { enforceRateLimit, objectIdSchema, requireUserContext } from "@/app/api/lib/routeGuards"
-import { getPrivateObject, headPrivateObject } from "@/app/api/lib/storage/r2"
+import { getPrivateObject, headPrivateObject } from "@/app/api/lib/storage/hddStorage"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import VaultDocument from "@/app/api/lib/models/vault-document"
 

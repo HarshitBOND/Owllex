@@ -1,5 +1,5 @@
 import { createHash } from "crypto"
-import { headPrivateObject } from "@/app/api/lib/storage/r2"
+import { headPrivateObject } from "@/app/api/lib/storage/hddStorage"
 
 /**
  * Builds a content-addressed storage key and reports whether the object is

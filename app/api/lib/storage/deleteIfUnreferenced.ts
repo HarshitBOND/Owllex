@@ -1,11 +1,11 @@
-import { deletePrivateObject } from "@/app/api/lib/storage/r2"
+import { deletePrivateObject } from "@/app/api/lib/storage/hddStorage"
 import VaultDocument from "@/app/api/lib/models/vault-document"
 import CorpusDocument from "@/app/api/lib/models/corpus-document"
 import ContractReview from "@/app/api/lib/models/contract-review"
 import Attachment from "@/app/api/lib/models/attachment"
 
 /**
- * Deletes an R2 object only if no remaining row points at it.
+ * Deletes a stored object only if no remaining row points at it.
  *
  * Uploads are content-addressed (see dedupe.ts), so one stored object can back
  * several rows -- the same exhibit filed under two matters, or a document kept
@@ -25,8 +25,10 @@ export async function deleteIfUnreferenced(r2Key: string): Promise<boolean> {
 
   if (counts.reduce((a, b) => a + b, 0) > 0) return false
 
-  // A failure here leaves an orphan rather than failing the user's delete;
-  // scripts/r2-orphan-sweep.mjs is the backstop.
+  // A failure here leaves an orphan on the volume rather than failing the
+  // user's delete. That is the right trade -- an unreferenced file costs disk,
+  // a failed delete costs the user their request -- and the disk it costs is
+  // reported by /health/storage rather than by a bucket bill nobody reads.
   await deletePrivateObject(r2Key).catch(() => {})
   return true
 }

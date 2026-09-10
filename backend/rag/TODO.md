@@ -1,3 +1,10 @@
+> **Status note.** The infrastructure items here (vector store, embeddings,
+> object storage, dedup index, resumable ingest, backups) were completed by the
+> self-hosted migration — see [`README.md`](README.md) and
+> [`../MIGRATION.md`](../MIGRATION.md). What remains open is the *retrieval and
+> metadata* work: citation resolution, the lineage subsystem, hybrid search and
+> the closed-vocabulary classifier.
+
 # Ravenslaw RAG Implementation Workflow & TODO
 
 Companion to `ARCHITECTURE.md` (the concept/decisions doc). This file is the concrete build plan: how a document actually moves through the pipeline, which LangChain pieces do which job, and the order to build things in. Nothing here overrides a decision already locked in `ARCHITECTURE.md` this is "how," that doc is "what/why."

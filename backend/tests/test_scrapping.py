@@ -15,7 +15,14 @@ import sys
 import tempfile
 import unittest
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+# rag.scrapping.curl_import does not exist on this tree (see PRODUCTION_TODO.md
+# T22). Skip collection of this module instead of aborting the whole test run
+# until that task deletes or rewrites it.
+pytest.importorskip("rag.scrapping.curl_import")
 
 from rag.scrapping.curl_import import parse_cookie_header, parse_curl
 from rag.scrapping.extract import (

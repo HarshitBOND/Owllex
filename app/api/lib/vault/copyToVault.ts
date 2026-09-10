@@ -1,5 +1,5 @@
 import { createHash } from "crypto"
-import { getPrivateObject, putPrivateObject } from "@/app/api/lib/storage/r2"
+import { getPrivateObject, putPrivateObject } from "@/app/api/lib/storage/hddStorage"
 import { contentAddressedKey } from "@/app/api/lib/storage/dedupe"
 import { compressPdf } from "@/app/api/lib/storage/compressPdf"
 import VaultDocument from "@/app/api/lib/models/vault-document"

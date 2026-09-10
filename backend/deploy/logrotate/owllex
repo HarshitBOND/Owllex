@@ -1,0 +1,56 @@
+# Log rotation for Owllex.
+#   sudo cp deploy/logrotate/owllex /etc/logrotate.d/owllex
+#   sudo logrotate -d /etc/logrotate.d/owllex     # dry run
+#
+# Two stanzas because the application and nginx hold their logs open in
+# different ways, and getting that wrong is how a log silently stops being
+# written while every process involved still looks healthy.
+
+# ── Application logs (rag.log, ingest.log, backup.log) ──────────────────────
+/var/log/owllex/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+
+    # copytruncate, not create: Python's RotatingFileHandler keeps the file open
+    # for the life of the process. Renaming it out from under the handler would
+    # leave every service writing happily into an unlinked inode -- disk fills,
+    # `tail rag.log` shows nothing, and nothing anywhere reports an error.
+    # copytruncate copies the content aside and truncates in place, so the open
+    # descriptor keeps working.
+    copytruncate
+
+    # dateext keeps these names (rag.log-20260909) out of the way of the
+    # handler's own size-based rotation (rag.log.1), which is a separate
+    # mechanism protecting the disk between daily logrotate runs.
+    dateext
+    dateformat -%Y%m%d
+
+    su owllex owllex
+    create 0640 owllex owllex
+}
+
+# ── nginx access/error logs for this vhost ──────────────────────────────────
+/var/log/owllex/nginx/*.log {
+    daily
+    rotate 30
+    missingok
+    notifempty
+    compress
+    delaycompress
+
+    # nginx reopens its logs on USR1, so the rename-and-signal path is correct
+    # here and avoids copytruncate's brief window of lost lines.
+    sharedscripts
+    postrotate
+        if [ -f /run/nginx.pid ]; then
+            kill -USR1 "$(cat /run/nginx.pid)"
+        fi
+    endscript
+
+    su root adm
+    create 0640 www-data adm
+}

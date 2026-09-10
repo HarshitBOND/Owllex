@@ -11,9 +11,13 @@
  * Ghostscript for the preview and called the backend for the apply, so the two
  * could disagree; neither dependency is needed any more.
  *
- * r2Key is content-addressed to the *original* upload bytes (see
+ * The storage key is content-addressed to the *original* upload bytes (see
  * app/api/lib/storage/dedupe.ts), so recompression overwrites the same key --
  * no new object, and no Mongo changes besides sha256/size/compressionStatus.
+ *
+ * Objects live on the mounted volume behind the backend now rather than in R2,
+ * so this talks to the same storage module the routes use. It therefore needs
+ * the backend reachable and BACKEND_INTERNAL_TOKEN set, not bucket credentials.
  *
  * This is lossy and irreversible, same as a fresh upload: only the currently
  * stored bytes are recompressed, so anything already recompressed once will be
@@ -24,11 +28,11 @@
  */
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { AwsClient } from "aws4fetch"
 import { config as loadEnv } from "dotenv"
 import mongoose from "mongoose"
 import { connectDB } from "../app/api/lib/db/connectMongo"
 import { compressPdf } from "../app/api/lib/storage/compressPdf"
+import { getPrivateObject, putPrivateObject } from "../app/api/lib/storage/hddStorage"
 
 // Plain `node` doesn't auto-load .env.local the way Next's dev/build commands
 // do -- without this every var below reads as missing even though it's sitting
@@ -37,43 +41,28 @@ loadEnv({ path: path.resolve(process.cwd(), ".env.local") })
 
 const APPLY = process.argv.includes("--apply")
 
-const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PRIVATE_BUCKET, MONGODB_URI, MONGODB_DB } =
-  process.env
+const { MONGODB_URI, BACKEND_INTERNAL_TOKEN } = process.env
 
-for (const [name, value] of Object.entries({
-  R2_ACCOUNT_ID,
-  R2_ACCESS_KEY_ID,
-  R2_SECRET_ACCESS_KEY,
-  R2_PRIVATE_BUCKET,
-  MONGODB_URI,
-})) {
+for (const [name, value] of Object.entries({ MONGODB_URI, BACKEND_INTERNAL_TOKEN })) {
   if (!value) {
     console.error(`Missing required env var ${name}`)
     process.exit(1)
   }
 }
 
-const r2Client = new AwsClient({
-  accessKeyId: R2_ACCESS_KEY_ID!,
-  secretAccessKey: R2_SECRET_ACCESS_KEY!,
-  service: "s3",
-  region: "auto",
-})
-const bucketUrl = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_PRIVATE_BUCKET}`
-
 async function getObject(key: string): Promise<Buffer | null> {
-  const res = await r2Client.fetch(`${bucketUrl}/${encodeURIComponent(key)}`)
-  if (!res.ok) return null
-  return Buffer.from(await res.arrayBuffer())
+  const object = await getPrivateObject(key)
+  return object.ok && object.body ? object.body : null
 }
 
 async function putObject(key: string, body: Buffer, contentType: string): Promise<boolean> {
-  const res = await r2Client.fetch(`${bucketUrl}/${encodeURIComponent(key)}`, {
-    method: "PUT",
-    body: new Uint8Array(body),
-    headers: { "content-type": contentType },
-  })
-  return res.ok
+  try {
+    await putPrivateObject(key, body, contentType)
+    return true
+  } catch (error) {
+    console.error(`  write failed: ${error instanceof Error ? error.message : String(error)}`)
+    return false
+  }
 }
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(2)} MB`

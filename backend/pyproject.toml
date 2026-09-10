@@ -18,36 +18,61 @@ dependencies = [
     "pyjwt[crypto]>=2.9",
     "gunicorn==23.*",
     "playwright>=1.62.0",
-    "langchain-experimental>=0.4.2",
-    "langchain-openai>=1.6.0",
 ]
 
-# Ingestion/RAG only deliberately NOT in the base dependency set: this extract/OCR
-# stack is still multi-hundred-MB (mostly onnxruntime), and the API image has no
-# reason to carry it. uv sync --extra rag
+# Ingestion/RAG deliberately NOT in the base dependency set: this stack is
+# multi-GB (torch, Docling models, the embedding model's runtime), and the API
+# image has no reason to carry it.
+#
+#   uv sync --extra rag        # storage + parsing + retrieval, no local model
+#   uv sync --extra embeddings # adds torch + sentence-transformers
+#
+# The split is deliberate: a host that only parses and stores documents does not
+# need a 4GB torch install, and the embedding model is the single largest thing
+# in this dependency tree.
 [project.optional-dependencies]
 rag = [
-    "boto3>=1.35",
-    # O(1) content-hash dedup index see rag/hash_db.py.
+    # ─── Storage ──────────────────────────────────────────────────────────────
+    # Vector index. Replaces Chroma Cloud; persisted under FAISS_ROOT.
+    "faiss-cpu>=1.8",
+    # O(1) content-hash dedup index -- see rag/core/hash_index.py.
     "lmdb>=1.4",
-    # Text/layout detection + recognition for scanned pages and photos (rag/app/ingest/loader.py).
-    # ONNX-only -- no torch. Used directly, not through Docling: a full
-    # document-understanding pipeline (layout model + table-structure model +
-    # torch itself) cost ~1.2-1.4GB peak RSS just to OCR one short document,
-    # which OOM-killed this process on anything under a 4GB instance. Plain
-    # OCR does not reconstruct tables or heading structure -- load_text's
-    # caller re-flows the text through its own markdown/HTML pipeline anyway,
-    # so that trade buys running comfortably on a small instance instead.
+    # numpy is FAISS's array interface and the embedder's output type. Pinned
+    # below 3 only because faiss-cpu wheels are built against the 2.x ABI.
+    "numpy>=1.26,<3",
+
+    # ─── Parsing ──────────────────────────────────────────────────────────────
+    # Layout analysis, table-structure recovery and OCR in one pass, emitting
+    # Markdown with real page boundaries (rag/app/ingest/loader.py).
+    "docling>=2.55",
+    # Fallback parser: PDF text-layer extraction plus page rasterization.
+    "pypdfium2>=5.13",
+    # OCR for the fallback path. ONNX-only -- no torch.
     "rapidocr>=3.9",
     "onnxruntime>=1.20",
-    # PDF text-layer extraction and page rasterization for the OCR fallback path.
-    "pypdfium2>=5.13",
     # EXIF auto-orientation for photo uploads.
     "pillow>=12.0",
+
+    # ─── Chunking ─────────────────────────────────────────────────────────────
+    # Recursive character splitting with start-index metadata, which is what
+    # maps each chunk back to the page it came from.
     "langchain-text-splitters>=0.3",
-    # Token-length function for the splitter (chunk_size/overlap are measured in tokens, not chars).
-    "tiktoken>=0.8",
-    "langchain-chroma>=1.1.0",
+]
+
+# The local embedding model. Split out because it is by far the heaviest part of
+# the install and because a parse-only or retrieval-only host does not need it.
+embeddings = [
+    "sentence-transformers>=3.3",
+    "torch>=2.5",
+    "transformers>=4.51",
+]
+
+# Optional metadata refinement through a hosted LLM, for prose documents where
+# the deterministic front-matter parse comes back empty. Off unless
+# METADATA_LLM_ENABLED=true; install this extra only if you turn it on. A
+# default deployment makes no outbound API calls at all.
+metadata-llm = [
+    "langchain-openai>=1.6.0",
 ]
 
 [tool.uv]

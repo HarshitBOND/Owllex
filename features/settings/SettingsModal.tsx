@@ -7,7 +7,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSettingsData } from "./hooks/useSettingsData"
-import { assistantSections, defaultAssistantToggles } from "./data/assistantSections"
+import { assistantSections } from "./data/assistantSections"
 import { AssistantPanel } from "./components/AssistantPanel"
 import { BillingPanel } from "./components/BillingPanel"
 import { GeneralPanel } from "./components/GeneralPanel"
@@ -45,13 +45,11 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ section, onSectionChange, onClose }: SettingsModalProps) {
-  const { isLoaded, isSignedIn } = useUser()
+  const { isLoaded, isSignedIn, user } = useUser()
   const panelRef = useRef<HTMLDivElement>(null)
   const paneRef = useRef<HTMLDivElement>(null)
 
   const [query, setQuery] = useState("")
-  const [choices, setChoices] = useState<Record<string, string>>({})
-  const [toggles, setToggles] = useState(defaultAssistantToggles)
 
   const activeId = resolveSection(section)
 
@@ -60,21 +58,28 @@ export function SettingsModal({ section, onSectionChange, onClose }: SettingsMod
     accountSaving,
     notificationSaving,
     subscriptionLoading,
+    assistantSaving,
     accountNotice,
     notificationNotice,
     billingNotice,
+    assistantNotice,
     account,
     setAccount,
     notificationPreferences,
     setNotificationPreferences,
     subscription,
     transactions,
+    assistantChoices,
+    setAssistantChoices,
+    assistantToggles,
+    setAssistantToggles,
     fetchSettingsData,
     saveAccountSettings,
     saveNotificationSettings,
     handleReminderToggle,
     runSubscriptionAction,
-  } = useSettingsData(isSignedIn)
+    saveAssistantSettings,
+  } = useSettingsData(isSignedIn, user)
 
   // Escape closes, and the page behind the overlay must not scroll with it.
   useEffect(() => {
@@ -114,18 +119,6 @@ export function SettingsModal({ section, onSectionChange, onClose }: SettingsMod
   const assistantSection = assistantSections.find((item) => item.id === activeId)
 
   const renderPanel = () => {
-    if (assistantSection) {
-      return (
-        <AssistantPanel
-          section={assistantSection}
-          choices={choices}
-          onChoice={(key, value) => setChoices((previous) => ({ ...previous, [key]: value }))}
-          toggles={toggles}
-          onToggle={(key, value) => setToggles((previous) => ({ ...previous, [key]: value }))}
-        />
-      )
-    }
-
     if (activeId === "usage") return <UsagePanel />
 
     if (loading) {
@@ -133,6 +126,21 @@ export function SettingsModal({ section, onSectionChange, onClose }: SettingsMod
         <div className="py-16 flex justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
         </div>
+      )
+    }
+
+    if (assistantSection) {
+      return (
+        <AssistantPanel
+          section={assistantSection}
+          choices={assistantChoices}
+          onChoice={(key, value) => setAssistantChoices((previous) => ({ ...previous, [key]: value }))}
+          toggles={assistantToggles}
+          onToggle={(key, value) => setAssistantToggles((previous) => ({ ...previous, [key]: value }))}
+          notice={assistantNotice}
+          saving={assistantSaving}
+          onSave={saveAssistantSettings}
+        />
       )
     }
 

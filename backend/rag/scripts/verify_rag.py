@@ -1,15 +1,23 @@
-"""End-to-end check of the RAG pipeline.
+"""End-to-end check of the self-hosted RAG pipeline.
 
-Run this after adding OPENAI_API_KEY to backend/.env to confirm the whole path
-works: config -> dependencies -> extraction -> chunking -> embedding -> Chroma
--> retrieval -> dedup.
+Confirms the whole path works: config -> storage layout -> dependencies ->
+extraction -> chunking -> local embedding -> FAISS -> SQLite -> retrieval ->
+dedup -> cleanup.
 
     cd backend
-    .venv/Scripts/python.exe rag/scripts/verify_rag.py            # in-process
-    .venv/Scripts/python.exe rag/scripts/verify_rag.py --http     # through the API
+    .venv/bin/python rag/scripts/verify_rag.py            # in-process
+    .venv/bin/python rag/scripts/verify_rag.py --http     # through the API
 
 --http hits the running FastAPI server exactly the way the admin page does,
 including the internal-token header, so it also proves the wiring in between.
+The API only enqueues the ingest (PRODUCTION_TODO.md T2), so --http also needs
+an ingest worker draining INBOX_ROOT -- either `owllex-ingest.service`, or for
+a one-off check: `.venv/bin/python -m rag.scripts.ingest_worker --once`.
+
+It writes into the configured DATA_ROOT and removes what it wrote. To keep it
+away from a production corpus entirely, point it at a scratch volume:
+
+    DATA_ROOT=/tmp/rag-verify .venv/bin/python rag/scripts/verify_rag.py
 """
 
 import argparse
@@ -61,69 +69,116 @@ QUERY = "zephyrquartzbail"
 
 def run_in_process():
     print("\n--- Config ---")
-    key = os.getenv("OPENAI_API_KEY", "")
-    if not check("OPENAI_API_KEY is set", bool(key), "add it to backend/.env"):
-        return
-    check("OPENAI_API_KEY looks well-formed", key.startswith("sk-"), f"starts with {key[:3]!r}")
+    try:
+        from rag.core.config import get_config
 
-    chroma_ok = bool(os.getenv("CHROMA_API_KEY") and os.getenv("CHROMA_TENANT") and os.getenv("CHROMA_DATABASE"))
-    if not check("CHROMA_API_KEY/TENANT/DATABASE are set", chroma_ok, "add them to backend/.env"):
+        config = get_config()
+    except Exception as e:
+        check("RAG config builds", False, str(e))
         return
+    check("RAG config builds", True, f"SSD={config.ssd_data_root} HDD={config.hdd_data_root}")
+    if config.storage_is_split:
+        print("       storage tiers are split (SSD metadata / HDD bulk)")
+    else:
+        print(f"       single volume at {config.data_root}")
+    # The tiers are what everything actually resolves against; DATA_ROOT is only
+    # a fallback for the paths they do not already cover.
+    for name, root in (("SSD_DATA_ROOT", config.ssd_data_root), ("HDD_DATA_ROOT", config.hdd_data_root)):
+        check(
+            f"{name} is writable",
+            os.access(root, os.W_OK) if root.exists() else os.access(root.parent, os.W_OK),
+            str(root),
+        )
 
     print("\n--- Dependencies ---")
     try:
-        from rag import hash_db
-        from rag.app.ingest.ingest import ingest_document
-        from rag.app.ingest.vector_db import collection_stats, get_vector_db
+        import faiss  # noqa: F401
+        import lmdb  # noqa: F401
+
+        from rag.app.ingest.pipeline import IngestionPipeline
+        from rag.app.retrieval.retriever import Retriever
+        from rag.core.services import build_services, shutdown, startup
+
         check("RAG modules import", True)
     except Exception as e:
-        check("RAG modules import", False, str(e))
+        check("RAG modules import", False, f"{e} (run: uv sync --extra rag)")
         return
 
-    before = collection_stats()
-    print(f"       vector store: Chroma Cloud database {os.getenv('CHROMA_DATABASE')!r}")
+    print("\n--- Storage ---")
+    try:
+        services = build_services()
+        startup(services)
+    except Exception as e:
+        check("storage starts", False, str(e))
+        return
+    check("storage starts", True, f"embeddings: {services.signature}")
+
+    before = services.metadata.stats()
+    print(f"       vector store: FAISS at {config.faiss_root}")
     print(f"       before: {before['document_count']} docs / {before['chunk_count']} chunks")
 
-    print("\n--- Ingest ---")
     tmp = Path(tempfile.gettempdir()) / f"ravenslaw_verify_{uuid.uuid4().hex}.md"
     tmp.write_text(SAMPLE, encoding="utf-8")
     document_id = uuid.uuid4().hex
+    pipeline = IngestionPipeline(services)
+    result = {}
 
     try:
+        print("\n--- Ingest ---")
         t = time.time()
-        result = ingest_document(str(tmp), document_id)
+        result = pipeline.ingest(str(tmp), document_id=document_id).to_dict()
         took = time.time() - t
 
         if result.get("skipped"):
             check("document ingested", False, "already present - delete the hash entry to re-run cleanly")
         else:
-            check("document ingested", result.get("chunk_count", 0) > 0, f"{result.get('chunk_count')} chunks in {took:.1f}s")
-            check("metadata extracted by the LLM", bool(result.get("title")), f"title={result.get('title')!r}, type={result.get('document_type')!r}")
+            check(
+                "document ingested",
+                result.get("chunk_count", 0) > 0,
+                f"{result.get('chunk_count')} chunks in {took:.1f}s",
+            )
+            check(
+                "metadata extracted",
+                bool(result.get("title")),
+                f"title={result.get('title')!r}, type={result.get('document_type')!r}, "
+                f"court={result.get('court')!r}",
+            )
 
         print("\n--- Vector store ---")
-        after = collection_stats()
+        after = services.metadata.stats()
         check(
             "chunk count grew",
             after["chunk_count"] > before["chunk_count"],
             f"{before['chunk_count']} -> {after['chunk_count']}",
         )
+        check(
+            "FAISS matches SQLite",
+            services.indexes.global_index().ntotal == after["chunk_count"],
+            f"faiss={services.indexes.global_index().ntotal}, sqlite={after['chunk_count']}",
+        )
 
         print("\n--- Retrieval ---")
-        hits = get_vector_db().similarity_search_with_score(QUERY, k=3)
+        hits = Retriever(services).search_public(QUERY, top_k=3)
         check("search returned hits", len(hits) > 0, f"{len(hits)} hits")
         if hits:
-            top_ids = [d.metadata.get("document_id") for d, _ in hits]
-            check("the ingested document is retrievable", document_id in top_ids, f"top distance {hits[0][1]:.4f}")
-            print(f"       top chunk: {hits[0][0].page_content[:120]!r}")
+            check(
+                "the ingested document is retrievable",
+                document_id in [h.document_id for h in hits],
+                f"top score {hits[0].score:.4f}",
+            )
+            print(f"       top chunk: {hits[0].text[:120]!r}")
 
         print("\n--- Dedup ---")
-        again = ingest_document(str(tmp), uuid.uuid4().hex)
+        again = pipeline.ingest(str(tmp), document_id=uuid.uuid4().hex).to_dict()
         check("re-ingesting the same bytes is skipped", bool(again.get("skipped")), again.get("reason", ""))
 
         print("\n--- Cleanup ---")
-        get_vector_db()._collection.delete(where={"document_id": document_id})
-        hash_db.delete(result["content_hash"])
-        final = collection_stats()
+        freed = services.metadata.delete_documents("lexvert", document_id=document_id)
+        services.indexes.global_index().remove(freed)
+        services.hashes.delete(result["content_hash"])
+        if result.get("storage_ref"):
+            services.documents.delete(result["storage_ref"])
+        final = services.metadata.stats()
         check(
             "test document removed",
             final["chunk_count"] == before["chunk_count"],
@@ -131,6 +186,7 @@ def run_in_process():
         )
     finally:
         tmp.unlink(missing_ok=True)
+        shutdown(services)
 
 
 def run_http():
@@ -170,13 +226,49 @@ def run_http():
                 f"{base}/api/v1/rag/ingest",
                 headers=headers,
                 files={"file": (tmp.name, fh, "text/markdown")},
-                timeout=600,
+                timeout=60,
             )
         ok = check("POST /api/v1/rag/ingest", r.ok, f"HTTP {r.status_code} in {time.time() - t:.1f}s")
         if not ok:
             print(f"       body: {r.text[:300]}")
             return
-        data = r.json()
+        enqueued = r.json()
+        job_id = enqueued.get("job_id")
+        ok = check("response carries a job_id", bool(job_id), str(enqueued))
+        if not ok:
+            return
+
+        # The API only enqueues -- the ingest worker (the sole FAISS writer,
+        # PRODUCTION_TODO.md T2) is what actually runs the pipeline. Poll the
+        # job the same way the Next app does rather than assuming a worker is
+        # even running.
+        deadline = time.time() + 600
+        data = None
+        while time.time() < deadline:
+            jr = requests.get(f"{base}/api/v1/rag/jobs/{job_id}", headers=headers, timeout=30)
+            if not jr.ok:
+                check("GET /api/v1/rag/jobs/{job_id}", False, f"HTTP {jr.status_code}: {jr.text[:200]}")
+                return
+            data = jr.json()
+            if data.get("status") in ("complete", "duplicate", "failed"):
+                break
+            time.sleep(2)
+        else:
+            check(
+                "ingest job reached a terminal status",
+                False,
+                "timed out after 600s -- is owllex-ingest (or `python -m rag.scripts.ingest_worker "
+                "--once`) running against this INBOX_ROOT?",
+            )
+            return
+
+        ok = check(
+            "ingest job completed",
+            data.get("status") == "complete",
+            f"status={data.get('status')} error={data.get('error')}",
+        )
+        if not ok:
+            return
         print(f"       {data}")
 
         r = requests.post(
@@ -190,7 +282,7 @@ def run_http():
             results = r.json().get("results", [])
             check("search returned hits", len(results) > 0, f"{len(results)} hits")
             if results:
-                print(f"       top: {results[0]['text'][:120]!r} (distance {results[0]['score']:.4f})")
+                print(f"       top: {results[0]['text'][:120]!r} (score {results[0]['score']:.4f})")
     finally:
         tmp.unlink(missing_ok=True)
 

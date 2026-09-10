@@ -2,28 +2,24 @@ import { Container } from "@cloudflare/containers";
 
 interface Env {
   RAVENSLAW_BACKEND: DurableObjectNamespace<RavenslawBackend>;
+  /**
+   * Origin of the Ubuntu VPS running the backend, e.g. https://api.example.com.
+   * When set, this Worker is a thin auth/routing proxy in front of that host --
+   * which is the supported topology since the RAG stack became stateful.
+   * When unset, it falls back to hosting the backend in a Cloudflare container.
+   */
+  VPS_ORIGIN?: string;
   MONGODB_URI: string;
   MONGODB_DB: string;
   RAVENSLAW_INTERNAL_TOKEN: string;
-  OPENAI_API_KEY: string;
-  CHROMA_API_KEY: string;
-  CHROMA_TENANT: string;
-  CHROMA_DATABASE: string;
-  R2_ACCOUNT_ID: string;
-  R2_ACCESS_KEY_ID: string;
-  R2_SECRET_ACCESS_KEY: string;
-  R2_BUCKET: string;
-  R2_PUBLIC_DOCS_BASE_URL: string;
   CLERK_JWT_ISSUER: string;
   RAVENSLAW_CORS_ORIGINS: string;
 }
 
-// Single always-on instance, same shape as Render's numInstances: 1 -- state
-// lives in MongoDB/Chroma/R2, not in the container, so there's nothing to
-// shard by session or user.
+// Single always-on instance. Only meaningful in the legacy container mode below.
 const INSTANCE_NAME = "singleton";
 
-// Non-secret defaults.
+// Non-secret defaults for the legacy container mode.
 const NON_SECRET_ENV = {
   RAVENSLAW_DEBUG: "false",
   RAVENSLAW_WARM_DOCUMENT_CONVERTER: "true",
@@ -37,8 +33,25 @@ const NON_SECRET_ENV = {
   // container directly rather than through the workers.dev hostname.
   RAVENSLAW_TRUSTED_HOSTS:
     "owllex-backend.owllex-backend-container.workers.dev,localhost,127.0.0.1",
+  // Container filesystems do not survive a restart, so a container-hosted
+  // backend must never be pointed at a real corpus. See the warning below.
+  DATA_ROOT: "/tmp/ravenslaw-data",
+  BACKUP_ENABLED: "false",
 };
 
+/**
+ * Legacy mode: run the FastAPI backend inside a Cloudflare container.
+ *
+ * WARNING -- this mode is no longer suitable for the RAG corpus. The backend is
+ * now stateful: FAISS indexes, the SQLite metadata database, the LMDB hash index
+ * and every archived PDF live under DATA_ROOT. A container's filesystem is
+ * ephemeral, so each restart would silently discard the entire corpus and the
+ * service would come back up looking healthy and empty.
+ *
+ * DATA_ROOT above therefore points at /tmp on purpose: this mode is for the
+ * stateless routes (cause-list parsing, extraction) only. Set VPS_ORIGIN to
+ * route to the Hetzner host instead, which is where the mounted volume is.
+ */
 export class RavenslawBackend extends Container<Env> {
   defaultPort = 8000;
   // WEB_TIMEOUT below allows requests up to 300s (OCR extraction); sleepAfter
@@ -53,6 +66,10 @@ export class RavenslawBackend extends Container<Env> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    if (env.VPS_ORIGIN) {
+      return proxyToVps(request, env.VPS_ORIGIN);
+    }
+
     const container = env.RAVENSLAW_BACKEND.getByName(INSTANCE_NAME);
 
     // Secrets are only applied by the platform when the container process
@@ -67,15 +84,6 @@ export default {
           MONGODB_URI: env.MONGODB_URI,
           MONGODB_DB: env.MONGODB_DB,
           RAVENSLAW_INTERNAL_TOKEN: env.RAVENSLAW_INTERNAL_TOKEN,
-          OPENAI_API_KEY: env.OPENAI_API_KEY,
-          CHROMA_API_KEY: env.CHROMA_API_KEY,
-          CHROMA_TENANT: env.CHROMA_TENANT,
-          CHROMA_DATABASE: env.CHROMA_DATABASE,
-          R2_ACCOUNT_ID: env.R2_ACCOUNT_ID,
-          R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
-          R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
-          R2_BUCKET: env.R2_BUCKET,
-          R2_PUBLIC_DOCS_BASE_URL: env.R2_PUBLIC_DOCS_BASE_URL,
           CLERK_JWT_ISSUER: env.CLERK_JWT_ISSUER,
           RAVENSLAW_CORS_ORIGINS: env.RAVENSLAW_CORS_ORIGINS,
         },
@@ -85,3 +93,30 @@ export default {
     return container.fetch(request);
   },
 };
+
+/**
+ * Forward the request to the VPS unchanged.
+ *
+ * The body is streamed rather than buffered: ingest uploads run to tens of
+ * megabytes, and reading one into memory here would both add latency and risk
+ * the Worker's memory limit. The Host header is rewritten to the origin so the
+ * backend's TrustedHostMiddleware sees a hostname it is configured to accept.
+ */
+async function proxyToVps(request: Request, origin: string): Promise<Response> {
+  const incoming = new URL(request.url);
+  const target = new URL(incoming.pathname + incoming.search, origin);
+
+  const headers = new Headers(request.headers);
+  headers.set("Host", target.host);
+  // Preserve the caller's IP for the backend's per-IP rate limiter, which would
+  // otherwise see every request as coming from Cloudflare.
+  const clientIp = request.headers.get("CF-Connecting-IP");
+  if (clientIp) headers.set("X-Forwarded-For", clientIp);
+
+  return fetch(target, {
+    method: request.method,
+    headers,
+    body: request.body,
+    redirect: "manual",
+  });
+}

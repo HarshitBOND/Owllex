@@ -23,7 +23,7 @@ vi.mock("@/app/api/lib/uploadValidation", () => ({
   validateUploadBuffer: mockState.validateUploadBuffer,
 }))
 vi.mock("@/app/api/lib/securityLogger", () => ({ logSecurityEvent: vi.fn() }))
-vi.mock("@/app/api/lib/storage/r2", () => ({
+vi.mock("@/app/api/lib/storage/hddStorage", () => ({
   putPrivateObject: mockState.putPrivateObject,
   headPrivateObject: vi.fn(),
 }))

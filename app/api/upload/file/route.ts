@@ -4,7 +4,7 @@ import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage";
 import { compressPdf } from "@/app/api/lib/storage/compressPdf";
-import { headPrivateObject, putPrivateObject } from "@/app/api/lib/storage/r2";
+import { headPrivateObject, putPrivateObject } from "@/app/api/lib/storage/hddStorage";
 import { contentAddressedKey } from "@/app/api/lib/storage/dedupe";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import Attachment from "@/app/api/lib/models/attachment";

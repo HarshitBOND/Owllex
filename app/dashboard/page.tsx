@@ -18,6 +18,30 @@ const DashboardHome = () => {
     }
   }, [isLoaded, isSignedIn, router])
 
+  // "/dashboard" is where sign-in and the header's "Dashboard" link both land --
+  // honour the landing page a user picked in Settings > General by forwarding
+  // from here, instead of always showing the AI chat home.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return
+
+    let cancelled = false
+
+    fetch("/api/userdetails/settings/account")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.success) return
+        const landingPage = data.account?.accountPreferences?.defaultLandingPage
+        if (landingPage && landingPage !== "/dashboard") {
+          router.replace(landingPage)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLoaded, isSignedIn, router])
+
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">

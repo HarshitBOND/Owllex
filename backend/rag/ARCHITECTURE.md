@@ -1,3 +1,14 @@
+> **Status note (superseded in part).** This document is the *design* reference:
+> the metadata schema, chunking rationale, retrieval strategy and cost analysis
+> below still stand. Its description of the **infrastructure** does not — the
+> stack was migrated off Chroma Cloud, OpenAI embeddings and Cloudflare R2 onto
+> a self-hosted FAISS + SQLite + LMDB + local-Qwen3 stack on one VPS. Wherever
+> this file says Chroma, R2, or `text-embedding-3-small`, read
+> [`README.md`](README.md) for what is actually deployed and
+> [`../MIGRATION.md`](../MIGRATION.md) for why and how it changed. The pipeline
+> is also no longer "a thin prototype": see `rag/core/` and
+> `rag/app/ingest/pipeline.py`.
+
 # Ravenslaw RAG Pipeline Concept & Architecture
 
 Status: **acquisition is built; the pipeline is a thin prototype; retrieval is still design.** This document is the working reference for building a legal-document RAG system that hallucinates as little as possible.

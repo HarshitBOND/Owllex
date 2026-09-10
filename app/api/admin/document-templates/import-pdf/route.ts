@@ -7,7 +7,7 @@ import DocumentTemplateVersion from "@/app/api/lib/models/document-template-vers
 import { validateUploadBuffer, sanitizeFileName } from "@/app/api/lib/uploadValidation"
 import { contentAddressedKey } from "@/app/api/lib/storage/dedupe"
 import { compressPdf } from "@/app/api/lib/storage/compressPdf"
-import { putPrivateObject } from "@/app/api/lib/storage/r2"
+import { putPrivateObject } from "@/app/api/lib/storage/hddStorage"
 import { extractDocumentText } from "@/app/api/lib/contractExtract"
 import { sanitizeDocumentHtml } from "@/app/api/lib/html/sanitizeHtml"
 import { extractTemplateFromText } from "@/app/api/lib/services/templateExtraction"

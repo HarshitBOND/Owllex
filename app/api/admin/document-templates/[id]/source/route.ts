@@ -3,7 +3,7 @@ import { requireAdmin } from "@/app/api/lib/adminMiddleware"
 import { objectIdSchema } from "@/app/api/lib/routeGuards"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import DocumentTemplateVersion from "@/app/api/lib/models/document-template-version"
-import { getPrivateSignedUrl } from "@/app/api/lib/storage/r2"
+import { getPrivateSignedUrl } from "@/app/api/lib/storage/hddStorage"
 
 /**
  * Hands the admin a short-lived link to the court's original PDF, so the review
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
-    const url = await getPrivateSignedUrl(snapshot.sourcePdf.r2Key, SIGNED_URL_TTL_SECONDS)
+    const url = await getPrivateSignedUrl(snapshot.sourcePdf.r2Key, SIGNED_URL_TTL_SECONDS, admin.userId)
     return NextResponse.json({
       success: true,
       url,

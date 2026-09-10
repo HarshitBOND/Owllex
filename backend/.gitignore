@@ -9,6 +9,9 @@ __pycache__/
 env/
 venv/
 .env*
+# The committed template. `.env*` above is deliberately broad, so the one file
+# that must be in the repo is re-included here.
+!.env.example
 
 # Uploads
 uploads/
@@ -37,6 +40,17 @@ rag/scrapping/**/sessions/
 data/raw/
 rag/scrapping/data/
 
-# Ingest artefacts extracted text and the SQLite ledger. Rebuildable
-# from the PDFs in R2; the ledger in particular is machine-local state.
+# Legacy ingest artefacts. The stack now keeps all state under DATA_ROOT
+# (/data on the VPS), outside the code tree entirely -- this pattern only
+# covers leftovers from before that move.
 rag/data/
+
+# A DATA_ROOT pointed inside the checkout, which is what a developer machine
+# without a mounted volume ends up doing. Never commit corpus state.
+/data/
+data/faiss/
+data/sqlite/
+data/lmdb/
+data/backups/
+data/documents/
+data/private/

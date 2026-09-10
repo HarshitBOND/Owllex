@@ -1,0 +1,94 @@
+# Owllex API (FastAPI + the RAG stack).
+#
+# Install:  deploy/deploy.sh, or by hand:
+#   sudo cp deploy/systemd/owllex-rag.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now owllex-rag
+#
+# Logs:     journalctl -u owllex-rag -f      (also /var/log/owllex/rag.log)
+
+[Unit]
+Description=Owllex RAG API (FastAPI)
+Documentation=file:///opt/owllex/backend/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+# The single most important line in this file. Without it systemd will happily
+# start the API before the data volume finishes mounting: /data is then an empty
+# directory on the boot SSD, the stack comes up "healthy" and empty, and
+# ingestion begins filling the root filesystem with a corpus that dies with the
+# instance. RequiresMountsFor makes the unit depend on whatever unit mounts
+# /data, so a failed mount means a refused start -- which is the outcome you
+# want, because it is the one you notice.
+RequiresMountsFor=/data
+
+[Service]
+Type=exec
+User=owllex
+Group=owllex
+WorkingDirectory=/opt/owllex/backend
+EnvironmentFile=/opt/owllex/backend/.env
+
+# Hugging Face caches the embedding model here. On the data volume, not in the
+# home directory: Qwen3-Embedding-8B is ~16GB of weights and would otherwise be
+# re-downloaded onto (and fill) the system disk.
+Environment=HF_HOME=/data/models
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# ── One worker, deliberately ────────────────────────────────────────────────
+# Each gunicorn worker is a separate process with its own copy of the embedding
+# model. At ~16GB resident for the 8B model, a second worker does not halve
+# latency -- it exhausts the 32GB box and the OOM killer takes the whole service.
+# Scale by making the box bigger or the model smaller (EMBED_MODEL), not by
+# raising this. --timeout 300 covers a slow OCR extraction; the default 30s
+# would kill the worker mid-document.
+ExecStart=/opt/owllex/backend/.venv/bin/gunicorn app.main:app \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --workers 1 \
+    --bind 127.0.0.1:8000 \
+    --timeout 300 \
+    --graceful-timeout 60 \
+    --keep-alive 65 \
+    --access-logfile - \
+    --error-logfile -
+
+ExecReload=/bin/kill -s HUP $MAINPID
+
+Restart=always
+RestartSec=10
+# Cold start loads Docling's layout models and the embedding model before the
+# first request. Ten minutes is generous on purpose: a restart loop here would
+# never let the warm-up finish, and the box would thrash instead of booting.
+TimeoutStartSec=900
+# Give the shutdown hook time to flush FAISS. Killed early, the index falls
+# behind SQLite and needs a rebuild.
+TimeoutStopSec=120
+KillSignal=SIGTERM
+
+# ── Hardening ───────────────────────────────────────────────────────────────
+# The application never needs to write outside these two trees.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+ReadWritePaths=/data /var/log/owllex
+
+# Bound the process so a runaway import cannot take the machine down with it.
+# 26G leaves headroom on a 32GB box for the page cache, which is what keeps
+# SQLite and FAISS reads off the disk.
+MemoryMax=26G
+LimitNOFILE=65535
+
+# journald also gets everything; app/logging_setup.py writes the rotating file.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=owllex-rag
+
+[Install]
+WantedBy=multi-user.target

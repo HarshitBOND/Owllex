@@ -1,0 +1,69 @@
+# Owllex corpus ingest worker -- drains /data/inbox into the RAG stack.
+#
+#   sudo systemctl enable --now owllex-ingest
+#   cp -r /path/to/judgments/. /data/inbox/sci/     # then watch it drain
+#   journalctl -u owllex-ingest -f
+#
+# Stop this unit before a migration or an index rebuild: it and the rebuild
+# script both write FAISS, and only one writer at a time is safe.
+
+[Unit]
+Description=Owllex corpus ingest worker
+Documentation=file:///opt/owllex/backend/deploy/README.md
+After=network-online.target owllex-rag.service
+Wants=network-online.target
+RequiresMountsFor=/data
+
+[Service]
+Type=exec
+User=owllex
+Group=owllex
+WorkingDirectory=/opt/owllex/backend
+EnvironmentFile=/opt/owllex/backend/.env
+Environment=HF_HOME=/data/models
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+ExecStart=/opt/owllex/backend/.venv/bin/python -m rag.scripts.ingest_worker
+
+# ── Nice'd below the API on purpose ─────────────────────────────────────────
+# Ingestion is throughput work with no user waiting on it; a search request is
+# latency work with one waiting on every millisecond. Giving the worker a lower
+# CPU and I/O priority means a bulk import runs at full speed on an idle box and
+# gets out of the way the moment someone runs a query, without any coordination
+# between the two processes.
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=50
+
+Restart=always
+RestartSec=30
+# The worker loads the same embedding model as the API.
+TimeoutStartSec=900
+# Long enough for the current document to finish and FAISS to flush. A worker
+# killed mid-document is safe -- LMDB is written last, so the document is simply
+# re-ingested -- but a clean stop saves the next start a rebuild.
+TimeoutStopSec=300
+KillSignal=SIGTERM
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+ReadWritePaths=/data /var/log/owllex
+
+MemoryMax=24G
+LimitNOFILE=65535
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=owllex-ingest
+
+[Install]
+WantedBy=multi-user.target

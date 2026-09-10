@@ -1,0 +1,45 @@
+# Single-host deployment for the Hetzner VPS.
+#
+#   docker compose up -d
+#
+# The only thing that must be right before the first start is the bind mount:
+# /data on the host has to be the mounted Hetzner volume, not a directory on the
+# system disk. Check with `findmnt /data` -- if it reports the root filesystem,
+# stop and mount the volume first, because the corpus will otherwise fill the
+# boot disk and be lost with the instance.
+
+services:
+  backend:
+    build:
+      context: .
+      target: ingest
+    restart: unless-stopped
+    ports:
+      # Bound to localhost: TLS and public exposure are the reverse proxy's job.
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    environment:
+      DATA_ROOT: /data
+      HF_HOME: /data/models
+    volumes:
+      - /data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      # Generous: a cold start loads the embedding model before it is ready to
+      # answer a RAG request, and a restart loop here would never let it finish.
+      start_period: 10m
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          # Qwen3-8B in bfloat16 (~16GB) plus a flat index plus the parser.
+          # Leaves headroom on the 32GB box for the page cache, which is what
+          # keeps SQLite and FAISS reads off the disk.
+          memory: 26G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"

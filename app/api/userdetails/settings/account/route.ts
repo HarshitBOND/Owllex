@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { clerkClient } from "@clerk/nextjs/server";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
 import { parseAndValidateJson, requireUserContext } from "@/app/api/lib/routeGuards";
 import User from "@/app/api/lib/models/user";
@@ -92,6 +93,25 @@ export async function PATCH(request: NextRequest) {
 
     if (typeof parsedBody.data.showBillingSummary === "boolean") {
       updateSet["accountPreferences.showBillingSummary"] = parsedBody.data.showBillingSummary;
+    }
+
+    // The name displayed everywhere else in the app (sidebar, dashboard greeting)
+    // comes straight from Clerk's useUser(), not from this Mongo record -- so a
+    // name edit here has to reach Clerk too, or it silently does nothing.
+    if (typeof parsedBody.data.firstName === "string" || typeof parsedBody.data.lastName === "string") {
+      try {
+        const client = await clerkClient();
+        await client.users.updateUser(userContext.clerkUid, {
+          ...(typeof parsedBody.data.firstName === "string" ? { firstName: parsedBody.data.firstName } : {}),
+          ...(typeof parsedBody.data.lastName === "string" ? { lastName: parsedBody.data.lastName } : {}),
+        });
+      } catch (error) {
+        console.error("Account settings Clerk sync error:", error);
+        return NextResponse.json(
+          { success: false, error: "Failed to update your name" },
+          { status: 502 },
+        );
+      }
     }
 
     const updatedUserResult = await User.findOneAndUpdate(

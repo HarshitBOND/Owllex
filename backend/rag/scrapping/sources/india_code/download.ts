@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { backupToR2, count, get as getHash, put } from "../../hashdb.js";
+import { backupHashIndex, count, get as getHash, put } from "../../hashdb.js";
 import { uploadRawDocument } from "../../storage.js";
 
 const SITE = "https://indiacode.gov.in";
@@ -136,7 +136,7 @@ async function main() {
     const filePath = join(PDF_DIR, filename);
     writeFileSync(filePath, bytes);
     await put(key, hash);
-    await backupToR2();
+    await backupHashIndex();
     await uploadRawDocument(SOURCE, hash, ".pdf", filePath);
     stored++;
     appendFileSync(
@@ -332,7 +332,7 @@ async function main() {
     if (info.number + 1 >= info.totalPages) break;
   }
 
-  await backupToR2(true);
+  await backupHashIndex(true);
   console.log(`\nDone. ${stored} new or changed, ${skipped} unchanged. Index now holds ${count()} entries.`);
   await browser.close();
 }

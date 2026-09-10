@@ -9,7 +9,7 @@ import {
   requireAdmin,
   logAdminAction,
 } from "@/app/api/lib/adminMiddleware";
-import { getBackendInternalHeaders } from "@/app/api/lib/backendInternalAuth";
+import { enqueueAndAwaitIngest } from "@/app/api/lib/ragIngestPoll";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo";
@@ -75,27 +75,37 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const response = await fetch(`${BACKEND_API}/api/v1/rag/ingest`, {
-      method: "POST",
-      headers: getBackendInternalHeaders(),
-      body: safeFormData,
-    });
+    // The backend enqueues onto the ingest worker (the sole FAISS writer,
+    // per PRODUCTION_TODO.md T2) and returns a job_id immediately; this waits
+    // for it, so the rest of this route sees the same synchronous result it
+    // always did.
+    let job;
+    try {
+      job = await enqueueAndAwaitIngest(`${BACKEND_API}/api/v1/rag/ingest`, safeFormData);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not enqueue ingestion";
+      return NextResponse.json({ success: false, error: message }, { status: 502 });
+    }
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      const detail = data.detail;
-      const isDuplicate = response.status === 409 && detail && typeof detail === "object";
+    if (job.status === "duplicate") {
       return NextResponse.json(
         {
           success: false,
-          error: isDuplicate ? detail.message : typeof detail === "string" ? detail : "Ingestion failed",
-          duplicate: isDuplicate || undefined,
-          existingDocumentId: isDuplicate ? detail.existing_document_id : undefined,
+          error: "This document has already been ingested (duplicate content).",
+          duplicate: true,
+          existingDocumentId: job.document_id,
         },
-        { status: response.status }
+        { status: 409 }
       );
     }
+    if (job.status === "failed") {
+      return NextResponse.json(
+        { success: false, error: job.error || "Ingestion failed" },
+        { status: 500 }
+      );
+    }
+
+    const data = { success: true, ...job };
 
     if (data.document_id && data.storage_ref) {
       try {
@@ -124,7 +134,7 @@ export async function POST(request: NextRequest) {
     const pageSuffix = inputFiles.length > 1 ? ` from ${inputFiles.length} pages` : "";
     await logAdminAction(admin.dbUserId, "rag_document_ingested", request, {
       targetType: "document",
-      targetId: data.document_id,
+      targetId: data.document_id ?? undefined,
       details: `Ingested "${primaryFileName}"${pageSuffix} into RAG pipeline (${data.chunk_count} chunks)`,
     });
 

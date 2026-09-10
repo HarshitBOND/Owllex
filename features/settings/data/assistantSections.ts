@@ -235,3 +235,24 @@ export const defaultAssistantToggles: Record<string, boolean> = {
   confidence: true, overruled: true, headnotes: false,
   improve: false, redact: true, localOnly: false,
 }
+
+const allAssistantFields = assistantSections.flatMap((section) =>
+  section.groups.flatMap((group) => group.fields),
+)
+
+/** Every select field's first option, so choices always starts fully populated rather than empty. */
+export const defaultAssistantChoices: Record<string, string> = Object.fromEntries(
+  allAssistantFields
+    .filter((field): field is Extract<AssistantField, { kind: "select" }> => field.kind === "select")
+    .map((field) => [field.key, field.options[0]]),
+)
+
+export const assistantSelectOptions: Record<string, string[]> = Object.fromEntries(
+  allAssistantFields
+    .filter((field): field is Extract<AssistantField, { kind: "select" }> => field.kind === "select")
+    .map((field) => [field.key, field.options]),
+)
+
+export const assistantToggleKeys: string[] = allAssistantFields
+  .filter((field) => field.kind === "toggle")
+  .map((field) => field.key)

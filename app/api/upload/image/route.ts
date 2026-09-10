@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, requireUserContext } from "@/app/api/lib/routeGuards";
 import { validateUploadBuffer } from "@/app/api/lib/uploadValidation";
 import { logSecurityEvent } from "@/app/api/lib/securityLogger";
-import { putPublicObject } from "@/app/api/lib/storage/r2";
+import { putPublicObject } from "@/app/api/lib/storage/hddStorage";
 import { optimizeImage, withExtension } from "@/app/api/lib/storage/optimizeImage";
 
 export async function POST(request: NextRequest) {

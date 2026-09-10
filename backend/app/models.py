@@ -73,3 +73,8 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     version: str
     mongodb: str = "not configured"
+    # Added, never removed: lib/backendClient.ts and the Cloudflare container's
+    # pingEndpoint both read only the HTTP status, and anything else consuming
+    # this keeps the three fields above unchanged. `dependencies` is a per-store
+    # summary; the detail lives on /health/{sqlite,lmdb,vector,storage}.
+    dependencies: dict[str, str] | None = None

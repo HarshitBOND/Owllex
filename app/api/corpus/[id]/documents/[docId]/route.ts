@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { objectIdSchema, requireUserContext } from "@/app/api/lib/routeGuards"
-import { getPrivateSignedUrl } from "@/app/api/lib/storage/r2"
+import { getPrivateSignedUrl } from "@/app/api/lib/storage/hddStorage"
 import { deleteIfUnreferenced } from "@/app/api/lib/storage/deleteIfUnreferenced"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import CorpusDocument from "@/app/api/lib/models/corpus-document"
@@ -26,7 +26,7 @@ export async function GET(
   }).lean<any>()
   if (!doc) return NextResponse.json({ success: false, error: "Document not found" }, { status: 404 })
 
-  const url = await getPrivateSignedUrl(doc.r2Key, 60 * 60)
+  const url = await getPrivateSignedUrl(doc.r2Key, 60 * 60, userContext.clerkUid)
   return NextResponse.json({ success: true, url, filename: doc.filename })
 }
 
@@ -53,9 +53,9 @@ export async function DELETE(
   await deleteCorpusVectors({ corpusId: id, clerkUid: userContext.clerkUid, documentId: doc.documentId })
 
   // The stored file used to be left behind here, so every deleted corpus
-  // document leaked its R2 object permanently. Failing this must not fail the
-  // delete -- the Mongo row is already gone, and scripts/r2-orphan-sweep.mjs
-  // catches anything that slips through.
+  // document leaked its stored object permanently. Failing this must not fail
+  // the delete -- the Mongo row is already gone, so the worst case is an
+  // unreferenced file on the volume rather than a document the user still sees.
   await deleteIfUnreferenced(doc.r2Key).catch(() => {})
 
   return NextResponse.json({ success: true })

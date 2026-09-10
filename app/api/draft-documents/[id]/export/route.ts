@@ -7,7 +7,7 @@ import { htmlToBlocks } from "@/app/api/lib/export/htmlBlocks"
 import { renderPdf } from "@/app/api/lib/export/pdf"
 import { renderDocx } from "@/app/api/lib/export/docx"
 import { renderPdfOverlay, type StampWarning } from "@/app/api/lib/export/pdfOverlay"
-import { getPrivateObject } from "@/app/api/lib/storage/r2"
+import { getPrivateObject } from "@/app/api/lib/storage/hddStorage"
 import type { TemplateField } from "@/lib/templates/fields"
 import { resolveDraftFont } from "@/lib/documents/draftFont";
 

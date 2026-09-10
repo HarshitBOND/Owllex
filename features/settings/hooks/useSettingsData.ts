@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import type { UserResource } from "@clerk/types"
 import type {
   AccountSettingsState,
   BillingTransaction,
@@ -7,22 +8,27 @@ import type {
   SubscriptionState,
 } from "../types"
 import { defaultAccountState, defaultNotificationState } from "../utils"
+import { defaultAssistantChoices, defaultAssistantToggles } from "../data/assistantSections"
 
-export function useSettingsData(isSignedIn: boolean | undefined) {
+export function useSettingsData(isSignedIn: boolean | undefined, clerkUser?: UserResource | null | undefined) {
   const [loading, setLoading] = useState(true)
   const [accountSaving, setAccountSaving] = useState(false)
   const [notificationSaving, setNotificationSaving] = useState(false)
   const [subscriptionLoading, setSubscriptionLoading] = useState(false)
+  const [assistantSaving, setAssistantSaving] = useState(false)
 
   const [accountNotice, setAccountNotice] = useState<NoticeState>(null)
   const [notificationNotice, setNotificationNotice] = useState<NoticeState>(null)
   const [billingNotice, setBillingNotice] = useState<NoticeState>(null)
+  const [assistantNotice, setAssistantNotice] = useState<NoticeState>(null)
 
   const [account, setAccount] = useState<AccountSettingsState>(defaultAccountState)
   const [notificationPreferences, setNotificationPreferences] =
     useState<NotificationPreferencesState>(defaultNotificationState)
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null)
   const [transactions, setTransactions] = useState<BillingTransaction[]>([])
+  const [assistantChoices, setAssistantChoices] = useState<Record<string, string>>(defaultAssistantChoices)
+  const [assistantToggles, setAssistantToggles] = useState<Record<string, boolean>>(defaultAssistantToggles)
 
   const fetchSettingsData = useCallback(async () => {
     if (!isSignedIn) return
@@ -35,17 +41,20 @@ export function useSettingsData(isSignedIn: boolean | undefined) {
         notificationResponse,
         subscriptionResponse,
         transactionsResponse,
+        assistantResponse,
       ] = await Promise.all([
         fetch("/api/userdetails/settings/account"),
         fetch("/api/userdetails/notifications/preferences"),
         fetch("/api/userdetails/subscription"),
         fetch("/api/userdetails/billing/transactions?limit=8"),
+        fetch("/api/userdetails/settings/assistant"),
       ])
 
       const accountData = await accountResponse.json().catch(() => ({}))
       const notificationData = await notificationResponse.json().catch(() => ({}))
       const subscriptionData = await subscriptionResponse.json().catch(() => ({}))
       const transactionsData = await transactionsResponse.json().catch(() => ({}))
+      const assistantData = await assistantResponse.json().catch(() => ({}))
 
       if (accountResponse.ok && accountData?.success) {
         setAccount({
@@ -79,6 +88,11 @@ export function useSettingsData(isSignedIn: boolean | undefined) {
 
       if (transactionsResponse.ok && transactionsData?.success) {
         setTransactions(Array.isArray(transactionsData.transactions) ? transactionsData.transactions : [])
+      }
+
+      if (assistantResponse.ok && assistantData?.success) {
+        setAssistantChoices({ ...defaultAssistantChoices, ...(assistantData.preferences?.choices || {}) })
+        setAssistantToggles({ ...defaultAssistantToggles, ...(assistantData.preferences?.toggles || {}) })
       }
     } catch (error) {
       console.error("Settings data fetch error:", error)
@@ -114,6 +128,11 @@ export function useSettingsData(isSignedIn: boolean | undefined) {
       if (!response.ok || !data.success) {
         throw new Error(data?.error || "Failed to save account preferences")
       }
+
+      // The name is stored on the Clerk account too (see the PATCH handler), so the
+      // sidebar/header greeting -- which reads useUser() directly -- needs a reload
+      // to pick up the change without a full page refresh.
+      await clerkUser?.reload()
 
       setAccountNotice({ kind: "success", message: "Account preferences saved." })
     } catch (error: any) {
@@ -171,6 +190,35 @@ export function useSettingsData(isSignedIn: boolean | undefined) {
     }))
   }
 
+  const saveAssistantSettings = async () => {
+    setAssistantNotice(null)
+    setAssistantSaving(true)
+
+    try {
+      const response = await fetch("/api/userdetails/settings/assistant", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ choices: assistantChoices, toggles: assistantToggles }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || "Failed to save assistant preferences")
+      }
+
+      setAssistantChoices({ ...defaultAssistantChoices, ...(data.preferences?.choices || {}) })
+      setAssistantToggles({ ...defaultAssistantToggles, ...(data.preferences?.toggles || {}) })
+      setAssistantNotice({ kind: "success", message: "Assistant preferences saved." })
+    } catch (error: any) {
+      setAssistantNotice({
+        kind: "error",
+        message: error?.message || "Could not save assistant preferences.",
+      })
+    } finally {
+      setAssistantSaving(false)
+    }
+  }
+
   const runSubscriptionAction = async (action: "cancel" | "renew") => {
     setBillingNotice(null)
     setSubscriptionLoading(true)
@@ -205,19 +253,26 @@ export function useSettingsData(isSignedIn: boolean | undefined) {
     accountSaving,
     notificationSaving,
     subscriptionLoading,
+    assistantSaving,
     accountNotice,
     notificationNotice,
     billingNotice,
+    assistantNotice,
     account,
     setAccount,
     notificationPreferences,
     setNotificationPreferences,
     subscription,
     transactions,
+    assistantChoices,
+    setAssistantChoices,
+    assistantToggles,
+    setAssistantToggles,
     fetchSettingsData,
     saveAccountSettings,
     saveNotificationSettings,
     handleReminderToggle,
     runSubscriptionAction,
+    saveAssistantSettings,
   }
 }

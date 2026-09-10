@@ -19,7 +19,7 @@ const mockState = vi.hoisted(() => ({
   create: vi.fn(),
 }))
 
-vi.mock("@/app/api/lib/storage/r2", () => ({
+vi.mock("@/app/api/lib/storage/hddStorage", () => ({
   putPrivateObject: mockState.putPrivateObject,
   getPrivateObject: mockState.getPrivateObject,
 }))

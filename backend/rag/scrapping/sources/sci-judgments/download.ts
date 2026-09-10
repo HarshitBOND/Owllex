@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { backupToR2, count, has, put } from "../../hashdb.js";
+import { backupHashIndex, count, has, put } from "../../hashdb.js";
 import { uploadRawDocument } from "../../storage.js";
 
 const SEARCH_URL = "https://scr.sci.gov.in/scrsearch/";
@@ -31,8 +31,15 @@ const MANIFEST_PATH = join(SOURCE_DIR, "manifest.jsonl");
 // pipeline the RAG Ingest tab uses, so a scrape run doesn't just fill a disk
 // folder -- each judgment is chunked, embedded, and counted in the knowledge
 // base immediately. Never fatal: a scrape that downloaded the PDF correctly
-// should not fail just because ingestion (or its OpenAI/Chroma config) isn't
+// should not fail just because ingestion (or its storage/embedding config) isn't
 // available right now.
+//
+// /ingest only enqueues -- the ingest worker is the sole FAISS writer
+// (PRODUCTION_TODO.md T2) -- so this polls the job to a terminal status the
+// way the Next app does. That wait now happens here, not inside a held-open
+// gunicorn worker thread on the backend, which is most of the way to what T11
+// asks for; it does not by itself stop a slow OCR run from blocking *this*
+// script's own download loop -- that part is still T11's to do.
 async function ingestIntoKnowledgeBase(filePath: string, filename: string): Promise<number | null> {
   const token = process.env.BACKEND_INTERNAL_TOKEN;
   if (!token) {
@@ -50,17 +57,46 @@ async function ingestIntoKnowledgeBase(filePath: string, filename: string): Prom
       body: form,
     });
 
-    if (response.status === 409) {
-      console.log("  Already in knowledge base (duplicate content)");
-      return null;
-    }
     if (!response.ok) {
       console.warn(`  Knowledge base ingestion failed (HTTP ${response.status})`);
       return null;
     }
 
-    const data = (await response.json()) as { chunk_count?: number };
-    return data.chunk_count ?? 0;
+    const enqueued = (await response.json()) as { job_id?: string };
+    if (!enqueued.job_id) {
+      console.warn("  Knowledge base ingestion failed: no job_id in response");
+      return null;
+    }
+
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const jobResponse = await fetch(`${BACKEND_API}/api/v1/rag/jobs/${enqueued.job_id}`, {
+        headers: { "x-internal-token": token },
+      });
+      if (!jobResponse.ok) {
+        console.warn(`  Knowledge base ingestion status check failed (HTTP ${jobResponse.status})`);
+        return null;
+      }
+      const job = (await jobResponse.json()) as {
+        status: string;
+        chunk_count?: number;
+        error?: string;
+      };
+      if (job.status === "duplicate") {
+        console.log("  Already in knowledge base (duplicate content)");
+        return null;
+      }
+      if (job.status === "failed") {
+        console.warn(`  Knowledge base ingestion failed: ${job.error ?? "unknown error"}`);
+        return null;
+      }
+      if (job.status === "complete") {
+        return job.chunk_count ?? 0;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    console.warn("  Knowledge base ingestion timed out waiting for the ingest worker");
+    return null;
   } catch (error) {
     console.warn(`  Knowledge base ingestion error: ${(error as Error).message}`);
     return null;
@@ -165,7 +201,7 @@ async function main(): Promise<void> {
         const filePath = join(PDF_DIR, filename);
         writeFileSync(filePath, buffer);
         await put(`sci:hash:${hash}`, cnr);
-        await backupToR2();
+        await backupHashIndex();
         await uploadRawDocument(SOURCE, hash, ".pdf", filePath);
         downloaded++;
 
@@ -208,7 +244,7 @@ async function main(): Promise<void> {
       }
     }
 
-    await backupToR2(true);
+    await backupHashIndex(true);
     console.log(`Done. Downloaded ${downloaded} new PDF(s). Index now holds ${count()} entries.`);
   } finally {
     await browser.close();

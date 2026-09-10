@@ -1,13 +1,43 @@
+"""Document text extraction: Docling first, with a lightweight fallback.
+
+Two backends, selected by ``PARSER_BACKEND``:
+
+* **docling** (default) -- layout analysis, table-structure recovery and OCR in
+  one pass, emitting Markdown. Structure survives extraction, which matters
+  because the chunker splits on headings and a citation is only useful if it can
+  say "Section 53(2)" rather than "chunk 7". Docling also reports real page
+  boundaries, which is what fills SQLite's ``page_number`` column.
+
+* **pypdfium** -- the text layer read directly, with RapidOCR only for pages that
+  have none. This was the sole backend while the service ran on a sub-4GB box,
+  where Docling's layout + table models cost ~1.2-1.4GB peak RSS and got the
+  process OOM-killed. On the 32GB VPS that trade no longer applies, but the
+  backend is kept: it is the fallback when Docling is unavailable or fails on a
+  document, and it stays the right choice for a small instance.
+
+Whichever backend runs, ``load_pages`` returns one string per page and
+``load_text`` joins them. Both contracts predate this file and are relied on by
+``/documents/extract``, so neither changes.
+"""
+
+from __future__ import annotations
+
 import gc
+import logging
+import threading
 from pathlib import Path
 from typing import Literal
+
+logger = logging.getLogger("ravenslaw.rag.loader")
 
 ExtractionMode = Literal["auto", "force_ocr", "text_only"]
 
 # Docling has no plain-text format, so .txt is read directly instead of converted.
-PLAIN_TEXT_SUFFIXES = {".txt"}
+PLAIN_TEXT_SUFFIXES = {".txt", ".md"}
 # Mirrors this pipeline's own allow-list (backend/app/rag_routes.py).
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
+# Formats Docling understands and the fast pypdfium path does not.
+DOCLING_ONLY_SUFFIXES = {".docx"}
 
 # A page with fewer real characters than this in its embedded text layer is
 # treated as scanned (no usable text layer) rather than as a very short page.
@@ -19,26 +49,100 @@ MIN_TEXT_LAYER_CHARS = 20
 _RAPIDOCR_PARAMS = {"Det.lang_type": "en", "Rec.lang_type": "en"}
 
 _ocr_engine = None
+_ocr_lock = threading.Lock()
+_docling_converter = None
+_docling_lock = threading.Lock()
+
+
+# ─── Backend selection ───────────────────────────────────────────────────────
+
+
+def _configured_backend() -> str:
+    try:
+        from rag.core.config import get_config
+
+        return get_config().parser_backend
+    except Exception:
+        # Extraction must work even if the RAG config cannot be built (e.g. an
+        # API-only host with no DATA_ROOT); the light backend needs nothing.
+        return "pypdfium"
+
+
+# ─── Docling ─────────────────────────────────────────────────────────────────
+
+
+def get_document_converter():
+    """Build the Docling converter once, on first use.
+
+    Construction loads the layout and table-structure models. Warmed at startup
+    by app/main.py so the cost does not land on whoever uploads first after a
+    restart.
+    """
+    global _docling_converter
+    if _docling_converter is not None:
+        return _docling_converter
+    with _docling_lock:
+        if _docling_converter is None:
+            from docling.document_converter import DocumentConverter
+
+            _docling_converter = DocumentConverter()
+    return _docling_converter
+
+
+def _docling_pages(path: Path, mode: ExtractionMode) -> list[str]:
+    """Convert with Docling and return one Markdown string per page."""
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    pipeline_options = PdfPipelineOptions()
+    # "auto" leaves Docling's own per-page decision in place; the two explicit
+    # modes exist for documents whose embedded text layer is present but garbled.
+    pipeline_options.do_ocr = mode != "text_only"
+    pipeline_options.do_table_structure = True
+    if mode == "force_ocr":
+        pipeline_options.ocr_options.force_full_page_ocr = True
+
+    converter = (
+        get_document_converter()
+        if mode == "auto"
+        else DocumentConverter(
+            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+        )
+    )
+
+    document = converter.convert(str(path)).document
+    page_numbers = sorted(document.pages) if getattr(document, "pages", None) else []
+
+    if not page_numbers:
+        return [document.export_to_markdown()]
+
+    pages: list[str] = []
+    for page_no in page_numbers:
+        try:
+            pages.append(document.export_to_markdown(page_no=page_no))
+        except TypeError:
+            # docling-core too old for per-page export: one page of everything
+            # is still correct, it just loses page provenance.
+            logger.warning("docling-core has no per-page export; page numbers unavailable")
+            return [document.export_to_markdown()]
+    return pages
+
+
+# ─── pypdfium + RapidOCR ─────────────────────────────────────────────────────
 
 
 def _get_ocr_engine():
-    # Built on first use, not at import: construction loads the tiny ONNX
-    # detection + recognition + orientation-classification weights (~170MB
-    # resident, well under a second on a warm disk). This used to be a full
-    # Docling DocumentConverter -- a document-layout model, a table-structure
-    # model, and torch itself, none of which OCR actually needs -- which cost
-    # ~1.2-1.4GB peak RSS on even a lightweight document and was what got this
-    # process OOM-killed on anything below a 4GB instance. A plain OCR engine
-    # with no layout/table understanding is a real trade: multi-column pages,
-    # tables and headings no longer come back structured, just linear text --
-    # acceptable here because load_text's caller re-flows everything through
-    # its own markdown/HTML pipeline anyway, and it's what keeps this running
-    # on a small server instead of needing one sized for a research pipeline.
+    # Built on first use, not at import: construction loads the ONNX detection,
+    # recognition and orientation-classification weights (~170MB resident).
     global _ocr_engine
-    if _ocr_engine is None:
-        from rapidocr import RapidOCR
+    if _ocr_engine is not None:
+        return _ocr_engine
+    with _ocr_lock:
+        if _ocr_engine is None:
+            from rapidocr import RapidOCR
 
-        _ocr_engine = RapidOCR(params=_RAPIDOCR_PARAMS)
+            _ocr_engine = RapidOCR(params=_RAPIDOCR_PARAMS)
     return _ocr_engine
 
 
@@ -62,21 +166,15 @@ def _ocr_pil_image(pil_image) -> str:
     return "\n".join(result.txts) if result and result.txts else ""
 
 
-def _load_pdf_pages(path: Path, mode: ExtractionMode = "auto") -> list[str]:
+def _pypdfium_pages(path: Path, mode: ExtractionMode = "auto") -> list[str]:
     """Extract a PDF page by page: its embedded text layer where one exists,
     OCR only for the pages that don't have one.
 
     Most uploaded contracts are Word-exported PDFs with a full text layer --
     reading it directly costs single-digit milliseconds per page and is exact,
-    character for character. OCR only runs on pages that actually need it (a
-    scan, or a signed page inserted as an image), which keeps the common case
-    fast and bounds the worst case's peak memory to roughly one rendered page
-    at a time instead of scaling with how many pages a document has.
-
-    `mode` overrides that per-page heuristic: "force_ocr" always OCRs, even
-    pages with a text layer (useful when the embedded layer is present but
-    garbled -- e.g. from a prior bad OCR pass); "text_only" never OCRs, so a
-    genuinely scanned page comes back blank rather than paying the OCR cost.
+    character for character. OCR only runs on pages that actually need it, which
+    keeps the common case fast and bounds peak memory to roughly one rendered
+    page at a time instead of scaling with page count.
     """
     import pypdfium2 as pdfium
 
@@ -88,17 +186,17 @@ def _load_pdf_pages(path: Path, mode: ExtractionMode = "auto") -> list[str]:
             text = textpage.get_text_range()
             textpage.close()
 
-            needs_ocr = mode == "force_ocr" or (mode == "auto" and len(text.strip()) < MIN_TEXT_LAYER_CHARS)
+            needs_ocr = mode == "force_ocr" or (
+                mode == "auto" and len(text.strip()) < MIN_TEXT_LAYER_CHARS
+            )
             if needs_ocr and mode != "text_only":
                 bitmap = page.render(scale=200 / 72)
                 text = _ocr_pil_image(bitmap.to_pil())
                 bitmap.close()
                 # CPython's allocator doesn't reliably hand a page bitmap's
                 # memory back to the OS between iterations, so an uncollected
-                # multi-page scan climbs in peak RSS the way the old Docling
-                # pipeline did. Collecting after each OCR pass is what keeps
-                # a long scanned document's footprint flat instead of growing
-                # with page count.
+                # multi-page scan climbs in peak RSS. Collecting after each OCR
+                # pass keeps a long scanned document's footprint flat.
                 gc.collect()
 
             pages_text.append(text)
@@ -108,7 +206,10 @@ def _load_pdf_pages(path: Path, mode: ExtractionMode = "auto") -> list[str]:
         pdf.close()
 
 
-def load_pages(path, mode: ExtractionMode = "auto") -> list[str]:
+# ─── Public API ──────────────────────────────────────────────────────────────
+
+
+def load_pages(path, mode: ExtractionMode = "auto", backend: str | None = None) -> list[str]:
     """Return the document as one string per page.
 
     Only PDFs really have pages; every other format comes back as a single
@@ -117,27 +218,47 @@ def load_pages(path, mode: ExtractionMode = "auto") -> list[str]:
     which is what lets a citation chip open the original at the right place.
     """
     path = Path(path)
-    if path.suffix.lower() in PLAIN_TEXT_SUFFIXES:
+    suffix = path.suffix.lower()
+
+    if suffix in PLAIN_TEXT_SUFFIXES:
         return [path.read_text(encoding="utf-8", errors="replace")]
-    if path.suffix.lower() in IMAGE_SUFFIXES:
+
+    backend = backend or _configured_backend()
+
+    if suffix in IMAGE_SUFFIXES and backend != "docling":
         _normalize_image_orientation(path)
         from PIL import Image
 
         with Image.open(path) as img:
             return [_ocr_pil_image(img)]
-    return _load_pdf_pages(path, mode)
+
+    if backend == "docling" or suffix in DOCLING_ONLY_SUFFIXES:
+        try:
+            return _docling_pages(path, mode)
+        except ImportError:
+            logger.warning("Docling not installed; falling back to the pypdfium backend")
+        except Exception as exc:
+            # A single malformed document must not fail extraction outright when
+            # a second, independent parser might still read it.
+            logger.warning("Docling failed on %s (%s); falling back to pypdfium", path.name, exc)
+
+        if suffix in DOCLING_ONLY_SUFFIXES:
+            raise RuntimeError(f"Could not extract {path.name}: Docling is required for {suffix}")
+        if suffix in IMAGE_SUFFIXES:
+            _normalize_image_orientation(path)
+            from PIL import Image
+
+            with Image.open(path) as img:
+                return [_ocr_pil_image(img)]
+
+    return _pypdfium_pages(path, mode)
 
 
-def load_text(path, mode: ExtractionMode = "auto"):
+def load_text(path, mode: ExtractionMode = "auto", backend: str | None = None) -> str:
     """Return the document as text, whatever the input format.
 
-    `mode` only affects PDFs, which are the only format with a text-layer
-    alternative to OCR -- plain text is always read as-is, and images always
-    need OCR since they have no embedded text layer to fall back to.
+    ``mode`` only affects formats with a text-layer alternative to OCR -- plain
+    text is always read as-is, and images always need OCR since they have no
+    embedded text layer to fall back to.
     """
-    return "\n\n".join(load_pages(path, mode))
-
-
-if __name__ == "__main__":
-    pdf_path = Path(__file__).resolve().parents[2] / "scrapping" / "data" / "raw" / "sci" / "pdfs" / "ESCR010002412026.pdf"
-    print(load_text(pdf_path)[:500])
+    return "\n\n".join(load_pages(path, mode, backend))

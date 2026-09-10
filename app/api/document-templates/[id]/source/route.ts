@@ -3,7 +3,7 @@ import { objectIdSchema, requireUserContext } from "@/app/api/lib/routeGuards"
 import connectMongoWithRetry from "@/app/api/lib/db/connectMongo"
 import DocumentTemplate from "@/app/api/lib/models/document-template"
 import DocumentTemplateVersion from "@/app/api/lib/models/document-template-version"
-import { getPrivateSignedUrl } from "@/app/api/lib/storage/r2"
+import { getPrivateSignedUrl } from "@/app/api/lib/storage/hddStorage"
 
 /**
  * The court's original PDF, for any signed-in user.
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
-    const url = await getPrivateSignedUrl(snapshot.sourcePdf.r2Key, SIGNED_URL_TTL_SECONDS)
+    const url = await getPrivateSignedUrl(snapshot.sourcePdf.r2Key, SIGNED_URL_TTL_SECONDS, userContext.clerkUid)
     return NextResponse.json({
       success: true,
       url,

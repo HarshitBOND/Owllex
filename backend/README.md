@@ -1,14 +1,29 @@
-# Ravenslaw Delhi High Court Cause List Parser API
+# Ravenslaw backend
 
-Production-ready backend service that parses Delhi High Court cause list PDFs into structured JSON data.
+Two services behind one FastAPI app:
+
+- **Cause-list parser** turns Delhi High Court cause list PDFs into structured JSON.
+- **RAG stack** ingests and retrieves legal documents, fully self-hosted:
+  Docling, a local Qwen3 embedding model, FAISS, SQLite and LMDB on a mounted
+  volume. See [`rag/README.md`](rag/README.md) for its architecture and
+  [`MIGRATION.md`](MIGRATION.md) for the move off Chroma Cloud / OpenAI / R2.
+
+For running this on a real server -- storage layout, systemd units, nginx,
+backups, restore, monitoring and hardening -- see
+[`deploy/README.md`](deploy/README.md). A fresh Ubuntu 24.04 box becomes
+production-ready with `sudo deploy/deploy.sh`.
 
 ## Quick Start
 
 ```bash
-cd ravenslaw_backend
+cd backend
 
-# Install dependencies (creates .venv automatically, pinned to Python 3.11)
+# Parser and API only (creates .venv automatically, pinned to Python 3.11)
 uv sync
+
+# ...or with the RAG stack. `embeddings` pulls in torch and is the heavy half;
+# omit it on a host that only parses and stores documents.
+uv sync --extra rag --extra embeddings
 
 # Copy env config
 copy .env.example .env       # Windows
@@ -112,12 +127,48 @@ All settings via environment variables (see `.env.example`):
 | `RAVENSLAW_IMPORT_PROGRESS_TTL_SECONDS` | `86400` | Retention for completed import progress data |
 | `RAVENSLAW_INTERNAL_TOKEN` | *(required)* | Shared internal token expected in `x-internal-token` header |
 
+### RAG stack
+
+Full reference in `.env.example`; these are the ones that matter on a new host.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATA_ROOT` | `/data` | **Must be the mounted volume.** All persistent state lives below it |
+| `LEGAL_CORPUS_ROOT` | `$DATA_ROOT/legal_corpus` | Public corpus, laid out by court and year. `PDF_ROOT` is still read as an alias |
+| `USERS_ROOT` | `$DATA_ROOT/users` | Private per-user documents, `0700`, owner-scoped |
+| `FAISS_ROOT` | `$DATA_ROOT/faiss` | Vector indexes |
+| `SQLITE_PATH` | `$DATA_ROOT/sqlite/chunks.db` | Document and chunk metadata |
+| `LMDB_PATH` | `$DATA_ROOT/lmdb/hashdb` | Content-hash duplicate index |
+| `BACKUP_ROOT` | `$DATA_ROOT/backups` | Nightly FAISS/SQLite/LMDB snapshots |
+| `EMBED_MODEL` | `qwen3-embedding-8b` | Local embedding model. Also accepts `-4b`, `-0.6b`, or any HF id |
+| `EMBED_DIM` | `1024` | Matryoshka truncation; sets the index's RAM footprint |
+| `EMBED_BATCH_SIZE` | `8` | Chunks per forward pass |
+| `PARSER_BACKEND` | `docling` | `docling` or `pypdfium` (lighter, no layout model) |
+| `FAISS_INDEX_FACTORY` | `Flat` | Exact search. Use `IVF4096,PQ64` past a few million chunks |
+| `BACKUP_ENABLED` | `true` | Nightly snapshot at `BACKUP_HOUR:BACKUP_MINUTE` |
+| `BACKUP_RETENTION_DAYS` | `14` | Snapshots kept. The newest document mirror is always kept, even past this |
+| `BACKUP_WEEKLY_WEEKDAY` | `6` (Sun) | Day the document trees are mirrored; the stores are nightly |
+| `MAX_USER_DOCUMENT_MB` | `50` | Per-upload ceiling for a private document |
+| `USER_QUOTA_MB` | `5120` | Per-owner storage ceiling; `0` disables it |
+
+Changing `EMBED_MODEL` or `EMBED_DIM` invalidates every stored vector. The
+signature is recorded in SQLite and checked at startup, so a mismatch refuses to
+boot rather than returning wrong neighbours; `rag/scripts/rebuild_index.py`
+re-embeds the corpus.
+
 ## Docker
 
 ```bash
-docker build -t ravenslaw .
-docker run -p 8000:8000 ravenslaw
+# Full image (parser + RAG). /data must be the mounted volume.
+docker compose up -d
+
+# Parser and API only, no RAG dependencies
+docker build --target api -t ravenslaw-api .
+docker run -p 8000:8000 ravenslaw-api
 ```
+
+The backend is stateful: without a real volume mounted at `/data` the corpus is
+discarded on every restart. `docker-compose.yml` bind-mounts it.
 
 ## Supported PDF Formats
 
@@ -143,23 +194,32 @@ Tested across 11 real DHC PDFs (11,854 cases):
 ## Project Structure
 
 ```
-ravenslaw_backend/
-├── app/
-│   ├── __init__.py      # Version
-│   ├── main.py          # FastAPI app + middleware
-│   ├── config.py        # Environment settings
-│   ├── models.py        # Data models (CaseEntry + Pydantic)
-│   ├── parser.py        # PDF parsing engine (core logic)
-│   ├── routes.py        # API endpoints
-│   └── db.py            # MongoDB operations (optional)
+backend/
+├── app/                     FastAPI layer
+│   ├── main.py              app, middleware, startup/shutdown, schedulers
+│   ├── config.py            server/security settings
+│   ├── parser.py            cause-list parsing engine
+│   ├── routes.py            parser endpoints
+│   ├── rag_routes.py        /api/v1/rag/* ingest, search, extract, serve
+│   ├── scraper_routes.py    scraper control endpoints
+│   ├── userdetails_routes.py
+│   ├── models.py            Pydantic models
+│   ├── security.py          internal-token + Clerk JWT auth
+│   └── db.py                MongoDB (optional)
+├── rag/                     the RAG stack -- see rag/README.md
+│   ├── core/                config, storage, embeddings, FAISS, backups
+│   ├── app/ingest/          the ingest pipeline
+│   ├── app/retrieval/       query -> FAISS -> SQLite
+│   ├── scripts/             verify, rebuild, backup, migrate
+│   └── scrapping/           document acquisition (TypeScript)
 ├── tests/
-│   ├── __init__.py
-│   └── test_parser.py   # Accuracy tests
-├── pyproject.toml
-├── uv.lock
+│   ├── test_parser.py       cause-list accuracy
+│   ├── test_rag_stack.py    RAG storage, isolation, resume, backups (offline)
+│   └── test_scrapping.py
+├── docker-compose.yml       single-host deployment, /data bind-mounted
+├── Dockerfile               targets: api (light), ingest (full)
+├── MIGRATION.md             move off Chroma/OpenAI/R2 + breaking changes
 ├── .env.example
-├── .gitignore
-├── Dockerfile
-├── README.md
-└── run.py               # Quick start
+├── pyproject.toml
+└── run.py
 ```
