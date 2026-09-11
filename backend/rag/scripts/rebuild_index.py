@@ -5,8 +5,7 @@ primary data. This is the recovery path for:
 
 * index drift after an unclean shutdown with ``FAISS_FLUSH_EVERY > 1``;
 * a change to ``EMBED_MODEL`` or ``EMBED_DIM``, which invalidates every vector;
-* a corrupt or lost ``.faiss`` file with no usable backup;
-* first build of a compressed (IVF/PQ) index, which must be trained in bulk.
+* a corrupt or lost ``.faiss`` file with no usable backup.
 
     cd backend
     .venv/bin/python -m rag.scripts.rebuild_index --collection lexvert
@@ -16,6 +15,14 @@ Embedding the whole corpus is the expensive operation in this system. The run is
 resumable in the sense that it can simply be restarted -- it rebuilds from
 scratch into a temporary index and swaps it in only on success, so an
 interrupted run leaves the existing index untouched.
+
+**Not** the tool for a compressed (IVF/PQ) factory, first build or otherwise:
+every run here starts from a brand-new, untrained staging index and adds in
+whatever ``--batch-size`` chunks at a time (``EMBED_BATCH_SIZE`` by default,
+8), so a factory that needs training raises on that first small batch rather
+than training on a representative sample -- see ``rag/scripts/build_index.py``,
+which trains in bulk before adding anything and checkpoints its embedding
+progress to a memory-mapped file so a killed run does not re-embed.
 """
 
 from __future__ import annotations
@@ -120,17 +127,22 @@ def rebuild_collections(services, collections, batch_size: int, force: bool = Fa
     logger.info("re-embedding %d chunk(s) across %s", total, collections)
     started = time.time()
     done = 0
-    offset = 0
+    # Keyset pagination, not OFFSET: OFFSET n re-walks n rows on every page and
+    # degrades as the run proceeds -- at tier 3's 450M chunks the last page
+    # would skip past almost the whole table before returning a row.
+    # faiss_id is unique and monotonically allocated, so "> last seen" is a
+    # stable cursor with no row to re-walk.
+    last_faiss_id = 0
 
     while True:
         rows = services.metadata.connection.execute(
             f"SELECT faiss_id, chunk_text FROM chunks WHERE collection IN ({placeholders}) "
-            "ORDER BY faiss_id LIMIT ? OFFSET ?",
-            (*collections, FETCH_SIZE, offset),
+            "AND faiss_id > ? ORDER BY faiss_id LIMIT ?",
+            (*collections, last_faiss_id, FETCH_SIZE),
         ).fetchall()
         if not rows:
             break
-        offset += len(rows)
+        last_faiss_id = rows[-1]["faiss_id"]
 
         for start in range(0, len(rows), batch_size):
             batch = rows[start : start + batch_size]

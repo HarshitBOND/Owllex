@@ -16,12 +16,15 @@ import { open } from "lmdb";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import "dotenv/config";
-import { backupRoot, dataRoot } from "./paths.js";
+import { backupRoot, ssdDataRoot } from "./paths.js";
 
 // Lives under the mounted volume, not next to this file: the code directory is
 // redeployed and the index is not. SCRAPE_LMDB_PATH overrides it; the default
-// sits beside the ingest index in <DATA_ROOT>/lmdb/.
-const DB_PATH = process.env.SCRAPE_LMDB_PATH?.trim() || join(dataRoot(), "lmdb", "scrapping_hashdb");
+// sits beside the ingest index in <SSD_DATA_ROOT>/lmdb/ -- this is a small,
+// latency-sensitive B-tree, the SSD tier's whole reason to exist (see
+// rag/core/config.py's LMDB_PATH, which this is a sibling of, not the same
+// database as -- see the module docstring above).
+const DB_PATH = process.env.SCRAPE_LMDB_PATH?.trim() || join(ssdDataRoot(), "lmdb", "scrapping_hashdb");
 
 mkdirSync(DB_PATH, { recursive: true });
 

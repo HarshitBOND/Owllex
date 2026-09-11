@@ -13,12 +13,18 @@ After=network-online.target
 Wants=network-online.target
 
 # The single most important line in this file. Without it systemd will happily
-# start the API before the data volume finishes mounting: /data is then an empty
-# directory on the boot SSD, the stack comes up "healthy" and empty, and
-# ingestion begins filling the root filesystem with a corpus that dies with the
-# instance. RequiresMountsFor makes the unit depend on whatever unit mounts
-# /data, so a failed mount means a refused start -- which is the outcome you
-# want, because it is the one you notice.
+# start the API before the data volume(s) finish mounting: the configured roots
+# are then empty directories on the boot SSD, the stack comes up "healthy" and
+# empty, and ingestion begins filling the root filesystem with a corpus that
+# dies with the instance. RequiresMountsFor makes the unit depend on whatever
+# unit mounts each root, so a failed mount means a refused start -- which is
+# the outcome you want, because it is the one you notice. deploy.sh renders
+# this line (and ReadWritePaths= and HF_HOME= below) from HDD_DATA_ROOT and
+# SSD_DATA_ROOT as they actually appear in .env, not from a literal /data --
+# on a split host those are two different mount points, and both must be
+# listed here or a host that starts with only one of them mounted looks
+# healthy right up until the first read or write that needs the other one
+# (PRODUCTION_TODO.md T4b).
 RequiresMountsFor=/data
 
 [Service]
@@ -28,20 +34,24 @@ Group=owllex
 WorkingDirectory=/opt/owllex/backend
 EnvironmentFile=/opt/owllex/backend/.env
 
-# Hugging Face caches the embedding model here. On the data volume, not in the
-# home directory: Qwen3-Embedding-8B is ~16GB of weights and would otherwise be
-# re-downloaded onto (and fill) the system disk.
+# Hugging Face caches the embedding model here. On the HDD tier, not in the
+# home directory: model weights are read once at startup and never randomly,
+# so they belong with the other bulk, sequential data, not on the boot SSD --
+# and not on the SSD tier either, which is sized for latency-critical metadata,
+# not multi-GB blobs.
 Environment=HF_HOME=/data/models
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 
 # ── One worker, deliberately ────────────────────────────────────────────────
 # Each gunicorn worker is a separate process with its own copy of the embedding
-# model. At ~16GB resident for the 8B model, a second worker does not halve
-# latency -- it exhausts the 32GB box and the OOM killer takes the whole service.
-# Scale by making the box bigger or the model smaller (EMBED_MODEL), not by
-# raising this. --timeout 300 covers a slow OCR extraction; the default 30s
-# would kill the worker mid-document.
+# model *and* its own copy of the FAISS index -- the latter, not the former, is
+# what actually dominates at scale (see the MemoryMax comment below). A second
+# worker does not halve latency -- it doubles resident memory and the OOM
+# killer takes the whole service. Scale by making the box bigger or the index
+# smaller (a compressed FAISS_INDEX_FACTORY, once PRODUCTION_TODO.md T9 makes
+# one buildable), not by raising this. --timeout 300 covers a slow OCR
+# extraction; the default 30s would kill the worker mid-document.
 ExecStart=/opt/owllex/backend/.venv/bin/gunicorn app.main:app \
     --worker-class uvicorn.workers.UvicornWorker \
     --workers 1 \
@@ -80,9 +90,24 @@ LockPersonality=yes
 ReadWritePaths=/data /var/log/owllex
 
 # Bound the process so a runaway import cannot take the machine down with it.
-# 26G leaves headroom on a 32GB box for the page cache, which is what keeps
-# SQLite and FAISS reads off the disk.
-MemoryMax=26G
+#
+# Re-derived for EMBED_MODEL=qwen3-embedding-0.6b (the default since
+# PRODUCTION_TODO.md T19), which is NOT what mostly determines this number.
+# The FAISS index -- loaded whole into this process's own memory, not the page
+# cache, once at startup and again after every rebuild -- is: at tier 1
+# (4.5M chunks, 1024 dims) with the Flat factory correct at this tier, that is
+# 4.5M x 1024 x 4 bytes ~= 18.4GB, against ~1.2GB for the model itself
+# (rag/FAISS_ARCHITECTURE.md §6 has both figures, and the formula to redo this
+# for a bigger corpus or a different EMBED_DIM). 26G was sized against the old
+# 8B model's ~16GB and never accounted for the index at all -- it happened to
+# leave enough headroom to also cover Flat at tier 1 by coincidence, not by
+# derivation. 28G is 18.4 + 1.2 + ~8GB for gunicorn/FastAPI/Docling's OCR and
+# layout models/request buffers, which is generous rather than tight on
+# purpose: raise it again before growing past tier 1 while still on Flat, or
+# lower it once T9 makes a compressed factory buildable (FAISS_ARCHITECTURE.md
+# §6's compressed-index figure for tier 1 is ~1.7GB total, which is a very
+# different number).
+MemoryMax=28G
 LimitNOFILE=65535
 
 # journald also gets everything; app/logging_setup.py writes the rotating file.

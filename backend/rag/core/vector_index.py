@@ -36,6 +36,15 @@ import numpy as np
 
 logger = logging.getLogger("ravenslaw.rag.faiss")
 
+# FAISS's own minimum training points per centroid before it starts warning and
+# producing a degenerate quantizer (PRODUCTION_TODO.md T9a). Duplicated from
+# rag/scripts/build_index.py's identical constant rather than imported -- core
+# must not depend on scripts, and the two enforce the same FAISS fact at two
+# different layers (this one guards the implicit per-`add()` training path;
+# that one guards the explicit bulk-build path, which allows down to `nlist`
+# itself since an operator building in bulk sees the log line either way).
+MIN_TRAINING_VECTORS_PER_CENTROID = 39
+
 # ─── One index, one id space ─────────────────────────────────────────────────
 #
 # There is a single physical FAISS index. Vectors are never duplicated and there
@@ -154,6 +163,8 @@ class VectorIndex:
         signature: str,
         index_factory: str = "Flat",
         flush_every: int = 1,
+        flush_max: int = 100_000,
+        nprobe: int = 16,
     ) -> None:
         self.collection = collection
         self.path = Path(path)
@@ -161,7 +172,13 @@ class VectorIndex:
         self.dimension = dimension
         self.signature = signature
         self.index_factory = index_factory
+        self.nprobe = nprobe
         self._flush_every = max(1, flush_every)
+        # Never below the floor: a caller that deliberately passes a huge
+        # flush_every (rebuild_index.py's staging index uses 10**9 to defer
+        # every flush to one explicit call at the end) must not have that
+        # lowered by the ceiling -- see _effective_flush_threshold.
+        self._flush_max = max(self._flush_every, flush_max)
         self._index = None
         self._unflushed = 0
         self._lock = threading.RLock()
@@ -197,8 +214,8 @@ class VectorIndex:
                         f"{self.dimension}. Re-embed the corpus or restore the matching index."
                     )
                 logger.info(
-                    "Loaded FAISS index %s (%d vectors, dim %d)",
-                    self.collection, index.ntotal, index.d,
+                    "Loaded FAISS index %s (%d vectors, dim %d, factory %s)",
+                    self.collection, index.ntotal, index.d, self.index_factory,
                 )
             else:
                 index = self._new_index()
@@ -221,11 +238,15 @@ class VectorIndex:
         return faiss.IndexIDMap2(base)
 
     def _verify_meta(self) -> None:
-        """Refuse to load an index built by a different model or dimension.
+        """Refuse to load an index built by a different model or factory.
 
         Vectors from two embedding models are not comparable, and mixing them
-        does not error -- it just returns confidently wrong neighbours. This is
-        the only place that mismatch can still be caught cheaply.
+        does not error -- it just returns confidently wrong neighbours. A
+        factory change is quieter still: it changes nothing about *reading* an
+        existing file (`faiss.read_index` just reads whatever is there), so
+        without this check the configured factory would silently describe a
+        different index than the one actually loaded. This is the only place
+        either mismatch can still be caught cheaply, before the first search.
         """
         if not self.meta_path.exists():
             logger.warning(
@@ -245,6 +266,27 @@ class VectorIndex:
                 f"FAISS index {self.path.name} was built with embeddings '{stored}' but this "
                 f"process is configured for '{self.signature}'. Re-embed the corpus "
                 f"(rag/scripts/rebuild_index.py) or restore the matching index."
+            )
+
+        # PRODUCTION_TODO.md T5a: changing FAISS_INDEX_FACTORY without rebuilding
+        # used to be a silent no-op -- load() never looked at it, only
+        # _new_index() did, on the path where no file exists yet. An operator
+        # setting FAISS_INDEX_FACTORY=OPQ64,IVF32768,PQ64 and restarting would
+        # get no error and a Flat index, or the reverse.
+        stored_factory = meta.get("index_factory")
+        if stored_factory is None:
+            # Written before this field existed. Warning rather than refusing:
+            # an older index has no recorded factory to compare, and refusing
+            # to boot on it would be worse than the drift it might be hiding.
+            logger.warning(
+                "%s has no recorded index_factory in its sidecar metadata; cannot verify it "
+                "matches the configured factory (%s)", self.path.name, self.index_factory,
+            )
+        elif stored_factory != self.index_factory:
+            raise RuntimeError(
+                f"FAISS index {self.path.name} was built with factory '{stored_factory}' but "
+                f"this process is configured for '{self.index_factory}'. Rebuild it with "
+                f"rag/scripts/rebuild_index.py, or restore the matching configuration."
             )
 
     @property
@@ -307,6 +349,27 @@ class VectorIndex:
             self._unflushed += len(embedding_ids)
             self._maybe_flush()
 
+    def train(self, vectors: np.ndarray) -> None:
+        """Explicitly train a non-flat factory on a bulk sample.
+
+        For a bulk build (``rag/scripts/build_index.py``), which must train on
+        a large, representative sample drawn from the whole corpus before any
+        vector is added -- unlike ``add()``'s own implicit ``_train()``, which
+        only ever sees whatever batch happened to trigger it, and is exactly
+        what makes a compressed factory's first ordinary ``add()`` fail (see
+        PRODUCTION_TODO.md T9/T9a). A no-op if the index is already trained
+        (e.g. every call after the first, or a factory like ``Flat`` that
+        never needs training), so callers can invoke it unconditionally.
+        """
+        vectors = self._as_matrix(vectors)
+        with self._lock:
+            self._acquire_write_lock()
+            index = self.index
+            if index.is_trained:
+                return
+            self._train(vectors)
+            self._dirty = True
+
     def remove(self, embedding_ids: Sequence[int]) -> int:
         """Drop vectors by id. Returns how many were actually removed."""
         if not embedding_ids:
@@ -329,8 +392,31 @@ class VectorIndex:
         arrive would make them unsearchable, and invisible in the index count,
         with nothing in the logs to explain it. An operator building a compressed
         index trains it explicitly from the corpus (rag/scripts/rebuild_index.py).
+
+        The dead-guard bug this replaces (PRODUCTION_TODO.md T9a): reading
+        ``nlist`` off ``self.index.index`` reads it off the SWIG base
+        ``faiss::Index`` pointer, which never has the attribute regardless of
+        what the wrapped index actually is, so ``getattr(..., 1)`` always
+        returned 1 and the check below never fired. ``faiss.extract_index_ivf``
+        is the same helper ``_build_params`` already uses to find the real IVF
+        index through any wrapping (``IndexIDMap2``, OPQ's
+        ``IndexPreTransform``, etc.), or raises if there isn't one -- which is
+        also true of a plain (non-IVF) PQ/OPQ factory, so that case trains on
+        whatever the batch holds rather than being blocked by a guard with
+        nothing to size itself against.
         """
-        needed = max(1, getattr(self.index.index, "nlist", 1))
+        import faiss
+
+        try:
+            ivf = faiss.extract_index_ivf(self.index)
+        except RuntimeError:
+            ivf = None
+        nlist = int(ivf.nlist) if ivf is not None else 0
+        # FAISS's own recommended minimum, not the bare "at least nlist": below
+        # 39x nlist it merely warns and produces a degenerate quantizer instead
+        # of raising, so a batch that clears nlist but not this floor would
+        # train silently instead of loudly.
+        needed = MIN_TRAINING_VECTORS_PER_CENTROID * nlist if nlist else 1
         if vectors.shape[0] < needed:
             raise RuntimeError(
                 f"FAISS index '{self.collection}' uses factory '{self.index_factory}', which must "
@@ -409,41 +495,64 @@ class VectorIndex:
             if i != -1
         ]
 
-    @staticmethod
-    def _build_params(faiss, scope: "SearchFilter"):
-        """Turn a scope into FAISS search parameters plus the objects to keep alive."""
-        if scope.unrestricted:
+    def _build_params(self, faiss, scope: "SearchFilter"):
+        """Turn a scope into FAISS search parameters plus the objects to keep alive.
+
+        An IVF index (including one wrapped in IDMap2, OPQ's IndexPreTransform,
+        etc.) rejects a plain ``SearchParameters`` outright -- it requires
+        ``SearchParametersIVF``, which is also the only place ``nprobe`` can be
+        set per search. ``faiss.extract_index_ivf`` finds the underlying IVF
+        index through any wrapping, or raises if there isn't one, which is why
+        this is wrapped in a ``try`` rather than an isinstance check against
+        every wrapper type FAISS_ARCHITECTURE.md's factories can produce.
+        """
+        try:
+            ivf = faiss.extract_index_ivf(self.index)
+        except RuntimeError:
+            ivf = None
+
+        if scope.unrestricted and ivf is None:
+            # The common case on Flat/HNSW: no selector to build and no
+            # per-search parameter (nprobe or otherwise) to carry. An
+            # unrestricted search on an IVF index still needs params, purely
+            # to set nprobe, so that case falls through to build one below.
             return None, ()
 
         keepalive: list = []
-        selectors = []
+        selector = None
 
-        if scope.include_public:
-            # A range check, not a list: the public corpus is the large side and
-            # must never be enumerated per query.
-            public = faiss.IDSelectorRange(PUBLIC_ID_MIN, PRIVATE_ID_MIN)
-            selectors.append(public)
-            keepalive.append(public)
+        if not scope.unrestricted:
+            selectors = []
 
-        if scope.allowed_ids:
-            batch = faiss.IDSelectorBatch(np.asarray(scope.allowed_ids, dtype=np.int64))
-            selectors.append(batch)
-            keepalive.append(batch)
+            if scope.include_public:
+                # A range check, not a list: the public corpus is the large side
+                # and must never be enumerated per query.
+                public = faiss.IDSelectorRange(PUBLIC_ID_MIN, PRIVATE_ID_MIN)
+                selectors.append(public)
+                keepalive.append(public)
 
-        if not selectors:
-            # Unreachable: matches_nothing covers the empty-allow-list case and
-            # unrestricted is handled above. Raising rather than defaulting to
-            # "no filter" keeps the fail-safe direction pointing at "return
-            # nothing" if a future branch ever misses a case.
-            raise RuntimeError("SearchFilter produced no selector; refusing an unscoped search")
+            if scope.allowed_ids:
+                batch = faiss.IDSelectorBatch(np.asarray(scope.allowed_ids, dtype=np.int64))
+                selectors.append(batch)
+                keepalive.append(batch)
 
-        selector = selectors[0]
-        for extra in selectors[1:]:
-            selector = faiss.IDSelectorOr(selector, extra)
-            keepalive.append(selector)
+            if not selectors:
+                # Unreachable: matches_nothing covers the empty-allow-list case
+                # and unrestricted is handled above. Raising rather than
+                # defaulting to "no filter" keeps the fail-safe direction
+                # pointing at "return nothing" if a future branch misses a case.
+                raise RuntimeError("SearchFilter produced no selector; refusing an unscoped search")
 
-        params = faiss.SearchParameters()
-        params.sel = selector
+            selector = selectors[0]
+            for extra in selectors[1:]:
+                selector = faiss.IDSelectorOr(selector, extra)
+                keepalive.append(selector)
+
+        params = faiss.SearchParametersIVF() if ivf is not None else faiss.SearchParameters()
+        if ivf is not None:
+            params.nprobe = self.nprobe
+        if selector is not None:
+            params.sel = selector
         keepalive.append(params)
         return params, tuple(keepalive)
 
@@ -460,8 +569,23 @@ class VectorIndex:
 
     # ─── Persistence ─────────────────────────────────────────────────────────
 
+    def _effective_flush_threshold(self) -> int:
+        """Vectors that must accumulate before `_maybe_flush` triggers a flush.
+
+        `flush()` is `O(ntotal)` -- it rewrites the whole file -- so a fixed
+        threshold is right at tier 1 and roughly 9,000x too small at tier 3
+        (writing ~37GB per 4MB of new vectors). The floor is `_flush_every`;
+        above that it rises to ~1% of the index's current size, bounding write
+        amplification at ~100x regardless of corpus size, capped at
+        `_flush_max` so the crash window (vectors lost on an unclean shutdown)
+        stays bounded no matter how large the index gets. The cap only limits
+        how far the ntotal-derived term can push the threshold up -- it never
+        lowers the floor itself.
+        """
+        return max(self._flush_every, min(self._index.ntotal // 100, self._flush_max))
+
     def _maybe_flush(self) -> None:
-        if self._unflushed >= self._flush_every:
+        if self._unflushed >= self._effective_flush_threshold():
             self.flush()
 
     def flush(self) -> None:
@@ -489,6 +613,7 @@ class VectorIndex:
                         "signature": self.signature,
                         "dimension": self.dimension,
                         "index_factory": self.index_factory,
+                        "nprobe": self.nprobe,
                         "ntotal": int(self._index.ntotal),
                     },
                     indent=2,
@@ -522,6 +647,8 @@ class VectorIndexRegistry:
         signature: str,
         index_factory: str = "Flat",
         flush_every: int = 1,
+        flush_max: int = 100_000,
+        nprobe: int = 16,
         collections: Sequence[str] = COLLECTIONS,
     ) -> None:
         self._root = Path(root)
@@ -529,6 +656,8 @@ class VectorIndexRegistry:
         self._signature = signature
         self._index_factory = index_factory
         self._flush_every = flush_every
+        self._flush_max = flush_max
+        self._nprobe = nprobe
         self._collections = tuple(collections)
         self._indexes: dict[str, VectorIndex] = {}
         self._lock = threading.Lock()
@@ -552,6 +681,8 @@ class VectorIndexRegistry:
                     signature=self._signature,
                     index_factory=self._index_factory,
                     flush_every=self._flush_every,
+                    flush_max=self._flush_max,
+                    nprobe=self._nprobe,
                 )
                 self._indexes[collection] = index
         return index.load()

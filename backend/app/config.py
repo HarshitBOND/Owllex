@@ -95,6 +95,16 @@ class Settings:
                 if origin.startswith("http://"):
                     raise RuntimeError("HTTP CORS origins are not allowed in production. Use HTTPS origins.")
 
+        # PRODUCTION_TODO.md T4a: an unset issuer used to make app/security.py
+        # trust the issuer printed inside the *unverified* token -- a full
+        # authentication bypass. Read fresh here, like CORS_ORIGINS above,
+        # rather than via self.CLERK_JWT_ISSUER (whose class-level default was
+        # already evaluated at import time): that is what lets a test construct
+        # a second Settings() after changing the environment and actually
+        # exercise this check.
+        if not os.getenv("CLERK_JWT_ISSUER", "").strip() and not self.DEBUG:
+            raise RuntimeError("CLERK_JWT_ISSUER must be explicitly configured in production")
+
         if self.RATE_LIMIT_WINDOW_SECONDS <= 0:
             raise RuntimeError("RAVENSLAW_RATE_LIMIT_WINDOW_SECONDS must be > 0")
         if self.RATE_LIMIT_MAX_REQUESTS <= 0:

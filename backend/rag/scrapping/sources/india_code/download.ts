@@ -137,7 +137,10 @@ async function main() {
     writeFileSync(filePath, bytes);
     await put(key, hash);
     await backupHashIndex();
-    await uploadRawDocument(SOURCE, hash, ".pdf", filePath);
+    // row.actYear is always present (see actRow/docRow below) -- "0000" when
+    // India Code itself doesn't know it, which yearSegment() also treats as
+    // implausible and buckets under unknown-year/ rather than trusting it.
+    await uploadRawDocument(SOURCE, hash, ".pdf", filePath, row.actYear);
     stored++;
     appendFileSync(
       MANIFEST_PATH,

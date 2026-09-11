@@ -22,12 +22,15 @@ import time
 import unittest
 import uuid
 from pathlib import Path
+from unittest import mock
+
+import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from rag.core import services as services_module
 from rag.core.backup import prune_backups, run_backup
-from rag.core.config import RagConfig, set_config
+from rag.core.config import RagConfig, ensure_directories, set_config
 from rag.core.embeddings import DeterministicEmbedder
 from rag.core.hash_index import HashEntry, HashIndex
 from rag.core.paths import document_relative_path, resolve_court
@@ -36,9 +39,13 @@ from rag.core.vector_index import (
     GLOBAL_COLLECTION,
     LOGICAL_COLLECTIONS,
     PUBLIC_COLLECTION,
+    SearchFilter,
     USER_COLLECTION,
+    VectorIndex,
     VectorIndexRegistry,
 )
+import rag.scripts.build_index as build_index_module
+from rag.scripts.build_index import BuildRefused, build_collections as build_index_collections
 from rag.scripts.rebuild_index import RebuildRefused, rebuild_collections
 
 
@@ -86,6 +93,13 @@ class RagStackTestCase(unittest.TestCase):
             "EMBED_MODEL": "deterministic-test",
             "EMBED_DIM": "64",
             "PARSER_BACKEND": "pypdfium",
+            # T8 raised the production default off 1 so a bulk import doesn't
+            # rewrite the whole file per document. Almost every test here
+            # ingests through the pipeline directly (bypassing ingest_worker's
+            # explicit flush_all()) and then inspects on-disk state, so pin
+            # synchronous flushing here; TestFlushThreshold overrides this
+            # per-test to exercise the adaptive behavior itself.
+            "FAISS_FLUSH_EVERY": "1",
         }
         env.update({k: str(v) for k, v in overrides.items()})
         previous = {k: os.environ.get(k) for k in env}
@@ -299,6 +313,148 @@ class TestSqliteStore(unittest.TestCase):
         self.assertEqual(record.citation, "2026 INSC 793")
 
 
+# ─── Lexical (BM25/FTS5) retrieval lane (PRODUCTION_TODO.md T7) ──────────────
+
+
+class TestLexicalSearch(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = SqliteStore(Path(self.tmp.name) / "chunks.db")
+        self.store.initialize()
+
+    def tearDown(self):
+        self.store.close()
+        self.tmp.cleanup()
+
+    def _document(self, document_id="D1", **kwargs):
+        self.store.upsert_document(
+            document_id=document_id,
+            collection=kwargs.pop("collection", PUBLIC_COLLECTION),
+            **kwargs,
+        )
+
+    def test_search_lexical_finds_exact_citation_text(self):
+        self._document("PUB1", title="X v. Y", court="sci")
+        ids = list(self.store.allocate_faiss_ids(2))
+        self.store.replace_chunks(
+            "PUB1",
+            PUBLIC_COLLECTION,
+            [
+                (
+                    "The bench in 2019 SCC OnLine SC 1234 held that limitation "
+                    "runs from the date of knowledge.",
+                    None,
+                ),
+                ("This paragraph discusses unrelated procedural costs.", None),
+            ],
+            ids,
+        )
+        hits = self.store.search_lexical("2019 SCC OnLine SC 1234", SearchFilter.public(), 5)
+        self.assertTrue(hits)
+        self.assertEqual(hits[0][0], ids[0])
+
+    def test_search_lexical_respects_owner_scoping(self):
+        """The exact security property T7 names: an owner must never see
+        another owner's chunk through FTS, even sharing every keyword."""
+        self._document("A1", collection=USER_COLLECTION, corpus_id="C1", clerk_uid="U1")
+        self._document("B1", collection=USER_COLLECTION, corpus_id="C2", clerk_uid="U2")
+        ids_a = list(self.store.allocate_faiss_ids(1, private=True))
+        ids_b = list(self.store.allocate_faiss_ids(1, private=True))
+        self.store.replace_chunks("A1", USER_COLLECTION, [("shared secret keyword alpha", None)], ids_a)
+        self.store.replace_chunks("B1", USER_COLLECTION, [("shared secret keyword bravo", None)], ids_b)
+
+        scope = SearchFilter.owned_by(self.store.faiss_ids_for_owner("U1"))
+        hits = self.store.search_lexical("shared secret keyword", scope, 10)
+        self.assertEqual([faiss_id for faiss_id, _ in hits], list(ids_a))
+
+    def test_search_lexical_empty_allow_list_returns_nothing(self):
+        """An empty allow-list must never widen into an unfiltered FTS scan."""
+        self._document("PUB1")
+        ids = list(self.store.allocate_faiss_ids(1))
+        self.store.replace_chunks("PUB1", PUBLIC_COLLECTION, [("anything at all", None)], ids)
+
+        self.assertEqual(
+            self.store.search_lexical("anything", SearchFilter.owned_by([]), 10), []
+        )
+
+    def test_search_lexical_tolerates_fts5_operator_characters_in_the_query(self):
+        """A citation carries punctuation FTS5's own query syntax uses for
+        something else (':' for a column filter, '(' unbalanced, '-' for
+        NOT). The match expression must treat it as literal text, not raise."""
+        self._document("PUB1")
+        ids = list(self.store.allocate_faiss_ids(1))
+        self.store.replace_chunks(
+            "PUB1", PUBLIC_COLLECTION, [("Section 138(1)(a) Negotiable Instruments Act", None)], ids
+        )
+        hits = self.store.search_lexical(
+            "Section 138(1)(a) Negotiable Instruments Act", SearchFilter.public(), 5
+        )
+        self.assertEqual([faiss_id for faiss_id, _ in hits], ids)
+
+    def test_fts_backfill_indexes_rows_that_predate_the_table(self):
+        """Simulates a database that had chunks before chunks_fts existed --
+        the sync triggers already cover writes going forward, but rows
+        written earlier only get indexed by the resumable backfill."""
+        self._document("PUB1")
+        ids = list(self.store.allocate_faiss_ids(3))
+        self.store.replace_chunks(
+            "PUB1",
+            PUBLIC_COLLECTION,
+            [("alpha one", None), ("bravo two", None), ("charlie three", None)],
+            ids,
+        )
+        rows = self.store.connection.execute(
+            "SELECT rowid, chunk_text FROM chunks ORDER BY rowid"
+        ).fetchall()
+        self.assertEqual(len(rows), 3)
+
+        # The insert trigger already synced these; wipe the FTS side to
+        # reproduce "written before chunks_fts existed".
+        self.store.connection.execute("DELETE FROM chunks_fts")
+        self.store.connection.commit()
+        self.store.set_meta("fts_backfill_rowid", "0")
+
+        self.store._backfill_fts(batch_size=1)  # force more than one batch
+
+        for text, faiss_id in (("alpha", ids[0]), ("bravo", ids[1]), ("charlie", ids[2])):
+            hits = self.store.search_lexical(text, SearchFilter.everything(), 5)
+            self.assertEqual([f for f, _ in hits], [faiss_id])
+
+    def test_fts_backfill_resumes_from_its_watermark_without_duplicating(self):
+        """A watermark already past the first row must skip it, not re-index
+        or duplicate it -- the resumability the backfill exists for."""
+        self._document("PUB1")
+        ids = list(self.store.allocate_faiss_ids(2))
+        self.store.replace_chunks(
+            "PUB1", PUBLIC_COLLECTION, [("alpha one", None), ("bravo two", None)], ids
+        )
+        rows = self.store.connection.execute(
+            "SELECT rowid FROM chunks ORDER BY rowid"
+        ).fetchall()
+
+        self.store.connection.execute("DELETE FROM chunks_fts")
+        self.store.connection.commit()
+        self.store.set_meta("fts_backfill_rowid", str(rows[0]["rowid"]))
+
+        self.store._backfill_fts()
+
+        self.assertEqual(self.store.search_lexical("alpha", SearchFilter.everything(), 5), [])
+        hits = self.store.search_lexical("bravo", SearchFilter.everything(), 5)
+        self.assertEqual([f for f, _ in hits], [ids[1]])
+
+        # Idempotent: running it again with nothing left to do must not raise.
+        self.store._backfill_fts()
+
+    def test_chunk_deletion_removes_it_from_the_lexical_index(self):
+        self._document("PUB1")
+        ids = list(self.store.allocate_faiss_ids(1))
+        self.store.replace_chunks("PUB1", PUBLIC_COLLECTION, [("findable phrase", None)], ids)
+        self.assertTrue(self.store.search_lexical("findable", SearchFilter.everything(), 5))
+
+        self.store.delete_documents(PUBLIC_COLLECTION, document_id="PUB1")
+        self.assertEqual(self.store.search_lexical("findable", SearchFilter.everything(), 5), [])
+
+
 # ─── LMDB ────────────────────────────────────────────────────────────────────
 
 
@@ -373,6 +529,31 @@ class TestVectorIndex(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             other.get(PUBLIC_COLLECTION)
 
+    def test_refuses_an_index_built_by_a_different_factory(self):
+        """PRODUCTION_TODO.md T5a: changing FAISS_INDEX_FACTORY without a
+        rebuild used to be a silent no-op -- load() never looked at it."""
+        self._seed().flush()
+        other = VectorIndexRegistry(
+            self.root, dimension=32, signature="test@32", index_factory="OPQ4_32,IVF16,PQ4np"
+        )
+        with self.assertRaises(RuntimeError):
+            other.get(PUBLIC_COLLECTION)
+
+    def test_an_index_predating_the_recorded_factory_warns_but_still_loads(self):
+        """An older index has no index_factory in its sidecar at all -- that
+        must not become a refused start; there is nothing to compare against."""
+        index = self._seed()
+        index.flush()
+        meta = json.loads(index.meta_path.read_text())
+        del meta["index_factory"]
+        index.meta_path.write_text(json.dumps(meta))
+        index.close()
+
+        reopened = VectorIndexRegistry(self.root, dimension=32, signature="test@32")
+        # Must not raise -- the whole point of the "predates the field" case.
+        self.assertEqual(reopened.get(PUBLIC_COLLECTION).ntotal, 3)
+        reopened.close()
+
     def test_removal_is_by_id(self):
         index = self._seed()
         self.assertEqual(index.remove([102]), 1)
@@ -409,6 +590,131 @@ class TestVectorIndex(unittest.TestCase):
         reader.close()  # must not raise, even though `self.registry` holds the lock
 
         self.assertEqual(self.registry.get(PUBLIC_COLLECTION).ntotal, 3)
+
+    def test_bulk_ingest_writes_the_index_file_far_fewer_times_than_it_adds(self):
+        """PRODUCTION_TODO.md T8: flush_every=1 makes every add() rewrite the
+        whole file -- O(n) bytes written per vector, O(n^2) for the run. The
+        adaptive threshold (floor at flush_every, ~1% of ntotal above that)
+        must write far fewer times than there are adds."""
+        registry = VectorIndexRegistry(
+            self.root, dimension=32, signature="bulk@32", flush_every=50, flush_max=1000
+        )
+        index = registry.get(PUBLIC_COLLECTION)
+        write_count = 0
+        import faiss as faiss_module
+
+        real_write_index = faiss_module.write_index
+
+        def counting_write_index(idx, path):
+            nonlocal write_count
+            write_count += 1
+            return real_write_index(idx, path)
+
+        with mock.patch("faiss.write_index", side_effect=counting_write_index):
+            for i in range(300):
+                index.add([200 + i], self.embedder.embed_documents([f"bulk doc {i}"]))
+        registry.close()
+
+        self.assertLess(write_count, 30, f"expected far fewer than 300 writes, got {write_count}")
+        reopened = VectorIndexRegistry(self.root, dimension=32, signature="bulk@32")
+        reopened.load_all()
+        self.assertEqual(reopened.get(PUBLIC_COLLECTION).ntotal, 300)
+        reopened.close()
+
+    def test_effective_flush_threshold_rises_with_ntotal_but_caps_at_flush_max(self):
+        """PRODUCTION_TODO.md T8: floor at flush_every, ~1% of ntotal above
+        that, capped at flush_max regardless of how large the index gets. A
+        caller-supplied flush_every above flush_max -- rebuild_index.py's
+        staging index passes 10**9 to defer every flush to one explicit call
+        at the end -- must never be lowered by the cap."""
+
+        class _FakeIndex:
+            def __init__(self, ntotal):
+                self.ntotal = ntotal
+
+        index = VectorIndex(
+            collection=PUBLIC_COLLECTION,
+            path=self.root / "threshold_test.faiss",
+            dimension=32,
+            signature="threshold@32",
+            flush_every=1000,
+            flush_max=100_000,
+        )
+
+        # Small corpus: 1% (500) is under the floor, so the floor wins.
+        index._index = _FakeIndex(50_000)
+        self.assertEqual(index._effective_flush_threshold(), 1000)
+
+        # Large enough that 1% (50,000) exceeds the floor but stays under the
+        # ceiling.
+        index._index = _FakeIndex(5_000_000)
+        self.assertEqual(index._effective_flush_threshold(), 50_000)
+
+        # Past the point where 1% would exceed flush_max (500,000) -- capped,
+        # not unbounded.
+        index._index = _FakeIndex(50_000_000)
+        self.assertEqual(index._effective_flush_threshold(), 100_000)
+
+        sentinel = VectorIndex(
+            collection=PUBLIC_COLLECTION,
+            path=self.root / "sentinel_test.faiss",
+            dimension=32,
+            signature="threshold@32",
+            flush_every=10**9,
+        )
+        sentinel._index = _FakeIndex(50_000_000)
+        self.assertEqual(sentinel._effective_flush_threshold(), 10**9)
+
+    def test_too_small_a_batch_to_train_is_refused_with_the_rebuild_hint(self):
+        """PRODUCTION_TODO.md T9a: the old guard read `nlist` off the SWIG
+        base `faiss::Index` pointer via `self.index.index`, which never has
+        the attribute regardless of the real factory, so `needed` was always
+        1 and the check never fired. The first add() on an untrained IVF
+        index hit a raw FAISS Clustering.cpp assertion instead of this
+        message."""
+        registry = VectorIndexRegistry(
+            self.root, dimension=32, signature="ivf@32", index_factory="IVF16,Flat"
+        )
+        index = registry.get(PUBLIC_COLLECTION)
+        small_batch = np.random.default_rng(0).random((5, 32)).astype("float32")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            index.add([1, 2, 3, 4, 5], small_batch)
+
+        self.assertIn("rebuild_index.py", str(ctx.exception))
+        self.assertNotIn("Clustering.cpp", str(ctx.exception))
+        registry.close()
+
+    def test_the_guard_requires_faiss_recommended_minimum_not_just_nlist(self):
+        """A batch that clears nlist (16) but not 39x nlist (624) must still
+        be refused -- below that FAISS only warns and trains a degenerate
+        quantizer instead of raising, so letting this batch through would
+        train silently rather than loudly."""
+        registry = VectorIndexRegistry(
+            self.root, dimension=32, signature="ivf@32", index_factory="IVF16,Flat"
+        )
+        index = registry.get(PUBLIC_COLLECTION)
+        batch = np.random.default_rng(0).random((20, 32)).astype("float32")
+
+        with self.assertRaises(RuntimeError):
+            index.add(list(range(1, 21)), batch)
+
+        registry.close()
+
+    def test_a_batch_clearing_the_recommended_minimum_trains_successfully(self):
+        """The positive case: once a guard exists it must not also refuse a
+        batch that is actually large enough."""
+        registry = VectorIndexRegistry(
+            self.root, dimension=32, signature="ivf@32", index_factory="IVF16,Flat"
+        )
+        index = registry.get(PUBLIC_COLLECTION)
+        batch = np.random.default_rng(0).random((700, 32)).astype("float32")
+
+        index.add(list(range(1, 701)), batch)
+
+        self.assertEqual(index.ntotal, 700)
+        self.assertTrue(index.index.is_trained)
+        registry.close()
 
 
 # ─── Ingest job queue (rag/scripts/ingest_worker.py) ─────────────────────────
@@ -685,6 +991,170 @@ class TestRetrieval(RagStackTestCase):
         )
 
 
+# ─── Lexical retrieval / fusion (PRODUCTION_TODO.md T7) ──────────────────────
+
+
+class TestLexicalFusion(RagStackTestCase):
+    """Retriever.search() fuses the dense and lexical lanes by default."""
+
+    def setUp(self):
+        super().setUp()
+        pipeline = self._pipeline()
+        pipeline.ingest(
+            self._document("cite.txt", "The tribunal held that 2019 SCC OnLine SC 1234 governs limitation."),
+            document_id="CITE",
+        )
+        pipeline.ingest(
+            self._document("other.txt", "This unrelated judgment discusses land acquisition procedure."),
+            document_id="OTHER",
+        )
+
+    def test_exact_citation_query_is_returned_rank_one_by_fused_search(self):
+        hits = self._retriever().search("2019 SCC OnLine SC 1234", k=5)
+        self.assertTrue(hits)
+        self.assertEqual(hits[0].document_id, "CITE")
+
+    def test_search_lexical_alone_also_ranks_the_citation_first(self):
+        hits = self._retriever().search_lexical("2019 SCC OnLine SC 1234", top_k=5)
+        self.assertTrue(hits)
+        self.assertEqual(hits[0].document_id, "CITE")
+
+    def test_fused_search_still_enforces_tenant_scoping(self):
+        pipeline = self._pipeline()
+        pipeline.ingest(
+            self._document("priv.txt", "2019 SCC OnLine SC 1234 also appears in this private note."),
+            document_id="PRIV",
+            collection=USER_COLLECTION,
+            extra_metadata={"corpus_id": "C9", "clerk_uid": "U9"},
+            dedupe_scope="C9",
+            persist_source=False,
+        )
+        hits = self._retriever().search("2019 SCC OnLine SC 1234", owner_id="someone_else", k=5)
+        self.assertNotIn("PRIV", [h.document_id for h in hits])
+
+
+# ─── Retrieval over-fetch (PRODUCTION_TODO.md T6) ────────────────────────────
+
+
+class TestRetrievalOverfetch(RagStackTestCase):
+    """A single dense FAISS call, over-fetched then truncated to the same
+    ``top_k`` by the same score FAISS already sorted by, returns exactly the
+    same ids as asking for ``top_k`` directly -- verified empirically before
+    writing this test, and it is a mathematical property of how
+    IndexIVFPQ.search selects its top-k, not a quirk of this corpus. So a
+    recall test built on ranking quality alone, with nothing else in the
+    pipeline to re-rank against, would show no difference and would not be
+    testing what T6 actually changed.
+
+    What over-fetch *does* buy, in this codebase specifically, is slack for
+    ``Retriever._hydrate`` to drop candidates whose chunk row is missing --
+    the index running ahead of SQLite (T2a's backup race, T2b's allocator
+    race before its fix, or simply a document deleted after it was indexed)
+    -- and still return a full ``top_k``. Fetching exactly ``top_k`` from
+    FAISS leaves no room to make up for a drop; over-fetching does. That is
+    the property this test exercises: a PQ-compressed index with ~50% of its
+    vectors missing their chunk row, recall@10 measured against the exact
+    ranking over only the vectors that *do* still have one (the best any
+    correct implementation could return), with a fetch capped at exactly
+    ``top_k`` against ``services.config.overfetch_k(top_k)``.
+    """
+
+    def _config(self, **overrides):
+        overrides.setdefault("EMBED_DIM", "32")
+        # A real compressed factory, not Flat, per the task -- fast to train
+        # (fast-scan PQ) so this stays a unit test rather than a benchmark.
+        overrides.setdefault("FAISS_INDEX_FACTORY", "IVF16,PQ16x4fs")
+        overrides.setdefault("FAISS_NPROBE", "16")
+        return super()._config(**overrides)
+
+    def _seed_corpus(self, n: int, dim: int, seed: int):
+        rng = np.random.default_rng(seed)
+        vectors = rng.standard_normal((n, dim)).astype("float32")
+        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+
+        ids = list(self.services.metadata.allocate_faiss_ids(n))
+        self.services.metadata.upsert_document(
+            document_id="BULK", collection=PUBLIC_COLLECTION, status=STATUS_COMPLETE
+        )
+        self.services.metadata.replace_chunks(
+            "BULK",
+            PUBLIC_COLLECTION,
+            [(f"chunk {i}", None) for i in range(n)],
+            ids,
+            owner_id=None,
+        )
+        # One add() call, deliberately: the factory needs >= 39x nlist vectors
+        # in its first batch to train at all (VectorIndex._train, PRODUCTION_
+        # TODO.md T9a), and this mirrors how rebuild_index.py trains in bulk
+        # rather than trickling vectors in one at a time.
+        self.services.indexes.global_index().add(ids, vectors)
+        return np.array(ids), vectors
+
+    def test_overfetch_recovers_recall_lost_to_missing_chunk_rows(self):
+        n, dim, top_k = 650, 32, 10  # n >= 39 * nlist(16) = 624, or _train refuses
+        ids, vectors = self._seed_corpus(n=n, dim=dim, seed=0)
+        # RetrievedChunk (what _hydrate returns) carries no faiss_id -- it's
+        # the HTTP-facing shape -- so recover it from the chunk text this
+        # test itself wrote, rather than reaching into chunk_id's internal
+        # "{document_id}_{index}" format.
+        faiss_id_of_text = {f"chunk {i}": int(ids[i]) for i in range(n)}
+
+        # Index-ahead-of-database drift: half the vectors have no chunk row,
+        # though FAISS still returns them like any other candidate. A fixed
+        # set, not query-dependent, matching real drift (it doesn't move
+        # around per query).
+        missing = set(
+            np.random.default_rng(1).choice(ids, size=n // 2, replace=False).tolist()
+        )
+        placeholders = ",".join("?" for _ in missing)
+        self.services.metadata.connection.execute(
+            f"DELETE FROM chunks WHERE faiss_id IN ({placeholders})", list(missing)
+        )
+        self.services.metadata.connection.commit()
+
+        surviving = np.array([i not in missing for i in ids])
+        surviving_ids, surviving_vectors = ids[surviving], vectors[surviving]
+
+        fetch_k = self.services.config.overfetch_k(top_k)
+        self.assertGreater(fetch_k, top_k, "the config knob this test exercises must raise k")
+
+        retriever = self._retriever()
+        scope = SearchFilter.public()
+        index = self.services.indexes.global_index()
+        queries = np.random.default_rng(2).standard_normal((40, dim)).astype("float32")
+        queries /= np.linalg.norm(queries, axis=1, keepdims=True)
+
+        recall_capped, recall_overfetched = [], []
+        for query in queries:
+            # Ground truth: exact inner product, restricted to vectors that
+            # still have a row -- a deleted row has nothing to hydrate, so no
+            # implementation, over-fetching or not, could ever return it.
+            true_top_k = set(
+                surviving_ids[np.argsort(-(surviving_vectors @ query))[:top_k]].tolist()
+            )
+
+            capped = {
+                faiss_id_of_text[r.text]
+                for r in retriever._hydrate(index.search(query, top_k, scope=scope))
+            }
+            overfetched = {
+                faiss_id_of_text[r.text]
+                for r in retriever._hydrate(index.search(query, fetch_k, scope=scope))[:top_k]
+            }
+
+            recall_capped.append(len(capped & true_top_k) / top_k)
+            recall_overfetched.append(len(overfetched & true_top_k) / top_k)
+
+        avg_capped = sum(recall_capped) / len(recall_capped)
+        avg_overfetched = sum(recall_overfetched) / len(recall_overfetched)
+        self.assertGreater(
+            avg_overfetched,
+            avg_capped + 0.2,
+            f"over-fetch should materially beat a fetch capped at top_k: "
+            f"overfetched={avg_overfetched:.2f} capped={avg_capped:.2f}",
+        )
+
+
 # ─── Startup ─────────────────────────────────────────────────────────────────
 
 
@@ -728,6 +1198,34 @@ class TestStartup(RagStackTestCase):
         # Put the signature back so tearDown closes a consistent stack.
         self.services.metadata.set_meta("embedding_signature", self.services.signature)
         services_module.startup(self.services)
+
+    def test_an_unwritable_root_refuses_to_start(self):
+        """PRODUCTION_TODO.md T4b: ``ensure_directories``'s ``mkdir(exist_ok=True)``
+        is a silent no-op on a directory that already exists -- exactly the
+        case on a re-mounted volume, and exactly the case that would otherwise
+        hide a read-only mount or a ReadWritePaths=/RequiresMountsFor=
+        mismatch until the first real write. Reproduced here without systemd:
+        create the layout normally (writable), then take write access away
+        from one tier root and start a *second* stack pointed at it -- the
+        directories all already exist, so only an actual write probe notices.
+        """
+        unwritable_root = self.root / "unwritable_hdd"
+        config = self._config(
+            HDD_DATA_ROOT=str(unwritable_root), SSD_DATA_ROOT=str(self.root / "ssd_for_probe_test")
+        )
+        ensure_directories(config)  # created while still writable
+
+        unwritable_root.chmod(0o500)
+        try:
+            services = services_module.build_services(
+                config, embedder=DeterministicEmbedder(dimension=config.embed_dim)
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                services_module.startup(services)
+            self.assertIn(str(unwritable_root), str(ctx.exception))
+        finally:
+            # So tearDown's rmtree of self.root (an ancestor) can still recurse in.
+            unwritable_root.chmod(0o700)
 
 
 # ─── Backups ─────────────────────────────────────────────────────────────────
@@ -1095,6 +1593,196 @@ class TestRebuildIndex(RagStackTestCase):
             self._read_ntotal(self.config.faiss_index_path(GLOBAL_COLLECTION)),
             self.services.metadata.stats()["chunk_count"],
         )
+
+    @staticmethod
+    def _read_ntotal(path) -> int:
+        import faiss
+
+        return int(faiss.read_index(str(path)).ntotal)
+
+
+# ─── Bulk train-and-add path for compressed indexes (PRODUCTION_TODO.md T9) ──
+
+
+class TestBuildIndex(RagStackTestCase):
+    """`rag/scripts/build_index.py`: the offline embed -> train -> add -> flush
+    path for building a *compressed* factory from scratch, which
+    `rebuild_index.py` cannot do -- its per-batch `add()` calls are far too
+    small to train an IVF/PQ index (see PRODUCTION_TODO.md T9's bug report).
+    """
+
+    def _config(self, **overrides):
+        overrides.setdefault("EMBED_DIM", "32")
+        # nlist=16: small enough to train fast in a unit test, real enough
+        # that a too-small training batch would still fail loudly (the bug
+        # this task exists to fix). FAISS_TRAIN_THRESHOLD default (10_000)
+        # only needs lowering because there aren't 39*16=624+ chunks in every
+        # test here -- tests that seed fewer set it themselves.
+        overrides.setdefault("FAISS_INDEX_FACTORY", "IVF16,PQ16x4fs")
+        return super()._config(**overrides)
+
+    def _seed_chunks(self, n: int, *, collection=PUBLIC_COLLECTION, document_id="BULK") -> list[int]:
+        ids = list(self.services.metadata.allocate_faiss_ids(n))
+        self.services.metadata.upsert_document(
+            document_id=document_id, collection=collection, status=STATUS_COMPLETE
+        )
+        self.services.metadata.replace_chunks(
+            document_id, collection, [(f"chunk {document_id} {i} legal text", None) for i in range(n)],
+            ids, owner_id=None,
+        )
+        return ids
+
+    def test_a_compressed_factory_trains_in_bulk_and_indexes_everything(self):
+        """The bug this task fixes: rebuild_index.py's default batch of 8
+        can't train nlist=16 at all. build_index.py must train on a proper
+        bulk sample and add every chunk."""
+        n = 700  # >= 39*16, so training also clears FAISS's own minimum
+        self._seed_chunks(n)
+        self.services.indexes.close()
+
+        written = build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        self.assertEqual(written, n)
+        index = self.services.indexes.get(PUBLIC_COLLECTION)
+        self.assertEqual(index.ntotal, n)
+        self.assertTrue(index.index.is_trained)
+
+    def test_a_killed_run_resumes_embedding_without_re_embedding_finished_rows(self):
+        """Done when: a killed run resumes from the mmap without re-embedding."""
+        n = 700
+        self._seed_chunks(n)
+        self.services.indexes.close()
+        build_index_module.FETCH_SIZE = 50
+        self.addCleanup(setattr, build_index_module, "FETCH_SIZE", 512)
+
+        real_embed = self.services.embedder.embed_documents
+        calls = {"n": 0}
+
+        def flaky(texts):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise KeyboardInterrupt("simulated kill")
+            return real_embed(texts)
+
+        self.services.embedder.embed_documents = flaky
+        with self.assertRaises(KeyboardInterrupt):
+            build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        checkpoint_dir = (
+            self.config.faiss_root
+            / f"{self.config.faiss_index_path(GLOBAL_COLLECTION).stem}.build_checkpoint"
+        )
+        progress = json.loads((checkpoint_dir / "progress.json").read_text())
+        self.assertGreater(progress["done"], 0)
+        self.assertLess(progress["done"], n)
+        rows_before_kill = progress["done"]
+
+        resumed_calls = {"n": 0}
+
+        def counting(texts):
+            resumed_calls["n"] += 1
+            return real_embed(texts)
+
+        self.services.embedder.embed_documents = counting
+        written = build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        self.assertEqual(written, n)
+        # Resumed from the checkpoint rather than re-embedding: the number of
+        # further embed_documents() calls only covers what was left, not the
+        # whole corpus again.
+        expected_further_batches = -(-(n - rows_before_kill) // build_index_module.FETCH_SIZE)
+        self.assertEqual(resumed_calls["n"], expected_further_batches)
+        index = self.services.indexes.get(PUBLIC_COLLECTION)
+        self.assertEqual(index.ntotal, n)
+        self.assertTrue(index.index.is_trained)
+
+    def test_flat_factory_needs_no_training(self):
+        n = 20
+
+        # A Flat factory is already "trained" on construction -- build_index.py
+        # must not require a training sample from it. Rebuild the stack (set
+        # up by RagStackTestCase's setUp with the IVF/PQ factory) against a
+        # Flat one instead, rooted at a fresh directory so it isn't looking at
+        # the IVF/PQ index this test case's setUp already created on disk.
+        services_module.shutdown(self.services)
+        flat_root = Path(tempfile.mkdtemp(prefix="rag_test_flat_"))
+        self.addCleanup(shutil.rmtree, flat_root, ignore_errors=True)
+        flat_config = self._config(DATA_ROOT=str(flat_root), FAISS_INDEX_FACTORY="Flat")
+        set_config(flat_config)
+        self.services = services_module.build_services(
+            flat_config, embedder=DeterministicEmbedder(dimension=flat_config.embed_dim)
+        )
+        services_module.startup(self.services)
+        self.config = flat_config
+
+        self._seed_chunks(n)
+        self.services.indexes.close()
+
+        written = build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        self.assertEqual(written, n)
+        index = self.services.indexes.get(PUBLIC_COLLECTION)
+        self.assertEqual(index.ntotal, n)
+        self.assertTrue(index.index.is_trained)
+
+    def test_zero_chunks_builds_an_empty_index(self):
+        written = build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+        self.assertEqual(written, 0)
+        self.assertEqual(self.services.indexes.get(PUBLIC_COLLECTION).ntotal, 0)
+
+    def test_zero_chunks_resolved_does_not_touch_a_nonempty_index(self):
+        self._seed_chunks(700)
+        self.services.indexes.close()
+        build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+        target_path = self.config.faiss_index_path(GLOBAL_COLLECTION)
+        ntotal_before = self._read_ntotal(target_path)
+        self.assertGreater(ntotal_before, 0)
+
+        self.services.metadata.connection.execute("DELETE FROM chunks")
+        self.services.metadata.connection.commit()
+
+        with self.assertRaises(BuildRefused):
+            build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        self.assertEqual(self._read_ntotal(target_path), ntotal_before)
+
+    def test_omitting_a_populated_logical_collection_is_refused(self):
+        self._seed_chunks(20, collection=PUBLIC_COLLECTION)
+        self.services.indexes.close()
+
+        with self.assertRaises(BuildRefused):
+            build_index_collections(self.services, [USER_COLLECTION])
+
+    def test_too_few_chunks_to_train_the_configured_nlist_is_refused_not_a_raw_faiss_assertion(self):
+        # nlist=16 needs at least 16 training vectors; 5 chunks can never
+        # clear that, compressed-factory-first-build or not.
+        self._seed_chunks(5)
+        self.services.indexes.close()
+
+        with self.assertRaises(BuildRefused) as ctx:
+            build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+        self.assertIn("training vectors", str(ctx.exception))
+
+    def test_training_sample_size_is_governed_by_faiss_train_threshold(self):
+        """PRODUCTION_TODO.md T9's bug report: FAISS_TRAIN_THRESHOLD 'exists in
+        RagConfig and is read by nothing'. build_index.py must be the reader."""
+        n = 700
+        self._seed_chunks(n)
+        self.services.indexes.close()
+
+        sampled = {}
+        real_train = VectorIndex.train
+
+        def spying_train(self, vectors):
+            sampled["size"] = vectors.shape[0]
+            return real_train(self, vectors)
+
+        with mock.patch.object(VectorIndex, "train", spying_train):
+            build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        # FAISS_TRAIN_THRESHOLD isn't overridden here, so the default (10_000)
+        # governs, capped at what's actually available (700).
+        self.assertEqual(sampled["size"], min(n, self.config.faiss_train_threshold))
 
     @staticmethod
     def _read_ntotal(path) -> int:

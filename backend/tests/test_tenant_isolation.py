@@ -85,6 +85,11 @@ class IsolationTestCase(unittest.TestCase):
             "EMBED_MODEL": "deterministic-test",
             "EMBED_DIM": "64",
             "PARSER_BACKEND": "pypdfium",
+            # T8 raised the production default off 1; pin synchronous flushing
+            # here since these tests ingest directly through the pipeline
+            # (bypassing ingest_worker's explicit flush_all()) and then
+            # inspect on-disk index files.
+            "FAISS_FLUSH_EVERY": "1",
         }
         previous = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
@@ -170,6 +175,42 @@ class TestCrossTenantRetrieval(IsolationTestCase):
         self.assertEqual(
             self.retriever.search_owned(PUBLIC_TEXT, "ghost", include_public=False), []
         )
+
+
+class TestLexicalRetrievalIsolation(IsolationTestCase):
+    """The lexical (FTS5/BM25) lane added by T7 must hold the same boundary
+    as the dense one -- both standalone (search_lexical) and once fused into
+    the default search()."""
+
+    def setUp(self):
+        super().setUp()
+        self.ingest_private("DOC_ALPHA", "user_alpha", ALPHA_TEXT)
+        self.ingest_private("DOC_BRAVO", "user_bravo", BRAVO_TEXT)
+
+    def test_owner_cannot_reach_another_owners_chunk_via_fts(self):
+        hits = self.retriever.search_lexical(BRAVO_TEXT, owner_id="user_alpha", top_k=10)
+        self.assertNotIn("DOC_BRAVO", self.documents_returned(hits))
+        self.assertTrue(set(self.documents_returned(hits)) <= {"DOC_ALPHA"})
+
+    def test_lexical_empty_owner_returns_empty_list(self):
+        """An empty allow-list must never widen into an unfiltered FTS scan."""
+        hits = self.retriever.search_lexical(ALPHA_TEXT, owner_id="user_with_no_documents")
+        self.assertEqual(hits, [])
+
+    def test_public_lexical_search_never_returns_private_documents(self):
+        self.ingest_public("PUBLIC_1")
+        for query in (ALPHA_TEXT, BRAVO_TEXT, "confidential clause"):
+            returned = self.documents_returned(
+                self.retriever.search_lexical(query, top_k=50)
+            )
+            self.assertNotIn("DOC_ALPHA", returned)
+            self.assertNotIn("DOC_BRAVO", returned)
+
+    def test_fused_default_search_holds_the_same_boundary(self):
+        """search() calls search_lexical internally and fuses it in -- the
+        fusion step itself must not be where isolation quietly breaks."""
+        hits = self.retriever.search(BRAVO_TEXT, owner_id="user_alpha", top_k=10)
+        self.assertNotIn("DOC_BRAVO", self.documents_returned(hits))
 
 
 class TestRankingWithinTheAllowedSubset(IsolationTestCase):
@@ -295,6 +336,128 @@ class TestPublicPrivatePartition(IsolationTestCase):
             self.services.indexes.global_index().ntotal,
             self.services.metadata.stats()["chunk_count"],
         )
+
+
+class TestTenantIsolationUnderAnIVFIndex(IsolationTestCase):
+    """PRODUCTION_TODO.md T5: every test above runs against the default
+    ``Flat`` factory, which never exercised ``_build_params``'s
+    ``SearchParametersIVF``/``nprobe`` path at all -- ``faiss.SearchParameters()``
+    (the base class) raises immediately against a real IVF index, so this is
+    the class of bug Flat-only testing cannot catch. Re-runs the two sharpest
+    cross-tenant cases from ``TestCrossTenantRetrieval``/``TestPublicPrivatePartition``
+    under ``IVF16,PQ4np`` with a real, configured ``nprobe`` instead.
+
+    Cannot reuse ``IsolationTestCase.setUp`` unmodified: an IVF index must be
+    trained on at least ``nlist`` vectors before its first ``add()``, and these
+    fixtures' documents are one or two chunks each -- nowhere near enough in a
+    single ingest call. Bulk-training a corpus in general is T9's job, not
+    this one's; this only needs the index in a *searchable* state, so it
+    pre-trains directly with a synthetic batch, using ids far outside anything
+    a real ingest below allocates.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="owllex_isolation_ivf_"))
+        env = {
+            "DATA_ROOT": str(self.root),
+            "EMBED_MODEL": "deterministic-test",
+            "EMBED_DIM": "64",
+            "PARSER_BACKEND": "pypdfium",
+            "FAISS_INDEX_FACTORY": "IVF16,PQ4np",
+            # Exhaustive over all 16 lists on purpose: this test is about
+            # SearchParametersIVF/nprobe actually taking effect and isolation
+            # holding under IVF, not about recall at a realistic nprobe --
+            # FAISS's own nprobe default (1) would make a real hit's absence
+            # from the results ambiguous between "filtered out" (what's under
+            # test) and "the wrong list was probed" (a different question).
+            "FAISS_NPROBE": "16",
+        }
+        self._previous_env = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        self.config = RagConfig.from_env()
+        set_config(self.config)
+        self.services = services_module.build_services(
+            self.config, embedder=DeterministicEmbedder(dimension=self.config.embed_dim)
+        )
+        services_module.startup(self.services)
+        self.pipeline = IngestionPipeline(self.services)
+        self.retriever = Retriever(self.services)
+
+        import numpy as np
+
+        # 650, not 16: VectorIndex._train (PRODUCTION_TODO.md T9a) now refuses
+        # to train on fewer than 39x nlist vectors -- FAISS's own recommended
+        # minimum, below which it merely warns and produces a degenerate
+        # quantizer instead of raising -- so IVF16 needs at least 624. PQ4 (4
+        # sub-quantizers, default 8 bits each) separately trains its own
+        # per-subquantizer clustering to 256 centroids independently of IVF's
+        # nlist and FAISS hard-errors below that regardless of any guard; the
+        # number this needs to clear is whichever of the two is larger, and
+        # since T9a, that is the 624 figure, not PQ4's 256.
+        rng = np.random.default_rng(0)
+        synthetic = rng.normal(size=(650, self.config.embed_dim)).astype("float32")
+        import faiss as _faiss
+
+        _faiss.normalize_L2(synthetic)
+        # Comfortably inside the public partition but far above anything this
+        # test's own document ingests will allocate, so a synthetic vector
+        # never collides with a real id and is silently dropped by
+        # Retriever._hydrate (no matching chunk row) if it ever surfaces in a
+        # result -- it is there purely to satisfy IVF/PQ's training minimums.
+        synthetic_ids = np.arange(10_000_000, 10_000_650, dtype=np.int64)
+        self.services.indexes.global_index().add(synthetic_ids, synthetic)
+
+    def tearDown(self):
+        services_module.shutdown(self.services)
+        services_module.set_services(None)
+        set_config(None)
+        shutil.rmtree(self.root, ignore_errors=True)
+        for key, value in self._previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_search_does_not_raise_on_a_real_ivf_index(self):
+        """The literal bug: SearchParameters() rejected outright by IndexIVF."""
+        self.ingest_public("PUBLIC_1")
+        hits = self.retriever.search_public(PUBLIC_TEXT, top_k=5)
+        self.assertTrue(hits)
+        self.assertEqual(self.documents_returned(hits), {"PUBLIC_1"})
+
+    def test_user_a_cannot_retrieve_user_b_chunks_under_ivf(self):
+        self.ingest_private("DOC_ALPHA", "user_alpha", ALPHA_TEXT)
+        self.ingest_private("DOC_BRAVO", "user_bravo", BRAVO_TEXT)
+
+        hits = self.retriever.search_owned(BRAVO_TEXT, owner_id="user_alpha", top_k=10)
+        self.assertNotIn("DOC_BRAVO", self.documents_returned(hits))
+        self.assertTrue(set(self.documents_returned(hits)) <= {"DOC_ALPHA"})
+
+    def test_public_search_never_returns_private_documents_under_ivf(self):
+        self.ingest_public("PUBLIC_1")
+        self.ingest_private("DOC_ALPHA", "user_alpha", ALPHA_TEXT)
+
+        returned = self.documents_returned(self.retriever.search_public(ALPHA_TEXT, top_k=50))
+        self.assertNotIn("DOC_ALPHA", returned)
+
+    def test_configured_nprobe_actually_reaches_faiss(self):
+        """Not just "doesn't crash" -- the configured value is what gets used."""
+        from unittest.mock import patch
+
+        self.ingest_public("PUBLIC_1")
+        index = self.services.indexes.global_index()
+        real_search = index.index.search
+        seen_nprobe = []
+
+        def spy(*args, **kwargs):
+            params = kwargs.get("params")
+            seen_nprobe.append(getattr(params, "nprobe", None))
+            return real_search(*args, **kwargs)
+
+        with patch.object(index.index, "search", side_effect=spy):
+            self.retriever.search_public(PUBLIC_TEXT, top_k=5)
+
+        self.assertEqual(seen_nprobe, [16])
 
 
 class TestDatabaseEnforcesThePartition(unittest.TestCase):

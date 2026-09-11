@@ -12,6 +12,9 @@ Description=Owllex corpus ingest worker
 Documentation=file:///opt/owllex/backend/deploy/README.md
 After=network-online.target owllex-rag.service
 Wants=network-online.target
+# deploy.sh renders this from HDD_DATA_ROOT and SSD_DATA_ROOT as they actually
+# appear in .env, not from a literal /data -- see the longer comment on the
+# same line in owllex-rag.service (PRODUCTION_TODO.md T4b).
 RequiresMountsFor=/data
 
 [Service]
@@ -20,6 +23,7 @@ User=owllex
 Group=owllex
 WorkingDirectory=/opt/owllex/backend
 EnvironmentFile=/opt/owllex/backend/.env
+# On the HDD tier, not the boot SSD or the SSD tier -- see owllex-rag.service.
 Environment=HF_HOME=/data/models
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
@@ -38,7 +42,8 @@ CPUWeight=50
 
 Restart=always
 RestartSec=30
-# The worker loads the same embedding model as the API.
+# The worker loads the same embedding model as the API, and holds its own
+# separate copy of the FAISS index in memory too (see MemoryMax below).
 TimeoutStartSec=900
 # Long enough for the current document to finish and FAISS to flush. A worker
 # killed mid-document is safe -- LMDB is written last, so the document is simply
@@ -58,7 +63,14 @@ RestrictRealtime=yes
 LockPersonality=yes
 ReadWritePaths=/data /var/log/owllex
 
-MemoryMax=24G
+# Same floor as owllex-rag.service and for the same reason: the FAISS index
+# resident in this process's own memory (~18.4GB at tier 1 with the Flat
+# factory) dominates over the embedding model (~1.2GB for
+# EMBED_MODEL=qwen3-embedding-0.6b), not the other way around. Docling's own
+# parsing models add to this too -- this is the process that actually does the
+# OCR and layout analysis, not owllex-rag. See owllex-rag.service's MemoryMax
+# comment for the full derivation and PRODUCTION_TODO.md T4b/T9.
+MemoryMax=28G
 LimitNOFILE=65535
 
 StandardOutput=journal

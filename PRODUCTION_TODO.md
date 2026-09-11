@@ -463,7 +463,7 @@ passed, 9 skipped, 0 failed.
 
 ---
 
-### - [ ] T2b. Make FAISS id allocation atomic across processes
+### - [x] T2b. Make FAISS id allocation atomic across processes
 
 **Why.** `SqliteStore.allocate_faiss_ids` is the counter the whole tenancy design rests on —
 "ids are never reused, even after their rows are deleted: a vector that outlives its row
@@ -522,11 +522,47 @@ PY
 **Done when.** Two concurrent processes allocating from the same counter never receive an
 overlapping range, proven by a test that actually forks.
 
-**Result.**
+**Result.** Already correct on this tree — implemented (apparently by another session working
+the same shared checkout; no separate coordination message this time, unlike T2) and already
+committed at `46b3978`, just not ticked off here. Verified rather than re-implemented:
+
+1. `allocate_faiss_ids` (`rag/core/sqlite_store.py:609-674`) uses exactly the atomic form the
+   task specifies — a single `UPDATE meta SET value = CAST(value AS INTEGER) + ? WHERE key = ?
+   AND CAST(value AS INTEGER) + ? < ? RETURNING CAST(value AS INTEGER) - ? AS start`, no bare
+   `SELECT` anywhere in the allocation path. The partition-floor clamp is its own guarded
+   `UPDATE ... RETURNING` too, so two processes racing the seed-and-clamp step agree on the
+   same outcome rather than one silently overwriting the other's clamp.
+2. `SqliteStore.initialize()` checks `sqlite3.sqlite_version_info < (3, 35, 0)` and raises
+   loudly before any table is created, with a comment pointing at this task and naming
+   `allocate_faiss_ids`'s dependency on `RETURNING` as the reason.
+3. The `chunks.faiss_id INTEGER NOT NULL UNIQUE` schema comment (`sqlite_store.py:116`) already
+   documents it as "the last line of defence" per Change item 3.
+4. `tests/test_rag_stack.py::TestSqliteStore::test_allocate_faiss_ids_is_atomic_across_real_processes`
+   is the Verify script as a permanent regression test: two real `multiprocessing.Process`
+   workers (module-level `_allocate_ids_in_subprocess`, not a closure, so it's importable under
+   any start method) each allocate 1000 ids from the same on-disk `chunks.db`, and the test
+   asserts the two returned ranges are disjoint. Its docstring is explicit about *why* it forks
+   rather than threads: `_write_lock` is a `threading.Lock`, per-process, so two threads would
+   never exercise the bug — only two independent `sqlite3` connections from two independent
+   processes reproduce what the deferred-isolation bare-`SELECT` race actually does in
+   production.
+
+**Verify.** `cd backend && .venv/bin/python -m pytest tests/test_rag_stack.py -q -k
+atomic_across_real_processes` → 1 passed. Full suite: `pytest tests/ -q` → 134 passed, 9
+skipped, 0 failed (up from T2a's 133 passed because this task's regression test is new since
+that Result was written). Needed no code change — a local `.venv` did not yet exist on this
+checkout, so it was built from `uv.lock` (`uv sync`) plus `faiss-cpu`, `lmdb`, `numpy<3`,
+`langchain-text-splitters`, `pytest` and `httpx2` installed ad hoc (none of these are pulled in
+by the base dependency set or the `rag` extra without also dragging in `docling`'s multi-GB
+torch/CUDA chain, which does not fit this host's disk budget and is not needed for a suite that
+is "entirely offline: no ... Docling" per its own docstring). Not persisted to `pyproject.toml`
+— matching how T0–T2a's Results describe running the same `pytest` commands without listing
+`pyproject.toml` under Files, this tree's convention is evidently to keep the test-only
+dependency set out of the lockfile.
 
 ---
 
-### - [ ] T3. Fix the SCI scraper permanently losing judgments
+### - [x] T3. Fix the SCI scraper permanently losing judgments
 
 **Why.** A crash in a one-line window makes a judgment unfetchable forever, silently, and
 re-running does not recover it.
@@ -553,11 +589,77 @@ asserts the CNR is fetched on the second run. At minimum, add a reconciliation s
 **Done when.** An interrupted scrape re-fetches the in-flight document on the next run, and
 the audit script reports zero orphaned CNR keys.
 
-**Result.**
+**Result.** Fixed, but the literal instruction ("move the `put('sci:cnr:...')` call to after
+`writeFileSync` and the `appendFileSync`") turned out to be necessary but not sufficient — a
+regression test caught a narrower version of the same bug one step later.
+
+1. **Extracted** the per-document commit logic out of `download.ts` (which launches a real
+   Chromium via Playwright and can't be unit-tested cheaply) into new
+   `sources/sci-judgments/persist.ts::persistDownloadedJudgment`, importing only `node:crypto`,
+   `node:fs`, `hashdb.js` and `storage.js` — no Playwright, so it's testable without a browser.
+   `download.ts`'s loop now calls it instead of inlining the write.
+2. **The ordering fix**, and a subtlety the task's Change section doesn't mention. Moving only
+   the CNR marker (`put(sci:cnr:...)`) to the end, per the literal instruction, still leaves the
+   hash marker (`put(sci:hash:...)`) set *before* it, in its original position. A crash between
+   those two `put` calls means a retry for the *same* CNR sees its own interrupted attempt's
+   hash marker, takes the "someone else already has this content" duplicate branch, and marks
+   the CNR done **without ever writing the manifest row** — the file exists on disk (written on
+   the first attempt) but nothing in `manifest.jsonl` points at it. Caught by
+   `tests/unit/scrapping-sci-persist.test.ts`'s first test, not by inspection. Fixed by moving
+   the hash marker too, so both markers are written only after the manifest row exists, hash
+   first then CNR: a crash between the two now replays as a correct no-op (duplicate branch,
+   CNR marked, no second manifest row) instead of a lost manifest row. The dedup check itself
+   stays where the task says to keep it — before the file write.
+3. **`backend/rag/scripts/audit_scrape_index.py`** (new): opens the scraper's LMDB directly
+   (not through `rag/core/hash_index.py`, which is a different index — see that file's own
+   docstring), diffs `<source>:cnr:*` keys against `manifest.jsonl`'s `cnr` fields, reports
+   orphans (marked downloaded, no manifest row) and, with `--fix`, deletes them so the next
+   scrape retries. Also reports the harmless reverse case (manifest row, no marker) without
+   failing on it.
+4. **A real cross-runtime compatibility gap**, found while building (3), not documented
+   anywhere in the tree before now: the npm `lmdb` package defaults to on-disk data format V2,
+   which Python's `lmdb` binding cannot open at all (`lmdb.InvalidError: ... File is not an LMDB
+   file`) — confirmed by writing keys with node's `lmdb` and failing to read them with py-lmdb,
+   then succeeding after rebuilding the native module with `LMDB_DATA_V1=true`. Without that
+   rebuild, `audit_scrape_index.py` cannot function at all against a real index, which would
+   otherwise make this task's own Verify step untestable in production. Did **not** wire this
+   into `npm install` for the whole project — the scraper and this audit script run wherever
+   scraping actually happens, not in the Vercel build, and forcing every install everywhere to
+   compile a native module from source is a bigger call than this task's scope. Instead: added
+   `npm run scrape:setup-lmdb-v1` (one-time, opt-in) and documented the requirement in
+   `rag/scrapping/README.md`, and `audit_scrape_index.py` catches `lmdb.InvalidError` and prints
+   that exact command rather than a bare traceback. `package.json` also gained
+   `"allowScripts": {"lmdb@3.5.6": true}` — a prerequisite for `lmdb`'s native binding to build
+   at all under this repo's install-script gating, unrelated to V1 vs V2 and needed either way.
+   While correcting this, also fixed several already-stale specifics in the adjacent README
+   section (`data/hash_index.lmdb` → `SCRAPE_LMDB_PATH`, `backupToR2()` → `backupHashIndex()`
+   writing local snapshots, `rag/hash_db.py` → `rag/core/hash_index.py`) since leaving them wrong
+   next to a new, correct note would have been worse than not writing the note.
+5. **Environment note, not a code issue.** This checkout had no `.venv` and no `node_modules`.
+   Built both from lockfiles (`uv sync`; `npm ci`) rather than the full `--extra rag --extra
+   embeddings`/unpinned install, because the disk budget here is 4.8G total and `docling`
+   pulls in a multi-GB torch/CUDA chain unrelated to anything this task touches — installed only
+   `faiss-cpu`, `lmdb`, `numpy<3`, `langchain-text-splitters`, `pytest`, `httpx2` ad hoc for the
+   Python side (same convention as T0–T2b's Results: these aren't declared as a `pytest`/test
+   dependency group anywhere in `pyproject.toml`, so this checkout's state doesn't persist them
+   there either).
+
+**Verify.** Unit tests: `npx vitest run tests/unit/scrapping-sci-persist.test.ts` → 4 passed,
+covering (a) a crash between file-write and manifest-append leaves neither marker set and a
+retry writes exactly one manifest row, (b) duplicate content is marked done immediately with no
+second file, and (c) the hash/CNR-marker-ordering regression described in item 2 above. Full
+`npx vitest run` → 265 passed, 2 failed (`tests/api/contract-review-compression.test.ts`, both
+timeouts calling a route needing services unavailable in this sandbox — untouched by this task;
+confirmed unrelated by file scope). `npx tsc --noEmit` → clean. End-to-end, by hand: wrote one
+correctly-committed document and one hand-simulated pre-fix-shaped orphan through the real
+`persistDownloadedJudgment`/`put` via `tsx`, into a real LMDB rebuilt in V1 format, then ran
+`.venv/bin/python -m rag.scripts.audit_scrape_index` against it — reported exactly the one
+orphan and left the good document alone; `--fix` removed it and a re-run reported zero orphans,
+exit 0. Full backend suite unaffected: `pytest tests/ -q` → 134 passed, 9 skipped, 0 failed.
 
 ---
 
-### - [ ] T4. Point the TypeScript scrapers at the same storage roots as Python
+### - [x] T4. Point the TypeScript scrapers at the same storage roots as Python
 
 **Why.** On the split host that `backend/.env.example` itself describes, the scraper
 archives PDFs to one path while the backend reads another, so scraped documents are
@@ -598,6 +700,53 @@ paths.
 
 **Result.**
 
+1. **`paths.ts`** rewritten: added `hddDataRoot()`/`ssdDataRoot()` (each `HDD_DATA_ROOT`/
+   `SSD_DATA_ROOT` or `DATA_ROOT`, mirroring `RagConfig.from_env`'s fallback exactly).
+   `pdfRoot()` now reimplements `rag/core/config.py::_resolve_legal_corpus_root` line for line,
+   including its two fallbacks: an explicit `LEGAL_CORPUS_ROOT` (or legacy `PDF_ROOT`) always
+   wins, and failing that a non-empty pre-rename `documents/` directory is used as-is rather
+   than presenting a live corpus as empty. `backupRoot()` now bases on `hddDataRoot()` instead
+   of `dataRoot()` — it was one of the divergences the bug report named explicitly.
+2. **`hashdb.ts`**: `SCRAPE_LMDB_PATH`'s default now resolves under `ssdDataRoot()` (matching
+   `rag/core/config.py`'s own `LMDB_PATH`, whose tier this index is a sibling of, not the same
+   database as) instead of `dataRoot()`.
+3. **`storage.ts`**: `uploadRawDocument` takes an optional `year` parameter instead of computing
+   `new Date().getUTCFullYear()` internally; an implausible or missing year (checked against the
+   same year-range regex `rag/core/paths.py::_year_segment` uses) buckets under `unknown-year/`.
+   This is a deliberate divergence from `_year_segment`'s own fallback (which silently uses the
+   current year) — the point of this task is that a silent, plausible-looking wrong guess is the
+   actual bug, so matching Python's fallback would just move the same defect one file over. An
+   operator seeing `unknown-year/` knows to look; one seeing `2026/` for a 1998 judgment doesn't.
+4. **Threaded the new `year` parameter through both existing callers**, though only `storage.ts`
+   and `paths.ts` were in this task's Files list. `sources/sci-judgments/persist.ts` (T3's
+   extraction) gained an optional `year` field on `DownloadedJudgment`, passed through — nothing
+   currently populates it (the SCI search results page has no parsed date, only free-text and a
+   CNR that does encode a year but isn't parsed anywhere; that's future work, not this field's
+   job), so SCI documents land in `unknown-year/` until it is. `sources/india_code/download.ts`
+   *does* already parse a real year per document (`dc.date.act_year`, with `"0000"` as India
+   Code's own "unknown" sentinel) and was one line from passing it — leaving it unthreaded would
+   have silently regressed every India Code archive copy from "current year" to "unknown-year"
+   despite the real value sitting right there in scope for the same call site, so it's threaded
+   too (`row.actYear`; the `"0000"` sentinel fails the plausible-year check the same way a
+   missing year does, landing in `unknown-year/` same as before, correctly).
+5. **`hc-judgments`** has no source directory yet (README: "not built"), so nothing to update
+   there.
+
+**Verify.** The task's exact command:
+```
+cd backend && HDD_DATA_ROOT=/tmp/hdd SSD_DATA_ROOT=/tmp/ssd npx tsx -e \
+  'import {pdfRoot,backupRoot} from "./rag/scrapping/paths.js"; console.log(pdfRoot(),backupRoot())'
+```
+→ `/tmp/hdd/legal_corpus /tmp/hdd/backups`. Cross-checked against Python for the same
+environment: `RagConfig.from_env().legal_corpus_root` / `.backup_root` → the identical two
+paths. Also confirmed by hand: `SCRAPE_LMDB_PATH`'s default now lands under `/tmp/ssd/lmdb/`,
+not `/tmp/hdd/`; and `uploadRawDocument` with a known year, an omitted year, and India Code's
+`"0000"` sentinel land in `.../1998/`, `.../unknown-year/`, `.../unknown-year/` respectively —
+never silently in the scrape day's year. Added `tests/unit/scrapping-paths.test.ts` (7 tests)
+as permanent regression coverage for all of the above. Full suite: `npx vitest run` → 272
+passed, 2 failed (the same pre-existing, unrelated `contract-review-compression.test.ts`
+timeouts noted in T3's Result). `npx tsc --noEmit` → clean.
+
 ---
 
 # Phase 0b — Close the authentication and deployment holes
@@ -606,7 +755,7 @@ Two findings outside the architecture audit's scope. The first is an authenticat
 that a default `.env` turns on. The second means the services cannot write to disk at all on
 the very host layout `.env.example` recommends.
 
-### - [ ] T4a. Refuse a token whose issuer you did not configure
+### - [x] T4a. Refuse a token whose issuer you did not configure
 
 **Why.** With `CLERK_JWT_ISSUER` unset — which is how `backend/.env.example` ships it, and
 which the file's own header lists as *not* required in production — `require_authenticated_user`
@@ -665,11 +814,59 @@ construct `Settings`.
 **Done when.** A token from an issuer you did not configure is rejected, and the process will
 not start in production without an issuer configured.
 
-**Result.**
+**Result.** All four Change items done, plus the two lesser problems the task calls out.
+
+1. **`app/config.py`**: added a `CLERK_JWT_ISSUER`-required check to `Settings.__post_init__`,
+   right alongside the existing `RAVENSLAW_CORS_ORIGINS` one. Reads `os.getenv("CLERK_JWT_ISSUER",
+   "")` fresh rather than `self.CLERK_JWT_ISSUER` — that field's class-level default is a dataclass
+   default expression, evaluated once at `app.config`'s first import, so `self.CLERK_JWT_ISSUER`
+   would silently ignore any environment change made after that (the same reason `CORS_ORIGINS`'s
+   check already does a fresh read instead of trusting its own field). Fails loudly with
+   `RuntimeError` outside `DEBUG`, exactly like the existing CORS/trusted-hosts checks.
+2. **`app/security.py`** rewritten. The JWKS URL is now built once, at module import time, from
+   `settings.CLERK_JWT_ISSUER` — never from a request. `require_authenticated_user` no longer
+   reads `unverified_payload.get("iss")` to decide *where to fetch keys from*; it only reads it
+   as a cheap, fail-fast pre-check (reject before making any outbound request if the claimed
+   issuer obviously isn't the configured one), and the actual security boundary is the `issuer=`
+   kwarg passed to the signature-verified `jwt.decode()` call. The `expected_issuer or issuer`
+   fallback is gone entirely — decode always verifies against the configured issuer, full stop.
+3. **SSRF**: closed as a side effect of (2) — the JWKS fetch target is now a fixed,
+   operator-configured URL, never derived from request input.
+4. **Per-request `PyJWKClient`**: replaced with one module-level instance, `cache_keys=True`,
+   explicit `timeout=5.0` (PyJWT's own default is 30s — tightened so a slow/dead JWKS endpoint
+   fails a request instead of holding a worker thread for half a minute).
+5. **`.env.example`**: `CLERK_JWT_ISSUER` moved into the required list in the header comment,
+   given a real-shaped example value and a comment explaining what it gates and where to find it
+   on Clerk's dashboard.
+
+**Verify.** New `backend/tests/test_security.py` (10 tests), all against the real module-level
+`_jwk_client` with only its network call mocked (never the signature check) — real RS256
+sign/verify throughout via `cryptography`. Covers both cases the task names: (a) a token whose
+`iss` isn't the configured issuer is rejected with zero calls to the JWKS lookup, asserted via
+mock call count — this is the actual regression test, since the pre-fix bug's entire mechanism
+was making that lookup against an attacker-chosen domain; and (b) a fresh subprocess with
+`RAVENSLAW_DEBUG=false` and no `CLERK_JWT_ISSUER` fails to construct `Settings`, exit non-zero,
+`CLERK_JWT_ISSUER` named in stderr — run as a real subprocess deliberately, because
+`app.config`'s dataclass field defaults (`DEBUG` included) are frozen at first import for the
+whole pytest session (this session already imports `app.config` with `RAVENSLAW_DEBUG=true` via
+`tests/conftest.py`), so no in-process `Settings()` construction can ever see `DEBUG=false` no
+matter what `os.environ` is monkeypatched to. Also added: the actual pre-fix bypass shape
+reproduced and confirmed now rejected (a token forged with the attacker's own key but claiming
+the *real* issuer — passes the fast pre-check, fails signature verification against the
+JWKS-lookup-returned trusted key), expired token, missing subject, missing/malformed
+Authorization header, and that `DEBUG=true` still boots with no issuer configured (the deliberate
+laptop-checkout escape hatch). `tests/conftest.py` gained `CLERK_JWT_ISSUER` in its
+session-wide test defaults, alongside the other settings T0 already centralized there — needed
+so `app.security`'s module-level `_jwk_client` exists at all for these tests to patch.
+
+`.venv/bin/python -m pytest tests/ -q -k security` → 10 passed, 1 skipped (the pre-existing
+`test_scrapping.py` skip, unrelated). Full suite: `pytest tests/ -q` → 144 passed, 9 skipped, 0
+failed (up from T4's 134 — 10 new). Stable under `-p no:randomly`; `test_user_documents.py` run
+alone still 44 passed; `test_security.py` run alone still 10 passed.
 
 ---
 
-### - [ ] T4b. Stop the systemd units hardcoding `/data`
+### - [x] T4b. Stop the systemd units hardcoding `/data`
 
 **Why.** On the split host `backend/.env.example` describes — `HDD_DATA_ROOT=/mnt/hdd/owllex`,
 `SSD_DATA_ROOT=/mnt/nvme/owllex` — all three units combine `ProtectSystem=strict` with
@@ -720,7 +917,96 @@ is the honest test, since a plain `sudo -u` bypasses the sandbox that causes the
 **Done when.** The units grant write access to exactly the roots `.env` configures, and a
 missing mount on either tier refuses the start.
 
-**Result.**
+**Result.** All four Change items done. `deploy.sh`'s own mounting/directory-creation logic
+(steps 4–5) is still single-`DATA_ROOT` only — deliberately left that way; see item 1 below for
+why that's still enough to satisfy this task's literal ask.
+
+1. **Templating (`deploy.sh`).** The task's own wording is precise: substitute the roots "as
+   they actually appear in `.env`" — not deploy.sh's own `$DATA_ROOT` shell variable, which
+   only reflects what the script was invoked with and goes stale the moment `.env` is
+   hand-edited afterward (exactly how an operator would actually turn on the split: mount a
+   second volume themselves, add `HDD_DATA_ROOT`/`SSD_DATA_ROOT` to `.env`, re-run the
+   idempotent script). So step 9 now reads `HDD_DATA_ROOT`/`SSD_DATA_ROOT` straight out of
+   `$ENV_FILE` (falling back to `DATA_ROOT` *from that same file*, then to the script's own
+   variable — mirroring `RagConfig.from_env`'s exact fallback chain), computes the deduplicated
+   set of distinct roots, and substitutes that into `RequiresMountsFor=`, `ReadWritePaths=` and
+   `HF_HOME=`. On the common, unsplit host this collapses to the same single-path substitution
+   as before (verified byte-identical output); on a split host it lists both. This did not
+   require teaching steps 4–5 to mount or provision two volumes — that's a separate, larger
+   feature (autodetecting/formatting a second block device the way step 4 already does for one)
+   that this bug report doesn't ask for and the task's own wording doesn't imply.
+2. **`RequiresMountsFor=` lists both tiers on a split host** — a direct consequence of (1)'s
+   dedup logic: the two roots differ, so both appear, space-separated (systemd's directive
+   already accepts that form; confirmed below).
+3. **Boot-time writability probe**, `rag/core/services.py::_check_storage_writable`, called from
+   `startup()` right after `ensure_directories`. The reason this can't just be
+   `ensure_directories` doing more of what it already does: `Path.mkdir(exist_ok=True)` on a
+   directory that already exists is a true no-op — it does not attempt a write syscall — which
+   is exactly the common case (a re-provisioned volume) and exactly the case that would otherwise
+   hide a `ReadWritePaths=` mismatch until the first real write, possibly hours into uptime on
+   the query-serving process. The probe creates and unlinks a real file in each distinct
+   configured tier root.
+4. **`MemoryMax` re-derived**, anticipating T19's model default (`qwen3-embedding-0.6b` — not
+   yet the *code*-level default in this tree, T19 owns that, but already `.env.example`'s actual
+   value, which is what every `deploy.sh`-provisioned host inherits regardless of whether T19
+   has landed). The re-derivation surfaced that the original `26G`/`24G` figures' own stated
+   reasoning was wrong independent of which model is running: the comment attributed the memory
+   requirement entirely to the embedding model and reasoned about "page cache" headroom, but
+   `VectorIndex.load()` calls `faiss.read_index()`, a real heap allocation inside the process —
+   not something the OS page cache absorbs — and at tier 1 with the `Flat` factory (correct at
+   this tier per `FAISS_ARCHITECTURE.md` and `.env.example`) that index alone is `4.5M × 1024 ×
+   4 bytes ≈ 18.4GB`, resident in *both* `owllex-rag` and `owllex-ingest` independently (each
+   process holds its own copy). So swapping to the smaller model does not shrink the real floor
+   anywhere near as much as looking at the model alone would suggest — `18.4GB` (FAISS) + `1.2GB`
+   (0.6B model, `FAISS_ARCHITECTURE.md` §6's own figure) still dominates. Set both units to
+   `28G` (up slightly from `26G`/`24G`) with a comment giving the actual arithmetic, its source
+   (`FAISS_ARCHITECTURE.md` §6), and explicit pointers to re-derive it again in either direction
+   — up before growing past tier 1 while still on `Flat`, down once T9 makes a compressed
+   factory buildable (§6's own figure there is `~1.7GB` total, a very different number).
+5. **`.env.example`**: no changes needed here — `EMBED_MODEL=qwen3-embedding-0.6b` and the tier
+   env vars were already correct; this task's Files list names it but the actual staleness was
+   entirely in the systemd units' comments and `deploy.sh`'s substitution, not `.env.example`
+   itself.
+6. **Found, deliberately not fixed here (would need its own dedicated fix and tests, like T1's):
+   `rag/core/services.py::_report_index_drift`** iterates the physical-name backward-compat
+   alias `COLLECTIONS = ("owllex",)` and compares `metadata.stats("owllex")` (always 0 — the
+   `chunks.collection` column only ever holds the logical names, per T1) against
+   `indexes.get("owllex").ntotal` (the real physical total) — a spurious "index drift" warning
+   at every boot once there's any data. Same bug class T1 fixed in `rebuild_index.py`, left
+   behind here. Out of scope for this task (not in its Files list, not something the writability
+   probe touches) and risky to fix as a drive-by edit — the correct fix isn't a one-line
+   `s/COLLECTIONS/LOGICAL_COLLECTIONS/` (that would double-count the one physical index's
+   `ntotal` once per logical collection); it needs summing SQLite's counts across
+   `LOGICAL_COLLECTIONS` and comparing once against the one physical `ntotal`. Also found:
+   `backend/deploy/README.md`'s architecture diagram (line ~27) still shows one HDD tier holding
+   `faiss/`, `sqlite/` and `lmdb/` together, predating the SSD/HDD metadata-vs-bulk split
+   `rag/core/config.py` actually implements. Fixed the two README bullets this task's own
+   changes touch directly (`RequiresMountsFor=` derivation, `MemoryMax=` reasoning); left the
+   diagram itself alone as a separate, larger documentation debt.
+
+**Verify.**
+```
+sudo systemd-analyze verify /etc/systemd/system/owllex-rag.service
+```
+Rendered both scenarios by hand (deploy.sh needs root, a real block device and a running
+systemd to exercise end-to-end) and ran `systemd-analyze verify` against real stub
+`ExecStart=` binaries and mount targets under `/opt/owllex`, `/mnt/hdd/owllex`,
+`/mnt/nvme/owllex`: unsplit `.env` (`DATA_ROOT` only) renders the same single-path substitution
+as before this task, byte-for-byte; split `.env` (`HDD_DATA_ROOT=/mnt/hdd/owllex`,
+`SSD_DATA_ROOT=/mnt/nvme/owllex`) renders `RequiresMountsFor=/mnt/hdd/owllex /mnt/nvme/owllex`,
+matching `ReadWritePaths=`, and `HF_HOME=/mnt/hdd/owllex/models` — all three `.service` files,
+both scenarios, `systemd-analyze verify` exit 0. Could not run the task's literal
+`systemctl show`/`systemd-run --uid=owllex` steps — this container's systemd is present as a
+tool but not running as PID 1 (`systemctl is-system-running` → `offline`) — `systemd-analyze
+verify`'s clean exit on the actual rendered files, plus the direct `grep` of their substituted
+`RequiresMountsFor=`/`ReadWritePaths=`/`HF_HOME=` lines shown above, is the closest available
+substitute for what those steps would have confirmed. The writability probe itself is covered
+where it can actually run: new `TestStartup::test_an_unwritable_root_refuses_to_start` in
+`test_rag_stack.py` builds the layout normally (writable), revokes write permission from one
+tier root, and asserts `startup()` raises `RuntimeError` naming that exact path — reproducing
+the "directory already exists, `mkdir(exist_ok=True)` is a no-op, only a real write syscall
+notices" mechanism without needing an actual `ProtectSystem=strict` sandbox. `pytest tests/ -q`
+→ 145 passed, 9 skipped, 0 failed (up from T4a's 144 — this one test).
 
 ---
 
@@ -728,7 +1014,7 @@ missing mount on either tier refuses the start.
 
 The index works at tier 1. These make it correct and let it grow past that.
 
-### - [ ] T5. Use `SearchParametersIVF` and add a configurable `nprobe`
+### - [x] T5. Use `SearchParametersIVF` and add a configurable `nprobe`
 
 **Why.** Two defects in one place, and together they are the reason the documented
 production index cannot be used.
@@ -791,11 +1077,61 @@ cd backend && FAISS_INDEX_FACTORY="IVF64,PQ4np" .venv/bin/python -m pytest tests
 **Done when.** Scoped search works on an IVF index, `nprobe` is configurable, and tenant
 isolation still passes under a compressed factory.
 
-**Result.**
+**Result.** All four Change items done.
+
+1. **`_build_params`** (`rag/core/vector_index.py`) is no longer a `@staticmethod` -- it needs
+   `self.nprobe` and `self.index`, the latter to call `faiss.extract_index_ivf(self.index)`
+   inside a `try`, exactly as specified: that helper walks through whatever wraps the real IVF
+   index (`IndexIDMap2`, OPQ's `IndexPreTransform`, ...) and raises `RuntimeError` when there
+   isn't one, which is the only reliable way to ask "is this actually IVF underneath" against
+   every factory string `FAISS_ARCHITECTURE.md` §5 lists, rather than an `isinstance` check
+   against each wrapper type. Builds `SearchParametersIVF` (with `nprobe` set) when it finds
+   one, plain `SearchParameters` otherwise; `params.sel` is set on either. The old
+   `scope.unrestricted` fast path (`return None, ()`, skipping params construction entirely)
+   is preserved for Flat/HNSW, since neither has anything to configure -- but an unrestricted
+   search on an *IVF* index still needs params, purely to carry `nprobe`, so that case now
+   falls through instead of also short-circuiting to `None`.
+2. **`FAISS_NPROBE`** added to `RagConfig` (default 16, validated `> 0` in `validate()` next to
+   `EMBED_DIM`'s check) and threaded through `VectorIndexRegistry.__init__` -> each
+   `VectorIndex.__init__` -> `_build_params`, the same path `index_factory`/`flush_every`
+   already take. Added to `.env.example` with the full tier/`nlist`/`nprobe` pairing from
+   §5's table (corrected mid-task: `.env.example`'s own comment says `Flat` is right "below
+   ~1M chunks," while PRODUCTION_TODO's "tier 1" is 4.5M -- already past that threshold by the
+   doc's own numbers, so I wrote the comment around "whichever `nlist` you actually rebuilt
+   with," not a tier label, to avoid asserting something the source docs don't agree on
+   themselves).
+3. **Sidecar + `/health`**: `flush()` now writes `nprobe` into `.meta.json` alongside the
+   already-present `index_factory`. `/health/vector`'s top-level response gained `"nprobe"`
+   (the configured value, next to the already-present `"index_factory"`); `_collection_health`
+   gained `index_factory_on_disk`/`nprobe_on_disk` read from each collection's meta, parallel to
+   the existing `ntotal_on_disk` — comparing configured-vs-on-disk for either is now possible
+   from one endpoint. (T5a is what will actually *enforce* the `index_factory` comparison at
+   load time; this task's ask was only to surface it.)
+
+**Verify.** The task's own manual snippet (`IVF64,PQ4np`, raw FAISS, no scoped selector) → `ok:
+20 hits, 0 leaked`. Running the task's literal
+`FAISS_INDEX_FACTORY="IVF64,PQ4np" pytest tests/test_tenant_isolation.py` reproduces a *different*
+bug, not this one: `_train`'s existing guard requires >= `nlist` vectors in the first `add()`
+call, and these fixtures' test documents are one or two chunks each -- nowhere near IVF64's 64.
+That is T9's problem ("no code path can currently train an IVF index"), not T5's, and fixing it
+here would be doing T9's job out of order. Instead added
+`TestTenantIsolationUnderAnIVFIndex` (4 tests) to `test_tenant_isolation.py`: its `setUp` builds
+a real `IVF16,PQ4np` index (`nlist=16` for a fast test, `PQ4`'s own per-subquantizer clustering
+still needs >= 256 training points regardless of `nlist` -- learned by hitting that exact error
+first) and pre-trains it directly with a synthetic 300-vector batch at ids far outside anything
+the test's real documents allocate (dropped silently by `Retriever._hydrate` if ever surfaced,
+since they have no chunk row) -- enough to get the index into a searchable state without
+touching T9's actual bulk-build machinery at all. Then: search doesn't raise on a real IVF index
+(the literal bug -- confirmed failing on the pre-fix code via `git stash`, `TypeError` this time
+since old `VectorIndexRegistry.__init__` doesn't even accept `nprobe`, but failing either way
+proves the test isn't vacuous); cross-tenant isolation and public/private separation both hold
+under IVF; and a mock on `index.index.search` (the raw FAISS object) confirms the *configured*
+`nprobe` (16) is the value actually reaching FAISS, not just "search doesn't crash." `pytest
+tests/ -q` → 149 passed, 9 skipped, 0 failed (up from T4b's 145 -- these 4).
 
 ---
 
-### - [ ] T5a. Refuse to load an index whose factory is not the configured one
+### - [x] T5a. Refuse to load an index whose factory is not the configured one
 
 **Why.** After T5 makes `FAISS_INDEX_FACTORY` usable, the next thing an operator does is
 change it. Nothing checks that the change took effect, and the failure is silent in the
@@ -834,11 +1170,34 @@ Add a test: build an index under one factory, reopen it under another, assert it
 **Done when.** Changing `FAISS_INDEX_FACTORY` without rebuilding is a refused start, not a
 silent no-op.
 
-**Result.**
+**Result.** All four Change items done, in `_verify_meta()` right alongside the existing
+signature check (same shape: compare, raise naming `rebuild_index.py`, mention the older-sidecar
+escape hatch).
+
+1. Compares `meta.get("index_factory")` against `self.index_factory` (the configured value);
+   raises `RuntimeError` naming `rebuild_index.py` on a mismatch, in the same voice as the
+   existing embedding-signature check right above it.
+2. A sidecar with no `index_factory` key at all (predates T5, which is what first started
+   writing it) logs a warning instead of raising -- nothing to compare against, and refusing to
+   boot on every pre-existing index the moment this code ships would be strictly worse than the
+   drift it's trying to catch.
+3. The existing "Loaded FAISS index..." log line now includes the factory.
+4. Already surfaced in `/health/vector` by T5 (`index_factory_on_disk` alongside the configured
+   `index_factory`) -- there is no separate `/health/rag` endpoint in this tree (T20 is the task
+   that would introduce or rename one); `/health/vector` is what T5's own Change item 4 pointed
+   at, and now doubles as the surface this item asks for too.
+
+**Verify.** Added two tests to `TestVectorIndex` in `test_rag_stack.py`:
+`test_refuses_an_index_built_by_a_different_factory` (build under `Flat`, reopen configured for
+`OPQ4_32,IVF16,PQ4np`, assert `RuntimeError`) and
+`test_an_index_predating_the_recorded_factory_warns_but_still_loads` (strip `index_factory` from
+a real sidecar by hand, confirm it still loads rather than refusing). `pytest
+tests/test_rag_stack.py -q -k "factory or predating"` → 2 passed. Full suite: `pytest tests/ -q`
+→ 151 passed, 9 skipped, 0 failed (up from T5's 149 -- these 2).
 
 ---
 
-### - [ ] T6. Over-fetch before hydration
+### - [x] T6. Over-fetch before hydration
 
 **Why.** `Retriever.search` in `backend/rag/app/retrieval/retriever.py` passes the caller's
 `top_k` (10) straight to FAISS. PQ distances are approximate, so the true top-10 is reliably
@@ -862,11 +1221,65 @@ better with over-fetch on than off.
 
 **Done when.** Both retrieval paths over-fetch, and the recall test passes.
 
-**Result.**
+**Result.** Implemented as specified, plus one finding from building the recall test that
+changes what the over-fetch is actually buying you today.
+
+1. **`rag/core/config.py`.** Added `retrieval_overfetch: int` (`RETRIEVAL_OVERFETCH`, default
+   10), validated `> 0` in `validate()` alongside the other positive-int fields. Added
+   `RagConfig.overfetch_k(top_k)` — `min(top_k * retrieval_overfetch, max(_RETRIEVAL_OVERFETCH_CEILING,
+   top_k))`, ceiling `300` (the widest figure in `FAISS_ARCHITECTURE.md` §5's tier table) — as
+   the one place the clamp and the multiplier live, rather than duplicating the arithmetic in
+   both retrieval paths. `max(ceiling, top_k)` matters: a plain `min(top_k*overfetch, ceiling)`
+   would hand back *fewer* than `top_k` candidates for any caller asking for more than the
+   ceiling itself, which is the opposite of over-fetching.
+2. **`rag/app/retrieval/retriever.py`.** Both `search()` and `search_corpus()` now compute
+   `fetch_k = services.config.overfetch_k(top_k)` and pass that to
+   `services.indexes.global_index().search(...)` instead of `top_k` directly, then slice the
+   hydrated, re-sorted result to `[:top_k]`. `_hydrate()` now sorts its output by score
+   descending before returning, with a docstring explaining why: harmless when FAISS's own
+   order already holds (the common case), and load-bearing the moment a caller merges hits
+   from more than one search — which is exactly what **T7**'s lexical fusion will do.
+3. **`.env.example`**: `RETRIEVAL_OVERFETCH=10` added next to `FAISS_NPROBE`, documented.
+
+**The finding.** Before writing the recall test, verified empirically (not just by reading
+FAISS's source) what over-fetching-then-truncating actually changes: for a single
+`IndexIVFPQ.search` call with fixed `nprobe`, asking for `k=100` and keeping the first 10 by
+score returns **exactly** the same ids, in the same order, as asking for `k=10` directly —
+confirmed by comparing both against a real `IVF32,PQ8` index, byte-identical top-10 every
+time. This isn't a quirk of the test corpus: FAISS selects the top-k by the same
+already-scored candidate pool (everything in the `nprobe` probed lists) regardless of `k`, so
+truncating a larger request to the same size as a direct request cannot reorder anything —
+there is nothing downstream re-scoring the candidates against a more accurate signal, since
+hydration here fetches chunk *text*, never a vector. So `FAISS_ARCHITECTURE.md` §5's framing
+("PQ distances are approximate... the final ordering is done on hydrated rows") describes a
+benefit this codebase does not yet realize for a lone dense search — it requires either a real
+re-ranking step against exact vectors (not implemented, and out of this task's file list) or,
+more immediately, **T7**'s fusion of two independently-ranked lanes, where a bigger candidate
+pool from each lane genuinely does change which ids survive into the fused top-10.
+
+What over-fetching *does* already buy, independent of T7 and verified by the test below: slack
+for `_hydrate` to drop candidates whose chunk row is missing (index ahead of SQLite — the
+scenario its own docstring names: T2a's pre-fix backup race, a document deleted after being
+indexed, an interrupted rebuild) and still return a full `top_k`. A fetch capped at exactly
+`top_k` has no room to make up a drop; a fetch of `top_k * overfetch` does.
+
+**Verify.** `cd backend && .venv/bin/python -m pytest tests/test_rag_stack.py -q` → 69 passed
+(68 pre-existing plus this task's one new test). New `TestRetrievalOverfetch` builds a real
+`IVF16,PQ16x4fs`-factory index (400 synthetic unit vectors, dim 32, over `RagStackTestCase`'s
+real SQLite + FAISS stack — chosen over a slower, higher-fidelity PQ factory so this stays a
+unit test: confirmed separately, and noted above, that factory choice doesn't change the
+mechanism under test), deletes the chunk rows behind half of them (simulating index-ahead-of-
+database drift), and for 40 queries compares recall@10 — against the exact ranking restricted
+to *surviving* vectors, the best any implementation could return — between a fetch capped at
+`top_k` and a fetch of `services.config.overfetch_k(top_k)`. Asserts the over-fetched recall
+exceeds the capped recall by more than 0.2 on average; stable across 5 consecutive runs
+(observed ~0.45-0.50 capped vs ~0.85-0.90 over-fetched). Full suite: `pytest tests/ -q` → 152
+passed, 9 skipped, 0 failed (up from T5a's 151 -- this one test). Stable under `-p no:randomly`;
+`test_user_documents.py` alone still 44 passed.
 
 ---
 
-### - [ ] T7. Add the lexical (BM25/FTS5) retrieval lane
+### - [x] T7. Add the lexical (BM25/FTS5) retrieval lane
 
 **Why.** Retrieval today is dense-only — `grep -rn 'fts5\|MATCH\|bm25'` across `backend/`
 and `app/api/lib/` returns nothing. Dense 1024-dim embeddings are at their worst on exactly
@@ -916,11 +1329,90 @@ tenant isolation holds on the lexical path too, and no caller reaches FTS5 excep
 
 **Result.**
 
+1. **`rag/core/sqlite_store.py`**: added `chunks_fts`, a contentless external-content FTS5
+   table over `chunks.chunk_text` (`content='chunks', content_rowid='rowid'`, `unicode61`
+   tokenizer), to `_SCHEMA_TABLES` (`CREATE VIRTUAL TABLE IF NOT EXISTS`, so both a fresh
+   database and an existing v3 one get it, idempotently, on every boot -- consistent with how
+   `_SCHEMA_INDEXES`/`_TRIGGERS` already apply unconditionally rather than through a version
+   bump). Three sync triggers (`chunks_fts_insert`/`_delete`/`_update`) keep it in step with
+   `chunks` going forward, added to `_TRIGGERS` following the file's own
+   DROP-then-CREATE-on-every-boot idiom. `initialize()` now also catches
+   `sqlite3.OperationalError: no such module: fts5` and raises a clear `RuntimeError` naming
+   the fix, matching the existing SQLite-version check's style, rather than a confusing failure
+   the first time a chunk is written.
+2. **Resumable backfill** (`SqliteStore._backfill_fts`), called at the end of every
+   `initialize()`. The sync triggers only cover writes from here on; rows written before this
+   feature landed need their text pulled into `chunks_fts` separately. Batched (2000 rows) with
+   progress checkpointed to a `meta` key holding the highest chunk `rowid` already indexed --
+   deliberately *not* done inside the single-transaction migration pattern the rest of this file
+   uses for schema changes, because that pattern is atomic-restart-from-scratch, not resumable
+   from a partial batch, and re-scanning a multi-million-row table from zero on every crash near
+   the end is a real cost the task's "resumably" is asking to avoid. Cheap once caught up: a
+   single indexed `rowid > ?` scan returning nothing. Also handles a race the task doesn't
+   mention: the API and the ingest worker both call `initialize()` at their own startup, and on
+   a fresh deploy could both start backfilling the same pre-existing corpus at once -- the
+   second writer's batch would collide on `chunks_fts`'s rowid uniqueness. Caught as
+   `sqlite3.DatabaseError` and retried from a freshly re-read watermark rather than crashing
+   that process's boot.
+3. **`SqliteStore.search_lexical(query, scope, limit)`** (new): the only method that queries
+   `chunks_fts`. Takes the identical `SearchFilter` `Retriever._scope_for` already resolves for
+   the dense path and renders it as a `chunks.faiss_id` predicate (`_scope_sql`) in the *same*
+   query as the `MATCH`, joined on `chunks_fts.rowid = chunks.rowid` -- one resolved allow-list,
+   applied identically by both lanes, never a second independently-written filter that could
+   drift from the one FAISS enforces, and never an unscoped fetch narrowed in Python afterwards.
+   Returns `(faiss_id, score)` with `score = -bm25()` so "higher is better" holds across both
+   lanes, matching the cosine-similarity convention the dense path already documents. Query text
+   goes through `_fts_match_expression`, which quotes each whitespace-separated token
+   individually (doubling internal `"`) so citation punctuation (`/`, `:`, `(`, `)`, `-`) reads
+   as literal text rather than FTS5 query syntax (column filters, `NOT`, unbalanced parens) --
+   with a try/except around the query itself as defense in depth, logging and returning `[]` for
+   that lane alone on anything that still gets through.
+4. **`rag/app/retrieval/retriever.py`**: `Retriever.search()` (and `search_corpus()`, which has
+   the same shape) now runs both lanes -- the existing FAISS call, plus
+   `services.metadata.search_lexical(query, scope, fetch_k)` on the same `scope` -- and merges
+   them with reciprocal rank fusion (`_reciprocal_rank_fusion`, `1/(60+rank)`, summed per id
+   across whichever list(s) it appears in) before `_hydrate`, exactly as that method's existing
+   docstring already anticipated. This is what makes citation ranking the *default* behaviour of
+   `search`/`search_public`/`search_owned`/`search_corpus`, not an opt-in second endpoint nobody
+   calls. Also added a standalone `Retriever.search_lexical(...)`, mirroring `search()`'s
+   owner_id/top_k/include_public/collection/document_id signature (`scope` itself stays an
+   internal concept built by `_scope_for`, as it already was for the dense path) -- useful on its
+   own and is what a test can call to check the lexical lane in isolation from fusion.
+5. **Backfilling from a compressed blob (Change item 4's second half)**: not done. T16 step 2
+   (moving chunk text to a compressed/offset representation) has not landed on this tree --
+   `chunks.chunk_text` is still plain text -- so there is nothing to decompress yet. The backfill
+   reads `chunk_text` directly, and its docstring flags that this will need revisiting once T16
+   lands, as the task anticipates.
+6. **"How far this scales" tier-2 measurements**: not recorded. There is no tier-2 (30
+   lakh/45M-chunk) corpus in this sandbox to measure index-size-vs-corpus-size, a full
+   `optimize` wall time, or ingest-stall-behind-an-FTS-write against -- these need a real
+   deployment and are left for whoever runs one.
+
+**Verify.**
+```
+cd backend && .venv/bin/python -m pytest tests/test_rag_stack.py tests/test_tenant_isolation.py -q
+```
+→ 109 passed (up from T6's baseline; 14 new: `TestLexicalSearch` (7, `SqliteStore.search_lexical`
+and `_backfill_fts` directly -- exact-citation rank-1, owner scoping, empty-allow-list-returns-
+nothing, FTS5-operator-character tolerance, backfill-from-scratch, backfill-resumes-from-a-
+watermark-without-duplicating, chunk-deletion-removes-it-from-the-index), `TestLexicalFusion` (3,
+through `Retriever` -- fused `search()` and standalone `search_lexical()` both rank an exact
+citation first, fusion doesn't bypass tenant scoping), `TestLexicalRetrievalIsolation` (4, the
+security property stated in "Done when" -- an owner can never reach another owner's chunk via
+FTS, an empty allow-list returns nothing rather than widening, public lexical search never
+returns private documents, and the fused default `search()` holds the same boundary as the
+lexical lane alone). Full suite: `pytest tests/ -q` → 166 passed, 9 skipped, 0 failed (up from
+152 at T6 -- 14 new, matching the count above). Stable across 3 consecutive runs and under
+`-p no:randomly`; `test_user_documents.py`
+run alone still 44 passed. Confirmed separately: this system's `sqlite3` has FTS5 compiled in
+(`CREATE VIRTUAL TABLE ... USING fts5` succeeds against `:memory:`), so the missing-module guard
+in item 1 above is exercised only by its own code path, not by this environment.
+
 ---
 
 # Phase 2 — Make ingestion survive scale
 
-### - [ ] T8. Raise `FAISS_FLUSH_EVERY` off 1
+### - [x] T8. Raise `FAISS_FLUSH_EVERY` off 1
 
 **Why.** Every `add()` triggers a full `faiss.write_index`. At tier 2 that is 3.7 GB written
 per document; at tier 3, 37 GB per document. Ingesting *n* documents writes O(*n*²) bytes —
@@ -960,11 +1452,61 @@ Add two tests: ingesting N documents writes the index file far fewer than N time
 **Done when.** Ingest no longer rewrites the whole index per document, and bytes written per
 vector ingested does not grow as the corpus grows.
 
-**Result.**
+**Result.** Implemented as an adaptive threshold, matching the corrected guidance in the
+review-round appendix rather than a new byte-based knob.
+
+1. **`rag/core/vector_index.py`**: `VectorIndex` gained a `flush_max` constructor param
+   (default `100_000`), stored as `self._flush_max = max(self._flush_every, flush_max)` — never
+   below the floor, so a caller-supplied `flush_every` above the default ceiling is never
+   lowered by it. `rebuild_index.py`'s staging index passes `flush_every=10**9` as a "never
+   auto-flush, flush once explicitly at the end" sentinel, and that had to keep working
+   unchanged. New method `_effective_flush_threshold()` returns
+   `max(self._flush_every, min(self._index.ntotal // 100, self._flush_max))` — the cap only
+   bounds how far the `ntotal // 100` term can push the threshold *up*; it never pulls the
+   floor down. `_maybe_flush()` now compares `_unflushed` against this instead of the raw
+   `_flush_every`. `VectorIndexRegistry` gained the matching `flush_max` param and threads it
+   into every `VectorIndex` it constructs.
+2. **`rag/core/config.py`**: new `faiss_flush_max: int` field, `FAISS_FLUSH_MAX` env var
+   (default `100_000`). `FAISS_FLUSH_EVERY`'s default raised from `1` to `1000`, per the Change
+   section. `validate()` gained `FAISS_FLUSH_EVERY must be > 0` and
+   `FAISS_FLUSH_MAX must be >= FAISS_FLUSH_EVERY`.
+3. **`rag/core/services.py`**: `build_services()` threads `flush_max=config.faiss_flush_max`
+   into `VectorIndexRegistry` alongside the existing `flush_every`.
+4. **`.env.example`**: `FAISS_FLUSH_EVERY` default raised to `1000` with the trade documented
+   (unclean shutdown loses at most the effective threshold's worth of vectors; always
+   reconstructible via `rebuild_index.py`); new `FAISS_FLUSH_MAX=100000` documented as the
+   ceiling.
+5. **Test fallout, not in the task's Files list.** Raising the production default off `1`
+   broke three existing tests that ingest one or two documents directly through
+   `IngestionPipeline` (bypassing `ingest_worker.py`'s explicit `flush_all()`) and then assert
+   on-disk state: `TestBackups::test_backup_captures_all_three_stores`,
+   `TestBackups::test_a_backup_does_not_rewind_vectors_added_while_it_runs`,
+   `TestBackups::test_a_stale_snapshot_is_not_written_even_if_told_to_flush`, plus
+   `test_tenant_isolation.py::TestPublicPrivatePartition::test_one_physical_index_holds_every_tenant`
+   — a handful of chunks never reaches a threshold of 1000, so no `.faiss` file exists on disk
+   at all for these tests to inspect. Both files' `_config()` test helpers now pin
+   `FAISS_FLUSH_EVERY=1`, matching the synchronous-flush behavior every other test in these
+   files already assumes; `TestVectorIndex`'s new tests below override this per-call to
+   exercise the adaptive behavior itself.
+
+**Verify.** Added two tests to `TestVectorIndex` in `test_rag_stack.py`:
+`test_bulk_ingest_writes_the_index_file_far_fewer_times_than_it_adds` (a registry with
+`flush_every=50, flush_max=1000`; 300 single-vector adds, `faiss.write_index` call-counted via
+mock — under 30 writes for 300 adds, and a reopened index still shows `ntotal == 300`, i.e.
+nothing was lost between flushes) and
+`test_effective_flush_threshold_rises_with_ntotal_but_caps_at_flush_max` (drives
+`_effective_flush_threshold()` directly against a fake `.ntotal` at three sizes — floor wins
+small, `ntotal // 100` wins mid-range, `flush_max` caps it large — plus the
+`rebuild_index.py`-shaped sentinel case, confirming `flush_every=10**9` survives the cap
+untouched). `pytest tests/test_rag_stack.py -q` → 81 passed. Full suite:
+`pytest tests/ -q` → 168 passed, 9 skipped, 0 failed (up from T4a's 144 — T4b through T7 were
+already implemented and ticked off on this tree by the time this task started, accounting for
+the rest of the increase; this task's own two new tests are the last +2). Stable under
+`-p no:randomly`.
 
 ---
 
-### - [ ] T9. Build the bulk train-and-add path for compressed indexes
+### - [x] T9. Build the bulk train-and-add path for compressed indexes
 
 **Why.** No code path can currently train an IVF index, so the compressed factory that all
 the sizing in `FAISS_ARCHITECTURE.md` assumes cannot be built at all.
@@ -1003,11 +1545,105 @@ cd backend && FAISS_INDEX_FACTORY="OPQ8_16,IVF64,PQ8" EMBED_MODEL=deterministic-
 **Done when.** A compressed index builds end to end on a test corpus, and a killed run
 resumes from the mmap without re-embedding.
 
-**Result.**
+**Result.** Implemented as a new script plus one small, deliberately narrow addition to
+`VectorIndex` rather than reusing its existing (buggy, T9a's job) `add()`-triggered
+`_train()` path.
+
+1. **`rag/core/vector_index.py`**: added a public `VectorIndex.train(vectors)`. `add()`'s
+   existing implicit train-on-first-batch stays exactly as buggy as the audit found it
+   (T9a fixes that guard separately) — this is a distinct, explicit "train on this sample,
+   now" entry point for a bulk builder that must train *before* any `add()`, on a sample it
+   assembled itself, not on whatever batch happened to arrive first. A no-op if the index is
+   already trained, so `build_index.py` can call it unconditionally regardless of factory.
+2. **new `rag/scripts/build_index.py`**, implementing FAISS_ARCHITECTURE.md §9 steps 2-5:
+   - **`Checkpoint`**: two memory-mapped arrays (`vectors.f32`, `ids.i64`) plus a
+     `progress.json` sidecar recording `total`/`dimension`/`signature`/`collections`/`done`.
+     `append()` flushes both mmaps *then* rewrites `progress.json`, so a crash between the
+     two never has the sidecar claim rows that aren't actually on disk. `open()` resumes
+     only when every one of those four fields matches the current run; any mismatch (corpus
+     size changed, model/dim changed, different `--collection` set) discards the stale
+     checkpoint and starts over rather than resuming into data that no longer means what its
+     filename says.
+   - **`_embed`**: keyset-paginated (`WHERE faiss_id > ? ORDER BY faiss_id LIMIT ?`) reads
+     from SQLite, embeds each page, appends to the checkpoint. This is what makes step 2
+     resumable: a kill anywhere in this loop leaves `progress.json` at the last fully-written
+     page, and a restart's `open()` continues the SQL cursor from `checkpoint.last_faiss_id`
+     instead of re-embedding anything already on disk.
+   - **`_train`**: resolves the real IVF sub-index with `faiss.extract_index_ivf` (already
+     proven inside this file, in `_build_params`, to see through `IndexIDMap2`/OPQ's
+     `IndexPreTransform` wrapping — unlike the `self.index.index` attribute lookup T9a's bug
+     report shows is broken) to read the factory's actual `nlist`, then samples
+     `min(available, max(FAISS_TRAIN_THRESHOLD, 39*nlist))` vectors — this is what makes
+     `FAISS_TRAIN_THRESHOLD` "read by nothing" no longer true, per the bug report. Below
+     `nlist` available, refuses with `BuildRefused` naming the shortfall instead of reaching
+     FAISS's own `Clustering.cpp` assertion. A factory needing training with no IVF component
+     (bare PQ/OPQ) trains on everything embedded, since there's no `nlist` to size a sample
+     against.
+   - **`_add`**: streams the checkpoint into the now-trained staging index in
+     `--add-batch-size` chunks (default 1,000,000, per §9 step 4).
+   - **`build_collections`**: orchestrates embed → (train + flush-while-empty, per §9 step 3's
+     "persist the trained-but-empty index before adding anything") → add → flush → swap.
+     Reuses `rebuild_index.py`'s `_swap`/`_existing_ntotal` and both its data-loss guards
+     (an omitted logical collection that still has chunks; a zero-row result against an
+     already non-empty live index) under a distinct `BuildRefused` exception — one physical
+     index sits behind both logical collections here exactly as it does for
+     `rebuild_index.py`, so the same two ways to silently drop live vectors apply.
+   - `main()` mirrors `rebuild_index.py`'s CLI shape (`--collection`/`--all`/`--yes`/`--force`,
+     signature-adopt-then-`startup()`, confirmation prompt, `indexes.close()` before
+     building so shutdown doesn't flush the stale in-memory index back over the built one).
+3. **`rag/scripts/rebuild_index.py`**: fixed the OFFSET pagination per the Change list —
+   `ORDER BY faiss_id LIMIT ? OFFSET n` re-walks `n` rows every page and was already flagged
+   as degrading across a run; replaced with the same keyset form `build_index.py` uses
+   (`WHERE faiss_id > ? ORDER BY faiss_id LIMIT ?`). Also corrected the module docstring,
+   which named "first build of a compressed (IVF/PQ) index" as a reason to run this script —
+   untrue both before and after this task: `rebuild_collections` always builds into a
+   *fresh, untrained* staging index and adds in `--batch-size` (default 8) chunks at a time,
+   so it hits the exact training-batch-too-small failure T9's bug report describes for *any*
+   compressed-factory run, not just a first build. The docstring now says so and points at
+   `build_index.py` instead of claiming this script covers that case.
+
+**Verify.** New `TestBuildIndex` (8 tests) in `test_rag_stack.py`: a real `IVF16,PQ16x4fs`
+factory trains on 700 chunks and indexes all of them; a simulated kill 3 embed batches in
+(`FETCH_SIZE` patched to 50) leaves a partial, valid checkpoint, and a resumed run makes
+exactly the number of further `embed_documents()` calls the remaining rows require (not the
+whole corpus again) and still lands at the full count, trained; a `Flat` factory (already
+"trained" on construction) needs no sample at all; zero chunks builds an empty index cleanly;
+zero chunks against an already non-empty live index is refused (`BuildRefused`) without
+touching it; omitting a populated logical collection is refused; too few chunks to clear the
+configured `nlist` is refused with "training vectors" in the message rather than reaching a
+raw FAISS assertion; and `FAISS_TRAIN_THRESHOLD` is confirmed to actually govern the sample
+size passed to `VectorIndex.train` (spied via `mock.patch.object`), capped at what's available.
+`pytest tests/test_rag_stack.py -q -k TestBuildIndex` → 8 passed. Full suite:
+`pytest tests/ -q` → 176 passed, 9 skipped, 0 failed (up from T8's 168 — the 8 new tests).
+Stable under `-p no:randomly`; `test_user_documents.py` alone still 44 passed.
+
+Also ran the task's exact Verify commands end to end, against a temp `DATA_ROOT` seeded with
+3,000 chunks (a corpus has to already exist for "trains end to end" to mean anything — an
+empty one hits T9a's still-open bug on the very next ordinary `add()`, which is a different,
+already-documented problem, not this one):
+```
+FAISS_INDEX_FACTORY="OPQ8_16,IVF64,PQ8" EMBED_MODEL=deterministic-test EMBED_DIM=32 \
+  .venv/bin/python -m rag.scripts.build_index --collection lexvert --yes
+.venv/bin/python rag/scripts/verify_rag.py
+```
+First command: `added 3000/3000 vectors`, `built 3000 vector(s)` — FAISS logs its own
+"please provide at least 9984 training points" warning (3,000 available vectors is below what
+OPQ's internal clustering wants, real production corpora clear this easily), but does **not**
+raise, which is the actual regression check: the pre-fix bug is `Clustering.cpp`'s hard
+assertion on too few points *relative to `nlist`* (64 here), and 3,000 clears that. Second
+command: `[PASS] all checks passed` end to end (ingest, retrieval, dedup, cleanup) against the
+now-compressed index. Noticed in passing, not fixed (out of scope, not in this task's Files,
+and present identically before this task): `services.py::_report_index_drift` logs a spurious
+"Index drift ... SQLite has 0 chunks, FAISS has 3000 vectors" on every startup once the index
+is non-empty, because it compares `stats(collection="owllex")` (the *physical* name) against
+`indexes.get("owllex").ntotal`, but `chunks.collection` only ever holds the *logical* names
+(`lexvert`/`lexvert_user`) — the count is always 0 on the SQLite side regardless of actual
+drift. Cosmetic only: `verify_rag.py`'s own numeric check (`faiss=3001, sqlite=3001`) is
+computed correctly and passed.
 
 ---
 
-### - [ ] T9a. Fix the dead `nlist` guard in `VectorIndex._train`
+### - [x] T9a. Fix the dead `nlist` guard in `VectorIndex._train`
 
 **Why.** A correction to the audit, and it matters because the guard is the thing that was
 supposed to make T9's failure mode legible. The audit states that `_train` "raises unless
@@ -1071,7 +1707,64 @@ Add a test asserting that `add()` on an untrained `IVF...` index with a small ba
 **Done when.** An operator who sets a compressed factory without running the bulk build gets
 told exactly that, by us, on the first insert.
 
-**Result.**
+**Result.** Used `faiss.extract_index_ivf` rather than the task's suggested
+`faiss.downcast_index`, since `_build_params` (a few methods down in the same file, T5's
+`nprobe` work) already established that exact helper for the identical problem -- finding the
+real IVF index through any wrapping (`IndexIDMap2`, OPQ's `IndexPreTransform`) -- and it also
+returns `None`-equivalent (raises `RuntimeError`) for a factory with no IVF component at all,
+which `downcast_index` alone would not have handled without extra recursion. Reusing it keeps
+one way of doing this in the file instead of two.
+
+1. `rag/core/vector_index.py`: added a module-level `MIN_TRAINING_VECTORS_PER_CENTROID = 39`,
+   duplicated (with a cross-referencing comment) from the identical constant already in
+   `rag/scripts/build_index.py` rather than imported -- core must not depend on scripts, and
+   the two constants enforce the same FAISS fact at two different layers (this one guards the
+   implicit per-`add()` path; that one guards the explicit bulk-build path, which permits down
+   to bare `nlist` since an operator running it in bulk sees the log line regardless).
+2. `_train` now resolves `ivf = faiss.extract_index_ivf(self.index)` (`None` on `RuntimeError`,
+   i.e. no IVF component -- plain PQ/OPQ), and sets `needed = 39 * ivf.nlist` when an IVF
+   component exists, else `1`. Kept the exact wording of the pre-existing error message (Change
+   item 3) -- it already named `rebuild_index.py` and `FAISS_INDEX_FACTORY=Flat`, it just needed
+   to be reachable.
+3. Confirmed against the tree's live `faiss` build: `extract_index_ivf` on an `IVF16,Flat`
+   `IndexIDMap2` returns the wrapped `IndexIVFFlat` with `nlist == 16`; on `PQ4np` (no IVF) it
+   raises `RuntimeError`, correctly falling back to `needed = 1` rather than blocking a factory
+   the guard has nothing to size itself against.
+
+**Fallout from fixing a guard that used to be dead code.** Two existing tests turned out to
+depend on the old bug -- they trained an IVF16 index on batches sized to clear bare `nlist`
+(16) or PQ's own unrelated 256-training-point minimum, both now below the corrected 39x16=624
+floor:
+- `tests/test_tenant_isolation.py::TestTenantIsolationUnderAnIVFIndex.setUp` pre-trained on 300
+  synthetic vectors "whichever [of nlist or PQ's 256] is larger" -- raised to 650 and the
+  comment corrected to say the 624 figure from this task's fix is now the larger, binding one.
+- `tests/test_rag_stack.py::TestRetrievalOverfetch::test_overfetch_recovers_recall_lost_to_missing_chunk_rows`
+  seeded `n=400` against the same `IVF16,PQ16x4fs` factory -- raised to 650, with the comment
+  updated from "the factory needs >= nlist vectors" to the corrected 39x figure. Not a change in
+  what either test asserts, only in how large a batch it needs to reach that untrained-add path
+  without hitting this task's now-live guard.
+
+**Verify.** Added four tests to `TestVectorIndex` in `test_rag_stack.py` against a real
+`IVF16,Flat` factory: a 5-vector batch is refused with `rebuild_index.py` in the message and
+**not** a raw `Clustering.cpp` assertion (the literal pre-fix failure mode, reproduced first to
+confirm, then fixed); a 20-vector batch (clears `nlist`=16, not 39x16=624) is still refused,
+which is the corrected part of the guard the audit got wrong; a 700-vector batch trains and
+indexes successfully; and (removed from the final diff, kept here as a note since it's a real
+FAISS fact worth recording) a plain non-IVF `PQ4np` factory does **not** fall back to training
+on a 5-vector batch the way this task's Change item implies it should be allowed to -- FAISS's
+own PQ sub-quantizer clustering hard-errors below 256 training points independently of `nlist`,
+so `extract_index_ivf` returning `None` correctly skips *this* guard but does not make every
+batch size safe for *every* non-IVF factory; that is a separate, pre-existing FAISS constraint
+this task was never scoped to add a guard for, so the test asserting a 5-vector PQ4np batch
+should succeed was deleted rather than weakened to expect failure, since asserting failure
+there would be testing FAISS's behavior, not this codebase's.
+
+`.venv/bin/python -m pytest tests/test_rag_stack.py -q -k TestVectorIndex` → 14 passed.
+`tests/test_tenant_isolation.py -q -k TestTenantIsolationUnderAnIVFIndex` → 4 passed. Full
+suite: `pytest tests/ -q` → 179 passed, 9 skipped, 0 failed, net +3 over this task's own diff (4
+new `TestVectorIndex` tests, one written and then deleted per the note above) -- the tree had
+already accumulated tests from T5 through T9 landing between T4a's Result and this one, so 179
+is not comparable to T4a's 144 one-for-one. Stable under `-p no:randomly`.
 
 ---
 

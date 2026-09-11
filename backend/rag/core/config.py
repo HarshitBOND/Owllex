@@ -72,6 +72,12 @@ _DEFAULT_LOG_ROOT = "/var/log/owllex"
 
 _TRUE = {"1", "true", "yes", "on"}
 
+# Ceiling on how many candidates a search over-fetches before hydration,
+# regardless of RETRIEVAL_OVERFETCH * top_k. Matches the widest figure in
+# FAISS_ARCHITECTURE.md's §5 tier table (tier 4: over-fetch 300) -- past that
+# the extra SQLite hydration cost buys no measurable recall.
+_RETRIEVAL_OVERFETCH_CEILING = 300
+
 
 def _flag(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -126,6 +132,9 @@ class RagConfig:
     faiss_index_factory: str
     faiss_train_threshold: int
     faiss_flush_every: int
+    faiss_flush_max: int
+    faiss_nprobe: int
+    retrieval_overfetch: int
 
     # ─── Metadata store ──────────────────────────────────────────────────────
     sqlite_busy_timeout_ms: int
@@ -228,7 +237,24 @@ class RagConfig:
             embed_trust_remote_code=_flag("EMBED_TRUST_REMOTE_CODE", True),
             faiss_index_factory=os.getenv("FAISS_INDEX_FACTORY", "Flat").strip(),
             faiss_train_threshold=_int("FAISS_TRAIN_THRESHOLD", 10_000),
-            faiss_flush_every=_int("FAISS_FLUSH_EVERY", 1),
+            # flush() rewrites the whole file, so a fixed threshold is right at
+            # tier 1 and catastrophic write amplification at tier 3 -- see
+            # VectorIndex._effective_flush_threshold. 1000 is the floor;
+            # FAISS_FLUSH_MAX below is the ceiling.
+            faiss_flush_every=_int("FAISS_FLUSH_EVERY", 1_000),
+            faiss_flush_max=_int("FAISS_FLUSH_MAX", 100_000),
+            # How many inverted lists an IVF search probes. Irrelevant for
+            # Flat/HNSW. FAISS defaults this to 1 -- at tier 3's 131,072 lists
+            # that is roughly 3,400 of 450M vectors probed, i.e. low-single-
+            # digit recall@10, silently. FAISS_ARCHITECTURE.md §5's tier table:
+            # 16 / 32 / 64 / 96 for tiers 1-4.
+            faiss_nprobe=_int("FAISS_NPROBE", 16),
+            # PQ/IVF distances are approximate: the true top-k is reliably
+            # *inside* the top `RETRIEVAL_OVERFETCH * k` candidates but not
+            # reliably at the front of it. Irrelevant for Flat (exact
+            # distances), harmless to leave on regardless.
+            # FAISS_ARCHITECTURE.md §5.
+            retrieval_overfetch=_int("RETRIEVAL_OVERFETCH", 10),
             sqlite_busy_timeout_ms=_int("SQLITE_BUSY_TIMEOUT_MS", 15_000),
             lmdb_map_size_mb=_int("LMDB_MAP_SIZE_MB", _int("HASH_DB_MAP_SIZE_MB", 4096)),
             parser_backend=os.getenv("PARSER_BACKEND", "docling").strip().lower(),
@@ -328,6 +354,21 @@ class RagConfig:
         """On-disk location of one collection's FAISS index."""
         return self.faiss_root / f"{collection}.faiss"
 
+    def overfetch_k(self, top_k: int) -> int:
+        """How many candidates to pull from FAISS before hydration and re-sort.
+
+        ``RETRIEVAL_OVERFETCH * top_k``, clamped to a ceiling so a large
+        ``top_k`` cannot force an unbounded FAISS scan or SQLite hydration.
+        Every retrieval path over-fetches through this one method rather than
+        each computing its own multiple, so the clamp and the tuning knob stay
+        in one place. See FAISS_ARCHITECTURE.md §5.
+        """
+        if top_k <= 0:
+            return top_k
+        # max(..., top_k): the ceiling bounds how much *extra* over-fetching
+        # costs, it must never cut into the caller's own requested top_k.
+        return min(top_k * self.retrieval_overfetch, max(_RETRIEVAL_OVERFETCH_CEILING, top_k))
+
     def absolute_document_path(self, relative_path: str) -> Path:
         """Resolve a SQLite-stored relative path against the document root.
 
@@ -350,6 +391,14 @@ class RagConfig:
     def validate(self) -> None:
         if self.embed_dim <= 0:
             raise RuntimeError("EMBED_DIM must be > 0")
+        if self.faiss_nprobe <= 0:
+            raise RuntimeError("FAISS_NPROBE must be > 0")
+        if self.faiss_flush_every <= 0:
+            raise RuntimeError("FAISS_FLUSH_EVERY must be > 0")
+        if self.faiss_flush_max < self.faiss_flush_every:
+            raise RuntimeError("FAISS_FLUSH_MAX must be >= FAISS_FLUSH_EVERY")
+        if self.retrieval_overfetch <= 0:
+            raise RuntimeError("RETRIEVAL_OVERFETCH must be > 0")
         if self.embed_batch_size <= 0:
             raise RuntimeError("EMBED_BATCH_SIZE must be > 0")
         if self.chunk_size <= 0:

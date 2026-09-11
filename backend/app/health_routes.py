@@ -263,6 +263,7 @@ def _check_vector() -> dict[str, Any]:
         "embed_model": config.embed_model,
         "embed_dim": config.embed_dim,
         "index_factory": config.faiss_index_factory,
+        "nprobe": config.faiss_nprobe,
         "collections": collections,
     }
 
@@ -281,6 +282,8 @@ def _collection_health(config, services, collection: str) -> dict[str, Any]:
             entry["signature"] = meta.get("signature")
             entry["dimension"] = meta.get("dimension")
             entry["ntotal_on_disk"] = meta.get("ntotal")
+            entry["index_factory_on_disk"] = meta.get("index_factory")
+            entry["nprobe_on_disk"] = meta.get("nprobe")
         except (OSError, json.JSONDecodeError) as exc:
             entry["meta_error"] = str(exc)
 

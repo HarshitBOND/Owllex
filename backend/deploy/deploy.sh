@@ -16,6 +16,13 @@
 # a deploy script is not a recoverable mistake, so the default is to refuse and
 # tell you what to run.
 #
+# It does not set up a two-volume, HDD+SSD split host on its own -- it mounts
+# and provisions exactly one volume, at DATA_ROOT. For that layout: run this
+# once as usual, mount the second volume yourself, then set HDD_DATA_ROOT and
+# SSD_DATA_ROOT in .env (rag/core/config.py resolves them, both falling back
+# to DATA_ROOT) and re-run this script -- idempotent, so it only re-renders
+# the systemd units (step 9) against the roots now in .env, moving nothing.
+#
 # ── Environment ─────────────────────────────────────────────────────────────
 #   OWLLEX_DOMAIN         hostname for the nginx vhost      (default: api.owllex.example)
 #   DATA_DEVICE           block device to mount at /data    (default: autodetect, else skip)
@@ -26,6 +33,11 @@
 #   REPO_URL / REPO_REF   git source, if APP_ROOT is empty
 #   PYTHON_EXTRAS         uv extras to install              (default: rag,embeddings)
 #   SKIP_NODE             "yes" to skip the scraper toolchain
+#
+# HDD_DATA_ROOT / SSD_DATA_ROOT are not accepted as deploy.sh environment
+# variables -- set them in .env directly (see above) once the second volume is
+# mounted by hand; this script only reads them back out of .env to render the
+# systemd units correctly (PRODUCTION_TODO.md T4b).
 #
 set -euo pipefail
 
@@ -400,13 +412,46 @@ cp "${DEPLOY_DIR}/logrotate/owllex" /etc/logrotate.d/owllex
 chmod 644 /etc/logrotate.d/owllex
 ok "logrotate installed"
 
+# Read a KEY=value straight out of .env, honouring the last assignment (same
+# as systemd's own EnvironmentFile= parsing and python-dotenv's) and falling
+# back to $2 when unset or blank there. PRODUCTION_TODO.md T4b: an operator
+# who splits storage across two volumes does it by editing .env, and the
+# rendered units below have to reflect *that*, not this script's own
+# single-DATA_ROOT variable -- which reflects only what deploy.sh itself was
+# invoked with, and goes stale the moment .env is hand-edited afterward. This
+# script is meant to be re-run after such an edit (see its own header), which
+# is exactly when this needs to read the file rather than its memory of it.
+env_file_value() {
+    local key="$1" default="$2" value
+    value="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)"
+    printf '%s' "${value:-$default}"
+}
+
+data_root_in_env="$(env_file_value DATA_ROOT "$DATA_ROOT")"
+hdd_root_for_units="$(env_file_value HDD_DATA_ROOT "$data_root_in_env")"
+ssd_root_for_units="$(env_file_value SSD_DATA_ROOT "$data_root_in_env")"
+
+# Both tiers on one line each, deduplicated -- on the common, unsplit host
+# this collapses to one path (unchanged from before this task), and on a
+# split host it lists both, which is what makes a host that starts with only
+# one of the two mounted still refuse to start (rather than come up "healthy"
+# against an empty directory on the boot SSD for whichever tier is missing).
+unit_data_roots="$hdd_root_for_units"
+[[ "$ssd_root_for_units" != "$hdd_root_for_units" ]] && unit_data_roots="${unit_data_roots} ${ssd_root_for_units}"
+
+if [[ "$hdd_root_for_units" != "$ssd_root_for_units" ]]; then
+    info "split storage detected in .env: HDD_DATA_ROOT=${hdd_root_for_units} SSD_DATA_ROOT=${ssd_root_for_units}"
+    info "rendering systemd units with both roots in RequiresMountsFor=/ReadWritePaths="
+fi
+
 for unit in owllex-rag.service owllex-ingest.service owllex-backup.service owllex-backup.timer; do
-    # Rewrite the paths so a non-default APP_ROOT/DATA_ROOT still produces
-    # correct units, rather than files that silently point at /opt/owllex.
+    # Rewrite the paths so a non-default APP_ROOT, or HDD_DATA_ROOT/
+    # SSD_DATA_ROOT split in .env, still produces correct units, rather than
+    # files that silently point at /opt/owllex or a single /data.
     sed -e "s|/opt/owllex|${APP_ROOT}|g" \
-        -e "s|=/data|=${DATA_ROOT}|g" \
-        -e "s|RequiresMountsFor=/data|RequiresMountsFor=${DATA_ROOT}|" \
-        -e "s|ReadWritePaths=/data |ReadWritePaths=${DATA_ROOT} |" \
+        -e "s|RequiresMountsFor=/data|RequiresMountsFor=${unit_data_roots}|" \
+        -e "s|ReadWritePaths=/data |ReadWritePaths=${unit_data_roots} |" \
+        -e "s|HF_HOME=/data/models|HF_HOME=${hdd_root_for_units}/models|" \
         -e "s|^User=owllex$|User=${OWLLEX_USER}|" \
         -e "s|^Group=owllex$|Group=${OWLLEX_USER}|" \
         "${DEPLOY_DIR}/systemd/${unit}" > "/etc/systemd/system/${unit}"

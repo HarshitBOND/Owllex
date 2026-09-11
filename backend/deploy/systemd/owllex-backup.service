@@ -13,6 +13,9 @@
 [Unit]
 Description=Owllex backup (FAISS, SQLite, LMDB, documents)
 Documentation=file:///opt/owllex/backend/deploy/README.md
+# deploy.sh renders this from HDD_DATA_ROOT and SSD_DATA_ROOT as they actually
+# appear in .env, not from a literal /data -- see owllex-rag.service
+# (PRODUCTION_TODO.md T4b).
 RequiresMountsFor=/data
 # Ordered after the API so a boot-time catch-up run does not compete with
 # startup for the disk. Not a hard dependency: a backup must still run on a box
@@ -25,6 +28,9 @@ User=owllex
 Group=owllex
 WorkingDirectory=/opt/owllex/backend
 EnvironmentFile=/opt/owllex/backend/.env
+# Unused today -- backup_now.py runs read-only and never loads the embedding
+# model (PRODUCTION_TODO.md T2a) -- but set for consistency with the other
+# units and in case that ever changes. On the HDD tier, not the boot SSD.
 Environment=HF_HOME=/data/models
 Environment=PYTHONUNBUFFERED=1
 

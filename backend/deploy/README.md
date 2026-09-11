@@ -135,13 +135,23 @@ journalctl -u owllex-rag -f
 
 Three details worth knowing:
 
-- **`RequiresMountsFor=/data`** — the API will not start before the volume
-  mounts. Without it, an unmounted volume leaves `/data` as an empty directory
-  on the boot SSD and the stack comes up "healthy" and empty, filling the root
-  filesystem with a corpus that dies with the instance.
+- **`RequiresMountsFor=`** — the API will not start before the configured
+  root(s) mount. Without it, an unmounted volume leaves the configured root as
+  an empty directory on the boot SSD and the stack comes up "healthy" and
+  empty, filling the root filesystem with a corpus that dies with the
+  instance. `deploy.sh` renders this (and `ReadWritePaths=`, `HF_HOME=`) from
+  `HDD_DATA_ROOT`/`SSD_DATA_ROOT` as they actually appear in `.env`, not from a
+  literal `/data` — on a split host both tiers are listed, so a box that
+  starts with only one of the two mounted still refuses to start rather than
+  quietly running against an empty directory for whichever one is missing.
+  See PRODUCTION_TODO.md T4b if either root is ever missing from a rendered
+  unit despite being set in `.env` — that means the units need re-rendering:
+  re-run `deploy.sh`.
 - **One worker, deliberately.** Each gunicorn worker holds its own copy of the
-  embedding model (~16 GB for the 8B). A second worker exhausts a 32 GB box.
-  Scale with a bigger machine or a smaller `EMBED_MODEL`, never with `--workers`.
+  embedding model *and* its own copy of the FAISS index — the latter, not the
+  former, is what actually dominates memory at scale. See the `MemoryMax=`
+  comment in `owllex-rag.service` for the derivation. Scale with a bigger
+  machine or a compressed `FAISS_INDEX_FACTORY`, never with `--workers`.
 - **The ingest worker is nice'd** (`Nice=10`, `IOSchedulingClass=idle`) so a bulk
   import runs at full speed on an idle box and yields the moment a query arrives.
 

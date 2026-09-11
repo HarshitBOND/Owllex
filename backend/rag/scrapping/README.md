@@ -71,16 +71,17 @@ flight; re-running resumes.
 Sources no longer read `manifest.jsonl` into a Set at startup that parsed the
 whole file before the first download and held every hash in RAM, which does not
 survive the 50,000-document target. Dedup now goes through `hashdb.ts`, an LMDB
-index at `data/hash_index.lmdb`: startup is constant, memory is constant, and a
-lookup is a single B-tree probe.
+index at `SCRAPE_LMDB_PATH` (default `<DATA_ROOT>/lmdb/scrapping_hashdb`):
+startup is constant, memory is constant, and a lookup is a single B-tree probe.
 
-The shape in a source is just:
+The shape in a source is, roughly (see `sources/sci-judgments/persist.ts` for
+the real, crash-safe version and why the ordering matters):
 
 ```ts
 if (!has(`sci:cnr:${cnr}`)) {
-  // ...download...
+  // ...download, write the file, append the manifest row...
   await put(`sci:hash:${hash}`, cnr);
-  await backupToR2();
+  await put(`sci:cnr:${cnr}`, 1); // last -- only once everything above landed
 }
 ```
 
@@ -89,13 +90,37 @@ The manifest is still written it remains the handoff to Python it is just no
 longer the thing consulted to decide what to skip.
 
 This index means "downloaded" and is deliberately **not** the same database as
-`rag/hash_db.py`, which means "ingested"; sharing them would make the ingest
-pipeline skip every document the scraper had just fetched.
+`rag/core/hash_index.py`, which means "ingested"; sharing them would make the
+ingest pipeline skip every document the scraper had just fetched.
 
-`backupToR2()` uploads a compacted snapshot to R2 after new entries land,
-throttled to one upload per `HASH_DB_BACKUP_INTERVAL_SECONDS` (default 300) so a
-bulk run does not re-upload the whole index per document, plus a forced upload at
-the end of every run. Without R2 credentials in `backend/.env` it silently no-ops.
+`backupHashIndex()` snapshots the index to `<BACKUP_ROOT>/scrapping/` (local
+disk, not R2 -- R2 was removed, see `backend/MIGRATION.md`), throttled to one
+snapshot per `HASH_DB_BACKUP_INTERVAL_SECONDS` (default 300) so a bulk run does
+not re-snapshot per document, plus a forced snapshot at the end of every run.
+
+### Reading this index from Python
+
+`backend/rag/scripts/audit_scrape_index.py` reconciles `<source>:cnr:*` keys
+against `manifest.jsonl` and reports (or, with `--fix`, deletes) orphans -- a
+CNR marked downloaded with no manifest row for it, which without a fix means
+it will never be re-fetched (PRODUCTION_TODO.md T3).
+
+The npm `lmdb` package defaults to an on-disk data format (V2) that Python's
+`lmdb` binding cannot open at all (`lmdb.InvalidError: ... File is not an LMDB
+file`). Before running the audit script against a real index, rebuild the
+native module in the legacy, cross-compatible V1 format on whichever machine
+actually runs the scraper:
+
+```bash
+npm run scrape:setup-lmdb-v1   # cd node_modules/lmdb && LMDB_DATA_V1=true node-gyp rebuild
+```
+
+This is a one-time build step for that machine, not something wired into
+`npm install` for the whole project -- the scraper and this audit script run
+wherever scraping happens, not in the Vercel build, and forcing every install
+everywhere to compile a native module from source is a bigger call than one
+task's scope. There is no in-place converter between the two formats: an index
+already written in V2 has to be re-scraped after rebuilding.
 
 One-time backfill from manifests written before this existed:
 

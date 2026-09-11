@@ -9,12 +9,11 @@
 //     npm run scrape:sci:download -- 25
 
 import { chromium } from "playwright";
-import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { backupHashIndex, count, has, put } from "../../hashdb.js";
-import { uploadRawDocument } from "../../storage.js";
+import { backupHashIndex, count, has } from "../../hashdb.js";
+import { persistDownloadedJudgment } from "./persist.js";
 
 const SEARCH_URL = "https://scr.sci.gov.in/scrsearch/";
 const N = Number(process.argv[2]) || 2; // how many new PDFs to download
@@ -190,25 +189,19 @@ async function main(): Promise<void> {
         }
         if (!buffer) continue;
 
-        const hash = createHash("sha256").update(buffer).digest("hex");
-        await put(`sci:cnr:${cnr}`, 1);
-        if (has(`sci:hash:${hash}`)) {
+        const result = await persistDownloadedJudgment(
+          { cnr, title, listingText, buffer },
+          { source: SOURCE, pdfDir: PDF_DIR, manifestPath: MANIFEST_PATH },
+        );
+        if (result.status === "duplicate") {
           console.log(`Duplicate, skipping: ${cnr}`);
           continue;
         }
 
-        const filename = `${cnr}.pdf`;
-        const filePath = join(PDF_DIR, filename);
-        writeFileSync(filePath, buffer);
-        await put(`sci:hash:${hash}`, cnr);
-        await backupHashIndex();
-        await uploadRawDocument(SOURCE, hash, ".pdf", filePath);
         downloaded++;
-
-        appendFileSync(MANIFEST_PATH, JSON.stringify({ cnr, title, listingText, hash, filename }) + "\n");
         console.log(`[${downloaded}/${N}] Downloaded ${cnr}`);
 
-        const chunkCount = await ingestIntoKnowledgeBase(filePath, filename);
+        const chunkCount = await ingestIntoKnowledgeBase(result.filePath, result.filename);
         if (chunkCount !== null) {
           console.log(`  Added to knowledge base (${chunkCount} chunks)`);
         }

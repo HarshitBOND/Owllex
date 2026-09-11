@@ -43,7 +43,7 @@ from typing import Any
 
 logger = logging.getLogger("ravenslaw.rag.sqlite")
 
-from rag.core.vector_index import PRIVATE_ID_MIN, PUBLIC_ID_MIN
+from rag.core.vector_index import PRIVATE_ID_MIN, PUBLIC_ID_MIN, SearchFilter
 
 SCHEMA_VERSION = 3
 
@@ -122,6 +122,21 @@ CREATE TABLE IF NOT EXISTS chunks (
     -- another's text.
     faiss_id     INTEGER NOT NULL UNIQUE,
     created_at   TEXT NOT NULL
+);
+
+-- Lexical (BM25) retrieval lane, alongside the dense FAISS index -- see
+-- rag/app/retrieval/retriever.py::search_lexical and PRODUCTION_TODO.md T7.
+-- Contentless external-content table: chunk_text is not duplicated, `chunks`
+-- stays the single source of truth. Nothing writes to this table directly --
+-- new/changed rows arrive through the sync triggers below, and rows that
+-- predate this table arrive through SqliteStore._backfill_fts. Query it only
+-- through SqliteStore.search_lexical, which is what applies the same tenant
+-- scoping the dense path enforces.
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    chunk_text,
+    content='chunks',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 2'
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -207,6 +222,9 @@ DROP TRIGGER IF EXISTS chunks_partition_update;
 DROP TRIGGER IF EXISTS documents_visibility_insert;
 DROP TRIGGER IF EXISTS documents_visibility_update;
 DROP TRIGGER IF EXISTS documents_private_immutable;
+DROP TRIGGER IF EXISTS chunks_fts_insert;
+DROP TRIGGER IF EXISTS chunks_fts_delete;
+DROP TRIGGER IF EXISTS chunks_fts_update;
 
 CREATE TRIGGER chunks_partition_insert
 BEFORE INSERT ON chunks
@@ -272,6 +290,33 @@ WHEN OLD.visibility = 'private'
    OR NEW.visibility IS NOT OLD.visibility)
 BEGIN
     SELECT RAISE(ABORT, 'documents: owner_id, storage_path and visibility of a private document are immutable');
+END;
+
+-- Keep chunks_fts in step with chunks. Standard external-content-table sync
+-- triggers (https://sqlite.org/fts5.html#external_content_tables): a delete
+-- is expressed as an INSERT of the special 'delete' command so FTS5 can
+-- remove the old tokenisation, and an update is a delete-then-insert rather
+-- than an in-place change.
+CREATE TRIGGER chunks_fts_insert
+AFTER INSERT ON chunks
+FOR EACH ROW
+BEGIN
+    INSERT INTO chunks_fts(rowid, chunk_text) VALUES (new.rowid, new.chunk_text);
+END;
+
+CREATE TRIGGER chunks_fts_delete
+AFTER DELETE ON chunks
+FOR EACH ROW
+BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, chunk_text) VALUES ('delete', old.rowid, old.chunk_text);
+END;
+
+CREATE TRIGGER chunks_fts_update
+AFTER UPDATE ON chunks
+FOR EACH ROW
+BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, chunk_text) VALUES ('delete', old.rowid, old.chunk_text);
+    INSERT INTO chunks_fts(rowid, chunk_text) VALUES (new.rowid, new.chunk_text);
 END;
 """
 
@@ -533,7 +578,16 @@ class SqliteStore:
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='documents'"
                 ).fetchone()
             )
-            conn.executescript(_SCHEMA_TABLES)
+            try:
+                conn.executescript(_SCHEMA_TABLES)
+            except sqlite3.OperationalError as exc:
+                if "no such module: fts5" in str(exc):
+                    raise RuntimeError(
+                        "This SQLite build has no FTS5 module compiled in, needed for "
+                        "lexical search (search_lexical / PRODUCTION_TODO.md T7). Rebuild "
+                        "or upgrade the system sqlite3 library with FTS5 enabled."
+                    ) from exc
+                raise
             # A database that predates the meta table is at v1 by definition; a
             # brand-new one is created at the current version.
             conn.execute(
@@ -557,6 +611,60 @@ class SqliteStore:
             conn.executescript(_TRIGGERS)
 
         logger.info("SQLite ready at %s (schema v%d)", self._path, stored)
+        self._backfill_fts()
+
+    def _backfill_fts(self, batch_size: int = 2000) -> None:
+        """Populate ``chunks_fts`` for rows written before it existed.
+
+        The sync triggers only cover rows written *after* ``chunks_fts`` was
+        created, so a database that carried chunks before this feature landed
+        needs its lexical index built from what is already there -- the
+        "backfill the FTS index for existing rows in a migration step,
+        resumably" half of PRODUCTION_TODO.md T7.
+
+        Batched and checkpointed via a meta key (the highest chunk ``rowid``
+        already indexed) rather than one large transaction, so a crash or a
+        restart mid-backfill resumes from the last committed batch instead of
+        redoing the whole table -- the same "persisted watermark" shape
+        :meth:`allocate_faiss_ids` uses for its counters. Idempotent and cheap
+        once caught up: a single indexed ``rowid > ?`` scan that returns
+        nothing.
+
+        Runs on every :meth:`initialize`, not only right after a migration --
+        the ingest worker and the API each call it at their own startup, and
+        either can be first to catch a corpus that predates this feature.
+        """
+        while True:
+            last = int(self.get_meta("fts_backfill_rowid") or 0)
+            try:
+                with self._write() as conn:
+                    rows = conn.execute(
+                        "SELECT rowid, chunk_text FROM chunks WHERE rowid > ? "
+                        "ORDER BY rowid LIMIT ?",
+                        (last, batch_size),
+                    ).fetchall()
+                    if not rows:
+                        return
+                    conn.executemany(
+                        "INSERT INTO chunks_fts(rowid, chunk_text) VALUES (?, ?)",
+                        [(r["rowid"], r["chunk_text"]) for r in rows],
+                    )
+                    conn.execute(
+                        "INSERT INTO meta(key, value) VALUES ('fts_backfill_rowid', ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (str(rows[-1]["rowid"]),),
+                    )
+            except sqlite3.DatabaseError:
+                # Another process's backfill (API and ingest worker both call
+                # initialize() at their own startup) committed this same batch
+                # first, so the rowid range we just tried to insert now
+                # collides with what it already wrote. Not a real failure --
+                # re-read the watermark it just advanced and carry on from
+                # there instead of crashing this process's boot.
+                logger.info("FTS backfill batch already applied by another process; resuming")
+                continue
+            if len(rows) < batch_size:
+                return
 
     # ─── Migrations ──────────────────────────────────────────────────────────
 
@@ -1106,6 +1214,55 @@ class SqliteStore:
                 found[record.faiss_id] = record
         return found
 
+    def search_lexical(
+        self, query: str, scope: "SearchFilter", limit: int
+    ) -> list[tuple[int, float]]:
+        """BM25 full-text search, scoped by exactly what the dense path sees.
+
+        Returns ``(faiss_id, score)`` pairs, best match first, ``score``
+        negated from FTS5's ``bm25()`` (a cost -- smaller is better) so that
+        "higher score is a better match" holds across both retrieval lanes,
+        the same convention the cosine-similarity dense path already
+        documents.
+
+        Takes the identical :class:`~rag.core.vector_index.SearchFilter` the
+        dense path resolves once in ``Retriever._scope_for`` and applies it as
+        one predicate on ``chunks.faiss_id`` in the same query as the MATCH --
+        never a separate unscoped fetch narrowed afterwards in Python. That is
+        what makes this "the same owner scoping in SQL" PRODUCTION_TODO.md T7
+        asks for, rather than a second, independently-written filter that
+        could drift from the one FAISS enforces.
+
+        The only method in this file that touches ``chunks_fts`` -- see that
+        table's comment in ``_SCHEMA_TABLES``.
+        """
+        if limit <= 0 or not query.strip():
+            return []
+        if scope.matches_nothing:
+            return []
+
+        match_expr = _fts_match_expression(query)
+        if not match_expr:
+            return []
+        clause, params = _scope_sql(scope)
+
+        sql = (
+            "SELECT c.faiss_id AS faiss_id, bm25(chunks_fts) AS cost "
+            "FROM chunks_fts JOIN chunks c ON c.rowid = chunks_fts.rowid "
+            f"WHERE chunks_fts MATCH ? AND ({clause}) "
+            "ORDER BY cost LIMIT ?"
+        )
+        try:
+            rows = self.connection.execute(sql, [match_expr, *params, limit]).fetchall()
+        except sqlite3.OperationalError:
+            # A malformed MATCH expression is a query-shape problem, not "no
+            # matches" -- swallowing it as an empty result would silently hide
+            # a broken lexical lane behind a still-working dense one, which
+            # is worse than logging and returning nothing from this lane only.
+            logger.warning("chunks_fts rejected query %r; skipping the lexical lane", query)
+            return []
+        return [(int(r["faiss_id"]), -float(r["cost"])) for r in rows]
+
     def faiss_ids_for_owner(
         self,
         owner_id: str,
@@ -1304,3 +1461,50 @@ class SqliteStore:
 def _batched(items: list[Any], size: int) -> Iterable[list[Any]]:
     for start in range(0, len(items), size):
         yield items[start : start + size]
+
+
+def _fts_match_expression(query: str) -> str:
+    """Turn free text into a safe FTS5 ``MATCH`` expression.
+
+    Each whitespace-separated token is individually quoted (internal ``"``
+    doubled, FTS5's own escape for a quote inside a string literal), which
+    turns punctuation a legal citation is full of -- ``/``, ``:``, ``(``,
+    ``)``, ``-`` -- into literal text instead of FTS5 query syntax (column
+    filters, ``NOT``, prefix operators, unbalanced parens). Quoted terms are
+    still tokenised by the same tokenizer as an unquoted term, so this does
+    not change what an ordinary word query matches -- only what a citation
+    string like ``"2019 SCC OnLine SC 1234"`` is parsed as. Adjacent quoted
+    terms default to FTS5's implicit ``AND``, same as adjacent bare terms.
+    """
+    tokens = query.split()
+    return " ".join('"' + token.replace('"', '""') + '"' for token in tokens)
+
+
+def _scope_sql(scope: "SearchFilter") -> tuple[str, list[Any]]:
+    """Render a :class:`SearchFilter` as a ``chunks.faiss_id`` predicate.
+
+    Mirrors, id-range for id-range and allow-list for allow-list, exactly what
+    :meth:`~rag.core.vector_index.VectorIndex._build_params` builds for FAISS
+    -- the two must agree, or a tenant could see a different set of chunks
+    through the lexical lane than through the dense one.
+    """
+    if scope.unrestricted:
+        return "1=1", []
+
+    parts: list[str] = []
+    params: list[Any] = []
+    if scope.include_public:
+        parts.append(f"c.faiss_id BETWEEN {PUBLIC_ID_MIN} AND {PRIVATE_ID_MIN - 1}")
+    if scope.allowed_ids:
+        placeholders = ",".join("?" for _ in scope.allowed_ids)
+        parts.append(f"c.faiss_id IN ({placeholders})")
+        params.extend(scope.allowed_ids)
+
+    if not parts:
+        # scope.matches_nothing already short-circuits callers before this is
+        # reached for the ordinary case (allowed_ids=[], include_public=False);
+        # this is only a defensive fallback in case a future SearchFilter shape
+        # doesn't set either field, so "no expressed scope" still means "see
+        # nothing" rather than falling through to an unrestricted query.
+        return "0=1", []
+    return "(" + " OR ".join(parts) + ")", params

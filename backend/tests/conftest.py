@@ -24,3 +24,9 @@ os.environ.setdefault(
     "RAVENSLAW_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
 )
 os.environ.setdefault("DATA_ROOT", str(Path(tempfile.mkdtemp(prefix="owllex_test_data_"))))
+# app/security.py builds its PyJWKClient once, at import time, from this --
+# tests/test_security.py needs a real (fake) issuer configured for that client
+# to exist at all, and this is the one place guaranteed to run before
+# app.security (or app.config, whose Settings.DEBUG field default this
+# module's DEBUG=true above also freezes for the session) is first imported.
+os.environ.setdefault("CLERK_JWT_ISSUER", "https://test-clerk.example.com")

@@ -37,12 +37,48 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
 from rag.core.services import RagServices
-from rag.core.vector_index import PUBLIC_COLLECTION, USER_COLLECTION, SearchFilter
+from rag.core.vector_index import PUBLIC_COLLECTION, USER_COLLECTION, SearchFilter, SearchHit
 
 logger = logging.getLogger("ravenslaw.rag.retrieval")
+
+# Reciprocal-rank-fusion constant. 60 is the value the original RRF paper
+# (Cormack, Clarke & Buettcher, 2009) settled on, and the one most fusion
+# implementations since have kept -- see PRODUCTION_TODO.md T7.
+_RRF_K = 60
+
+
+def _reciprocal_rank_fusion(
+    dense_hits: Sequence[SearchHit], lexical_hits: Sequence[tuple[int, float]]
+) -> list[SearchHit]:
+    """Merge two independently-ranked hit lists into one, by rank position.
+
+    Dense cosine similarity and BM25 cost live on incomparable scales, so
+    summing or averaging the raw scores would let whichever lane happens to
+    produce larger numbers dominate regardless of how good its matches
+    actually are. RRF sidesteps that: each id's fused score is
+    ``sum(1 / (_RRF_K + rank))`` over every list it appears in, using each
+    list's own 1-based rank rather than its score. A chunk that is the literal
+    text of the query -- a citation, a section number -- typically lands at
+    lexical rank 1 regardless of how the dense embedding happens to place it,
+    which is what lets an exact citation query outrank a merely
+    semantically-similar chunk after fusion.
+
+    Both inputs are assumed already sorted best-first, which is true of a
+    single FAISS call and of :meth:`SqliteStore.search_lexical`'s own
+    ``ORDER BY``.
+    """
+    scores: dict[int, float] = {}
+    for rank, hit in enumerate(dense_hits, start=1):
+        scores[hit.faiss_id] = scores.get(hit.faiss_id, 0.0) + 1.0 / (_RRF_K + rank)
+    for rank, (faiss_id, _score) in enumerate(lexical_hits, start=1):
+        scores[faiss_id] = scores.get(faiss_id, 0.0) + 1.0 / (_RRF_K + rank)
+    return [
+        SearchHit(embedding_id=faiss_id, score=score)
+        for faiss_id, score in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    ]
 
 
 @dataclass(frozen=True)
@@ -118,12 +154,51 @@ class Retriever:
             # invariant that actually guarantees isolation.
             return []
 
+        fetch_k = services.config.overfetch_k(top_k)
         vector = services.embedder.embed_query(query)
-        hits = services.indexes.global_index().search(vector, top_k, scope=scope)
-        if not hits:
+        dense_hits = services.indexes.global_index().search(vector, fetch_k, scope=scope)
+        lexical_hits = services.metadata.search_lexical(query, scope, fetch_k)
+
+        fused = _reciprocal_rank_fusion(dense_hits, lexical_hits)
+        if not fused:
             return []
 
-        return self._hydrate(hits)
+        return self._hydrate(fused)[:top_k]
+
+    def search_lexical(
+        self,
+        query: str,
+        owner_id: str | None = None,
+        top_k: int = 10,
+        *,
+        include_public: bool = True,
+        collection: str | None = None,
+        document_id: str | None = None,
+    ) -> list[RetrievedChunk]:
+        """BM25-only search, over the same tenant-scoped slice as :meth:`search`.
+
+        The lexical counterpart of :meth:`search`: useful standalone for a
+        query that is really a citation or section-number lookup, and this is
+        also what :meth:`search` calls internally before fusing its results
+        with the dense lane. Scoping is computed the same way and by the same
+        code (:meth:`_scope_for`) as the dense path, so the two can never
+        disagree about what a tenant may see.
+        """
+        if not query.strip() or top_k <= 0:
+            return []
+
+        services = self._services
+        scope = self._scope_for(owner_id, include_public, collection, document_id)
+        if scope.matches_nothing:
+            return []
+
+        fetch_k = services.config.overfetch_k(top_k)
+        hits_raw = services.metadata.search_lexical(query, scope, fetch_k)
+        if not hits_raw:
+            return []
+
+        hits = [SearchHit(embedding_id=faiss_id, score=score) for faiss_id, score in hits_raw]
+        return self._hydrate(hits)[:top_k]
 
     def _scope_for(
         self,
@@ -155,7 +230,16 @@ class Retriever:
         return SearchFilter.owned_by(allowed, include_public=include_public)
 
     def _hydrate(self, hits) -> list[RetrievedChunk]:
-        """Join FAISS hits back to their chunk rows, dropping any that are gone."""
+        """Join FAISS hits back to their chunk rows, dropping any that are gone.
+
+        Re-sorts by score after hydration rather than trusting FAISS's own
+        order. Harmless when ``hits`` is already sorted (the common case: one
+        FAISS call, nothing dropped) and necessary the moment it isn't --
+        PQ/IVF distances are approximate over an over-fetched candidate set,
+        so the true top-k can sit anywhere in it, and a future caller that
+        merges hits from more than one search (T7's lexical fusion) cannot
+        assume a single sorted order going in.
+        """
         records = self._services.metadata.chunks_by_faiss_ids([hit.faiss_id for hit in hits])
 
         results: list[RetrievedChunk] = []
@@ -187,6 +271,7 @@ class Retriever:
                     storage_ref=record.storage_ref,
                 )
             )
+        results.sort(key=lambda r: r.score, reverse=True)
         return results
 
     def search_public(self, query: str, top_k: int = 10) -> list[RetrievedChunk]:
@@ -215,9 +300,13 @@ class Retriever:
         if scope.matches_nothing or not query.strip() or k <= 0:
             return []
 
+        fetch_k = self._services.config.overfetch_k(k)
         vector = self._services.embedder.embed_query(query)
-        hits = self._services.indexes.global_index().search(vector, k, scope=scope)
-        return self._hydrate(hits) if hits else []
+        dense_hits = self._services.indexes.global_index().search(vector, fetch_k, scope=scope)
+        lexical_hits = self._services.metadata.search_lexical(query, scope, fetch_k)
+
+        fused = _reciprocal_rank_fusion(dense_hits, lexical_hits)
+        return self._hydrate(fused)[:k] if fused else []
 
 
 def delete_corpus_documents(

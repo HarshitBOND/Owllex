@@ -70,6 +70,8 @@ def build_services(config: RagConfig | None = None, embedder: Embedder | None = 
             signature=embedding_signature(embedder.model_name, embedder.dimension),
             index_factory=config.faiss_index_factory,
             flush_every=config.faiss_flush_every,
+            flush_max=config.faiss_flush_max,
+            nprobe=config.faiss_nprobe,
         ),
         documents=DocumentStore(config, compressor=_build_compressor()),
         user_documents=UserDocumentStore(config),
@@ -104,6 +106,7 @@ def startup(services: RagServices, *, read_only: bool = False) -> None:
     logger.info("Starting RAG stack (DATA_ROOT=%s, read_only=%s)", config.data_root, read_only)
 
     ensure_directories(config)
+    _check_storage_writable(config)
 
     services.metadata.initialize()
     services.metadata.verify_integrity()
@@ -127,6 +130,33 @@ def startup(services: RagServices, *, read_only: bool = False) -> None:
         services.metadata.stats(),
         services.indexes.counts(),
     )
+
+
+def _check_storage_writable(config: RagConfig) -> None:
+    """Fail fast if a configured tier root cannot actually be written to.
+
+    ``ensure_directories`` only calls ``mkdir(parents=True, exist_ok=True)``,
+    which is a silent no-op on a directory that already exists -- the common
+    case on a re-mounted volume, and exactly the case that would otherwise
+    hide a read-only mount or a systemd ``ReadWritePaths=``/
+    ``RequiresMountsFor=`` mismatch (PRODUCTION_TODO.md T4b) until the first
+    real write, which on a query-serving process might not happen until an
+    ingest or a FAISS flush minutes or hours into uptime. This performs the
+    one syscall that actually exercises it: create a real file, then remove
+    it, in each distinct configured root.
+    """
+    for root in {config.ssd_data_root, config.hdd_data_root}:
+        probe = root / ".owllex_write_probe"
+        try:
+            probe.write_text("")
+            probe.unlink()
+        except OSError as exc:
+            raise RuntimeError(
+                f"{root} is not writable: {exc}. If this is running under systemd with "
+                f"ProtectSystem=strict, check that ReadWritePaths= includes this exact path "
+                f"(see backend/deploy/systemd/*.service and backend/deploy/README.md) and "
+                f"that the underlying volume is actually mounted read-write."
+            ) from exc
 
 
 def _check_embedding_signature(services: RagServices) -> None:
