@@ -134,17 +134,51 @@ class RagConfig:
     faiss_flush_every: int
     faiss_flush_max: int
     faiss_nprobe: int
+    faiss_mmap: bool
     retrieval_overfetch: int
 
     # ─── Metadata store ──────────────────────────────────────────────────────
     sqlite_busy_timeout_ms: int
+    # PRODUCTION_TODO.md T18. page_size only takes effect on a database that
+    # has no tables yet and is not already in WAL mode -- see
+    # SqliteStore._connect for the ordering that makes that true on first
+    # boot, and rag/scripts/vacuum_page_size.py for migrating one that
+    # already has data at the default 4096.
+    sqlite_page_size: int
+    # A few GB is safe here even multiplied across this store's one-connection-
+    # per-thread model: mmap_size pages are backed by the OS page cache, which
+    # is shared across every connection (and process) that maps the same
+    # file, so this does not multiply resident memory by the thread count.
+    sqlite_mmap_size_mb: int
+    # Unlike mmap_size, this is SQLite's own *private* pager cache -- real
+    # heap memory, one allocation per connection, not shared. Kept far below
+    # "a few GB" by default for exactly that reason: this store opens one
+    # connection per thread (see SqliteStore's class docstring), and FastAPI's
+    # default thread pool alone could turn a naive multi-GB default into tens
+    # of GB resident. See the longer note in .env.example before raising it.
+    sqlite_cache_size_mb: int
     lmdb_map_size_mb: int
+    # chunk_text is stored zstd-compressed (PRODUCTION_TODO.md T16). Level 19
+    # is zstd's own "high compression, still fast enough to decompress one
+    # hydrated chunk in microseconds" recommendation; dict size is the
+    # trainer's own default (see zstd's --train docs) -- both tunable because
+    # neither has a single right answer across corpus sizes.
+    chunk_text_zstd_level: int
+    chunk_text_zstd_dict_size: int
 
     # ─── Ingestion ───────────────────────────────────────────────────────────
     parser_backend: str
     chunk_size: int
     chunk_overlap: int
     ocr_enabled: bool
+
+    # ─── Dense/lexical lane routing (PRODUCTION_TODO.md T14) ─────────────────
+    # A document with more pages than this, or at least this many characters,
+    # is worth embedding regardless of court. Below both, and not from a court
+    # that always qualifies, it goes to the FTS5-only lexical lane instead of
+    # being embedded -- see rag/app/ingest/pipeline.py::_route_lane.
+    dense_lane_min_pages: int
+    dense_lane_min_chars: int
 
     # ─── Backups ─────────────────────────────────────────────────────────────
     backup_retention_days: int
@@ -161,6 +195,22 @@ class RagConfig:
     max_user_document_mb: int
     max_user_documents_per_owner: int
     user_quota_mb: int
+
+    # ─── Archived document compression ───────────────────────────────────────
+    # Lives here, not in app/config.py, even though rag/app/ingest/compress.py
+    # is the only reader: it is a property of the document *store* (this
+    # module's own composition root builds the compressor -- see
+    # rag/core/services.py::_build_compressor), not of the FastAPI layer. A RAG
+    # script with no HTTP server in the picture at all (rag/scripts/build_index.py,
+    # run against a copied chunks.db on a rented GPU box per PRODUCTION_TODO.md
+    # T10) still calls build_services() -> DocumentStore(...), and app/config.py's
+    # Settings() now refuses to construct in production without CLERK_JWT_ISSUER
+    # (T4a) -- config that script has no reason to need. Keeping this in
+    # rag/core/config.py, which every rag/ entry point already builds, means
+    # importing rag.core.services never drags in app.config at all.
+    pdf_compression_enabled: bool
+    pdf_compression_dpi: int
+    pdf_compression_timeout_seconds: int
 
 
     @classmethod
@@ -222,7 +272,14 @@ class RagConfig:
             archive_root=archive_root,
             app_root=app_root,
             log_root=log_root,
-            embed_model=os.getenv("EMBED_MODEL", "qwen3-embedding-8b").strip(),
+            # PRODUCTION_TODO.md T19: was "qwen3-embedding-8b" here, which
+            # FAISS_ARCHITECTURE.md §1 explains is a ~2.5s-per-query offline/
+            # GPU choice, not a serving one -- while .env.example already
+            # correctly set 0.6b. A host that boots without a complete .env (a
+            # container image built without one, or a test run) silently got
+            # the wrong, unservably slow model. This default must match
+            # .env.example's; if one changes, so must the other.
+            embed_model=os.getenv("EMBED_MODEL", "qwen3-embedding-0.6b").strip(),
             # Qwen3-Embedding-8B emits 4096 dimensions natively but is trained
             # with Matryoshka representation learning, so a truncated prefix is
             # still a valid embedding. 1024 is the default because the index is
@@ -249,6 +306,16 @@ class RagConfig:
             # digit recall@10, silently. FAISS_ARCHITECTURE.md §5's tier table:
             # 16 / 32 / 64 / 96 for tiers 1-4.
             faiss_nprobe=_int("FAISS_NPROBE", 16),
+            # PRODUCTION_TODO.md T17. Default off: below tier 2 the whole
+            # index fits comfortably in RAM and IO_FLAG_MMAP buys nothing but
+            # page faults on cold pages. Once it is on, the process reading
+            # with it must be the read-only side of the T2 split -- the
+            # writer (owllex-ingest) must run with this false, since FAISS
+            # cannot mutate a memory-mapped index in place, and a reader that
+            # sets it must have the T17 reload path (VectorIndex._maybe_reload)
+            # actually exercised, or a flush from the writer freezes it
+            # silently until restart. See FAISS_MMAP in .env.example.
+            faiss_mmap=_flag("FAISS_MMAP", False),
             # PQ/IVF distances are approximate: the true top-k is reliably
             # *inside* the top `RETRIEVAL_OVERFETCH * k` candidates but not
             # reliably at the front of it. Irrelevant for Flat (exact
@@ -256,11 +323,18 @@ class RagConfig:
             # FAISS_ARCHITECTURE.md §5.
             retrieval_overfetch=_int("RETRIEVAL_OVERFETCH", 10),
             sqlite_busy_timeout_ms=_int("SQLITE_BUSY_TIMEOUT_MS", 15_000),
+            sqlite_page_size=_int("SQLITE_PAGE_SIZE", 8192),
+            sqlite_mmap_size_mb=_int("SQLITE_MMAP_SIZE_MB", 2048),
+            sqlite_cache_size_mb=_int("SQLITE_CACHE_SIZE_MB", 64),
             lmdb_map_size_mb=_int("LMDB_MAP_SIZE_MB", _int("HASH_DB_MAP_SIZE_MB", 4096)),
+            chunk_text_zstd_level=_int("CHUNK_TEXT_ZSTD_LEVEL", 19),
+            chunk_text_zstd_dict_size=_int("CHUNK_TEXT_ZSTD_DICT_SIZE", 112_640),
             parser_backend=os.getenv("PARSER_BACKEND", "docling").strip().lower(),
             chunk_size=_int("CHUNK_SIZE", 2000),
             chunk_overlap=_int("CHUNK_OVERLAP", 200),
             ocr_enabled=_flag("OCR_ENABLED", True),
+            dense_lane_min_pages=_int("DENSE_LANE_MIN_PAGES", 3),
+            dense_lane_min_chars=_int("DENSE_LANE_MIN_CHARS", 4000),
             backup_retention_days=_int("BACKUP_RETENTION_DAYS", 14),
             backup_enabled=_flag("BACKUP_ENABLED", True),
             backup_hour=_int("BACKUP_HOUR", 3),
@@ -284,6 +358,11 @@ class RagConfig:
             # enforced on every upload, because on a single mounted volume one
             # user filling the disk takes ingestion and SQLite down with them.
             user_quota_mb=_int("USER_QUOTA_MB", 5120),
+            # Same env var names app/config.py used before T10 moved ownership
+            # here, so a deployed .env needs no changes.
+            pdf_compression_enabled=_flag("RAVENSLAW_PDF_COMPRESSION", True),
+            pdf_compression_dpi=_int("RAVENSLAW_PDF_COMPRESSION_DPI", 72),
+            pdf_compression_timeout_seconds=_int("RAVENSLAW_PDF_COMPRESSION_TIMEOUT", 120),
         )
         cfg.validate()
         return cfg
@@ -405,8 +484,29 @@ class RagConfig:
             raise RuntimeError("CHUNK_SIZE must be > 0")
         if not 0 <= self.chunk_overlap < self.chunk_size:
             raise RuntimeError("CHUNK_OVERLAP must be >= 0 and < CHUNK_SIZE")
+        if self.dense_lane_min_pages <= 0:
+            raise RuntimeError("DENSE_LANE_MIN_PAGES must be > 0")
+        if self.dense_lane_min_chars <= 0:
+            raise RuntimeError("DENSE_LANE_MIN_CHARS must be > 0")
+        # SQLite accepts page_size 512..65536, and only a power of two --
+        # anything else is silently rejected by SQLite itself (page_size
+        # reverts to its previous value), which would make a misconfigured
+        # value invisible rather than refused. Failing loudly here is cheaper
+        # than debugging "why didn't SQLITE_PAGE_SIZE take effect" months later.
+        if self.sqlite_page_size < 512 or self.sqlite_page_size > 65536:
+            raise RuntimeError("SQLITE_PAGE_SIZE must be between 512 and 65536")
+        if self.sqlite_page_size & (self.sqlite_page_size - 1) != 0:
+            raise RuntimeError("SQLITE_PAGE_SIZE must be a power of two")
+        if self.sqlite_mmap_size_mb < 0:
+            raise RuntimeError("SQLITE_MMAP_SIZE_MB must be >= 0 (0 disables mmap I/O)")
+        if self.sqlite_cache_size_mb <= 0:
+            raise RuntimeError("SQLITE_CACHE_SIZE_MB must be > 0")
         if self.lmdb_map_size_mb <= 0:
             raise RuntimeError("LMDB_MAP_SIZE_MB must be > 0")
+        if not 1 <= self.chunk_text_zstd_level <= 22:
+            raise RuntimeError("CHUNK_TEXT_ZSTD_LEVEL must be between 1 and 22")
+        if self.chunk_text_zstd_dict_size <= 0:
+            raise RuntimeError("CHUNK_TEXT_ZSTD_DICT_SIZE must be > 0")
         if self.backup_retention_days < 1:
             raise RuntimeError("BACKUP_RETENTION_DAYS must be >= 1")
         if not 0 <= self.backup_hour <= 23:
@@ -423,6 +523,10 @@ class RagConfig:
             raise RuntimeError("MAX_USER_DOCUMENTS_PER_OWNER must be > 0")
         if self.user_quota_mb < 0:
             raise RuntimeError("USER_QUOTA_MB must be >= 0 (0 disables the quota)")
+        if not 72 <= self.pdf_compression_dpi <= 600:
+            raise RuntimeError("RAVENSLAW_PDF_COMPRESSION_DPI must be between 72 and 600")
+        if self.pdf_compression_timeout_seconds <= 0:
+            raise RuntimeError("RAVENSLAW_PDF_COMPRESSION_TIMEOUT must be > 0")
 
         # The private tree must not be reachable through the public one. If it
         # were, a corpus path built from a court name could be steered into a

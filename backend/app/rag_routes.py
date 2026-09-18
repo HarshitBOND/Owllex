@@ -34,6 +34,30 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".jpg", ".jpeg", ".png"}
 _MISSING_DEPENDENCIES = "RAG dependencies are not installed on this instance (run: uv sync --extra rag)"
 
 
+def _opaque_error(status_code: int, public_message: str, log_message: str) -> HTTPException:
+    """A 5xx `HTTPException` whose body carries a fixed message and a
+    correlation id -- never the exception itself.
+
+    PRODUCTION_TODO.md T19a, Bug B: `detail=f"Search failed: {exc}"` and its
+    several siblings across this file put filesystem paths, SQLite messages
+    naming columns, and FAISS assertions naming source files straight into
+    the HTTP response. The full traceback already goes to the log via
+    `logger.exception` below (whose whole point is that it reads the *active*
+    exception via `sys.exc_info()` -- this must only ever be called from
+    inside the `except` block it is reporting on, same as calling
+    `logger.exception` directly would require); the response body only needs
+    something an operator can `grep` the log for, which is what `reference`
+    is. Not applied to the `_MISSING_DEPENDENCIES` 503s: that message is
+    already fixed and actionable and names no internals, so there is nothing
+    here to fix for it, and not applied to 4xx validation messages (a known
+    file-size ceiling, a malformed field) that were never exception text to
+    begin with.
+    """
+    reference = uuid.uuid4().hex[:12]
+    logger.exception("%s (reference=%s)", log_message, reference)
+    return HTTPException(status_code=status_code, detail=f"{public_message} (reference: {reference})")
+
+
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=1000)
     k: int = Field(5, ge=1, le=20)
@@ -66,16 +90,19 @@ def _services():
     """
     try:
         from rag.core.services import get_services
-    except ImportError as exc:
-        raise HTTPException(status_code=503, detail=f"{_MISSING_DEPENDENCIES}: {exc}")
+    except ImportError:
+        # The exception text used to be appended here too (an ImportError
+        # naming the missing module) -- dropped for the same reason as every
+        # other site below: the log line already has it, via `logger.exception`.
+        logger.exception("RAG dependencies not installed")
+        raise HTTPException(status_code=503, detail=_MISSING_DEPENDENCIES)
 
     try:
         return get_services()
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.exception("RAG stack failed to start")
-        raise HTTPException(status_code=503, detail=f"RAG storage is unavailable: {exc}")
+    except Exception:
+        raise _opaque_error(503, "RAG storage is unavailable", "RAG stack failed to start")
 
 
 def _retriever():
@@ -163,9 +190,8 @@ async def _run_search(label: str, search):
         raise
     except ImportError:
         raise HTTPException(status_code=503, detail=_MISSING_DEPENDENCIES)
-    except Exception as exc:
-        logger.exception("%s failed", label)
-        raise HTTPException(status_code=500, detail=f"Search failed: {exc}")
+    except Exception:
+        raise _opaque_error(500, "Search failed", f"{label} failed")
 
 
 @rag_router.post(
@@ -251,9 +277,8 @@ async def corpus_delete(payload: CorpusDeleteRequest):
         await run_in_threadpool(_delete)
     except ImportError:
         raise HTTPException(status_code=503, detail=_MISSING_DEPENDENCIES)
-    except Exception as exc:
-        logger.exception("Corpus delete failed")
-        raise HTTPException(status_code=500, detail=f"Delete failed: {exc}")
+    except Exception:
+        raise _opaque_error(500, "Delete failed", "Corpus delete failed")
 
     return {"success": True}
 
@@ -380,9 +405,8 @@ async def ingest_rag_document(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception("Could not enqueue RAG ingestion for %s", raw_name)
-        raise HTTPException(status_code=500, detail=f"Could not enqueue ingestion: {e}")
+    except Exception:
+        raise _opaque_error(500, "Could not enqueue ingestion", f"Could not enqueue RAG ingestion for {raw_name}")
 
     logger.info("Enqueued %s (%d page(s)) as job_id=%s", raw_name, len(uploads), job_id)
     return {"job_id": job_id, "status": "queued", "filename": raw_name}
@@ -428,9 +452,8 @@ async def ingest_corpus_document(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception("Could not enqueue corpus ingestion for %s", raw_name)
-        raise HTTPException(status_code=500, detail=f"Could not enqueue ingestion: {e}")
+    except Exception:
+        raise _opaque_error(500, "Could not enqueue ingestion", f"Could not enqueue corpus ingestion for {raw_name}")
 
     logger.info("Enqueued %s into corpus %s as job_id=%s", raw_name, corpus_id, job_id)
     return {"job_id": job_id, "status": "queued", "filename": raw_name}
@@ -525,9 +548,8 @@ async def extract_document_text(
         return result
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception("Document extraction failed for %s", file.filename)
-        raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")
+    except Exception:
+        raise _opaque_error(500, "Extraction failed", f"Document extraction failed for {file.filename}")
     finally:
         _remove(temp_path)
 
@@ -568,9 +590,8 @@ async def compress_document(
             handle.write(content)
         result = await run_in_threadpool(_compress_and_store, temp_path, key, content_type)
         return {"success": True, **result}
-    except Exception as e:
-        logger.exception("Compress-and-store failed for %s", file.filename)
-        raise HTTPException(status_code=500, detail=f"Storage failed: {e}")
+    except Exception:
+        raise _opaque_error(500, "Storage failed", f"Compress-and-store failed for {file.filename}")
     finally:
         _remove(temp_path)
 
@@ -585,7 +606,7 @@ def _compress_and_store(temp_path: str, key: str, content_type: str) -> dict:
     from rag.app.ingest.compress import compress_pdf
 
     services = _services()
-    stored_path, stats = compress_pdf(temp_path)
+    stored_path, stats = compress_pdf(temp_path, services.config)
     try:
         with open(stored_path, "rb") as handle:
             stored_sha256 = hashlib.sha256(handle.read()).hexdigest()
@@ -699,9 +720,8 @@ async def put_private_object(key: str, file: UploadFile = File(...)):
         await run_in_threadpool(_store)
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.exception("Failed to store object")
-        raise HTTPException(status_code=500, detail=f"Storage failed: {exc}")
+    except Exception:
+        raise _opaque_error(500, "Storage failed", "Failed to store object")
     finally:
         _remove(temp_path)
 

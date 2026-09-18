@@ -13,7 +13,7 @@ import logging
 import os
 import threading
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -40,7 +40,100 @@ from .userdetails_routes import userdetails_router
 # app/logging_setup.py for why both.
 _LOG_PATH = configure_logging("rag", debug=settings.DEBUG)
 logger = logging.getLogger("ravenslaw")
-_request_buckets = defaultdict(deque)
+
+
+class _RateLimiter:
+    """In-memory, per-process, per-IP request-rate tracking.
+
+    PRODUCTION_TODO.md T19a. **Not the authoritative limiter** -- nginx's
+    `limit_req zone=owllex_api` (deploy/nginx/owllex.conf) is: it sits in
+    front of this process and is the only layer that sees the raw TCP
+    connection rather than whatever `request.client.host` reports one hop
+    downstream, and it is not reset by a restart of this process the way this
+    in-memory tracker is. This one exists as defence in depth for anything
+    that reaches the app without going through nginx (a healthcheck run
+    directly against 127.0.0.1:8000, a misconfigured proxy in front) -- and
+    because "per-process" only matters at all while `owllex-rag` runs with
+    `--workers 1` (PRODUCTION_TODO.md T2's design); nginx's view stays
+    authoritative across however many workers there are either way.
+
+    Unbounded before this task: every distinct IP that ever reached the
+    process kept its own `deque` forever, in a `Restart=always` unit expected
+    to run for months behind a public endpoint -- a few million probing
+    source addresses is a few hundred MB of dead dict entries. Bounded two
+    ways now, per this task's Change item 1:
+
+    * entries are swept opportunistically, every `_sweep_every` requests
+      rather than on every single one, dropping any IP whose *newest* logged
+      request already fell outside the window (if the newest one is stale,
+      every older one in that bucket is too);
+    * the tracked-IP count is capped independently of the sweep, with LRU
+      eviction (`OrderedDict` + `move_to_end`) -- a burst of unique source
+      addresses between sweeps cannot grow the dict past `max_tracked_ips`
+      regardless of how the sweep timing lands.
+    """
+
+    def __init__(
+        self,
+        window_seconds: float,
+        max_requests: int,
+        max_tracked_ips: int,
+        sweep_every: int = 1000,
+    ) -> None:
+        self._window_seconds = window_seconds
+        self._max_requests = max_requests
+        self._max_tracked_ips = max_tracked_ips
+        self._sweep_every = max(1, sweep_every)
+        self._buckets: "OrderedDict[str, deque]" = OrderedDict()
+        self._requests_since_sweep = 0
+
+    def allow(self, client_ip: str, *, now: float | None = None) -> bool:
+        """True if this request is within the limit; also records it."""
+        now = time.time() if now is None else now
+        window_start = now - self._window_seconds
+
+        bucket = self._buckets.get(client_ip)
+        if bucket is None:
+            bucket = deque()
+            self._buckets[client_ip] = bucket
+        else:
+            # Mark most-recently-used so `_enforce_cap`'s eviction takes the
+            # IPs that have gone quiet the longest, not an arbitrary one.
+            self._buckets.move_to_end(client_ip)
+
+        while bucket and bucket[0] < window_start:
+            bucket.popleft()
+
+        allowed = len(bucket) < self._max_requests
+        if allowed:
+            bucket.append(now)
+
+        self._requests_since_sweep += 1
+        if self._requests_since_sweep >= self._sweep_every:
+            self._sweep(window_start)
+
+        self._enforce_cap()
+        return allowed
+
+    def _sweep(self, window_start: float) -> None:
+        self._requests_since_sweep = 0
+        stale = [ip for ip, bucket in self._buckets.items() if not bucket or bucket[-1] < window_start]
+        for ip in stale:
+            del self._buckets[ip]
+
+    def _enforce_cap(self) -> None:
+        while len(self._buckets) > self._max_tracked_ips:
+            self._buckets.popitem(last=False)  # least-recently-used
+
+    def __len__(self) -> int:
+        return len(self._buckets)
+
+
+_rate_limiter = _RateLimiter(
+    window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+    max_requests=settings.RATE_LIMIT_MAX_REQUESTS,
+    max_tracked_ips=settings.RATE_LIMIT_MAX_TRACKED_IPS,
+)
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
@@ -60,21 +153,12 @@ async def add_security_headers(request: Request, call_next):
     # must never be the thing that trips the limiter and reports an outage it
     # caused itself.
     if not request.url.path.startswith("/health"):
-        now = time.time()
         client_ip = request.client.host if request.client else "unknown"
-        bucket = _request_buckets[client_ip]
-        window_start = now - settings.RATE_LIMIT_WINDOW_SECONDS
-
-        while bucket and bucket[0] < window_start:
-            bucket.popleft()
-
-        if len(bucket) >= settings.RATE_LIMIT_MAX_REQUESTS:
+        if not _rate_limiter.allow(client_ip):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded"},
             )
-
-        bucket.append(now)
 
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"

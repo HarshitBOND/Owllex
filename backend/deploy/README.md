@@ -183,6 +183,29 @@ Every check touches its dependency for real. The one most likely to save the
 deployment is `/health/storage`'s `separate_device`: if `/data` and
 `/opt/owllex` report the same block device, **the volume is not mounted**.
 
+**Quantizer drift (T9b).** A compressed (IVF-based) `FAISS_INDEX_FACTORY` is
+trained once, on the corpus as it existed that day. Owllex's corpus arrives
+court by court, not all at once, so the trained centroids eventually stop
+covering the newest material and its vectors collapse into whichever handful
+of lists happen to be nearest -- slow queries on the overfull lists, and
+worst recall for exactly the newest, most relevant documents on the rest.
+`/health/vector`'s `collections.<name>.quantizer_drift` reports it as two
+independent numbers (either can trip on its own): `max_mean_ratio` (list-size
+imbalance) and `added_since_training_pct` (corpus growth since the last
+train). `severity` is `"ok"`, `"warn"` (either > 3 / > 50%, reported but does
+not change `status`) or `"degraded"` (either > 10 / > 200%, which does). The
+response is a retrain, not an emergency:
+
+```bash
+.venv/bin/python -m rag.scripts.build_index --collection lexvert --collection lexvert_user --yes
+```
+
+Re-embedding every chunk is still the expensive step (see Bulk ingest below),
+but training and adding are cheap once the checkpoint exists, so a retrain
+run is minutes to hours, not the multi-GPU-day cost of the first build.
+Budget it as an occasional line item once High Court ingest is underway, not
+a page.
+
 ---
 
 ## Backups
@@ -333,6 +356,155 @@ between storage roots at the filesystem level rather than going through
 `VectorIndex`, so it never touches the lock. If the worker is still running
 during the move, its next flush recreates a file at the *old* path — orphaned
 from the one the migration just moved — rather than raising anything.
+
+### Changing SQLITE_PAGE_SIZE on an existing database (PRODUCTION_TODO.md T18)
+
+`SQLITE_PAGE_SIZE` (default 8192, against SQLite's own 4096 default) only
+takes effect on a brand-new `chunks.db` — SQLite silently ignores a
+`page_size` change once a database has any tables or is already in WAL mode,
+both of which are true for `chunks.db` the moment it exists. A freshly
+deployed host gets the configured page size for free on first boot; a host
+upgraded from before this setting existed, or one where `SQLITE_PAGE_SIZE`
+is changed later, needs an explicit rebuild.
+
+**Both `owllex-rag` and `owllex-ingest` must be stopped first.** The
+migration script takes a consistent snapshot of the database when it starts
+(`VACUUM INTO`, through the normal SQL layer, so it correctly includes
+anything already committed to the WAL) and writes the rebuilt copy to a
+temporary file before swapping it over the live one — but it cannot see a
+write committed *after* it takes that snapshot. A write from either service
+during the rebuild exists in the live file and is silently discarded when the
+rebuilt copy is swapped in.
+
+```bash
+sudo systemctl stop owllex-ingest owllex-rag
+sudo -u owllex .venv/bin/python -m rag.scripts.vacuum_page_size --dry-run  # confirm what it will do
+sudo -u owllex .venv/bin/python -m rag.scripts.vacuum_page_size --yes
+sudo systemctl start owllex-rag owllex-ingest
+```
+
+**Downtime.** The whole database is read once and written once — for a
+multi-GB `chunks.db` that is minutes at disk speed, not the sub-second run
+this takes against an empty or small database. Size the maintenance window to
+the real corpus. The script verifies the rebuilt copy (`PRAGMA quick_check`,
+row counts matching the source) before it swaps anything in, and leaves the
+live database completely untouched if that check fails.
+
+### Off-box embedding (PRODUCTION_TODO.md T10)
+
+`EMBED_DEVICE=auto` resolves to `cpu` on this box, and bulk-embedding the
+corpus on CPU does not scale past Tier 1 (`FAISS_ARCHITECTURE.md` §9). Query
+embedding stays here regardless — one query at ~80ms on CPU is fine — but a
+full `rag/scripts/build_index.py` run (a model change, a factory change, or
+recovering `quantizer_drift`) should run on a rented GPU box against a copy
+of `chunks.db`, never on `owllex-rag` or `owllex-ingest`.
+
+**Ship out**, from this box:
+
+```bash
+sudo systemctl stop owllex-ingest   # nothing else may write chunks.db meanwhile
+scp /data/sqlite/chunks.db gpu-box:/build/sqlite/chunks.db
+sudo systemctl start owllex-ingest  # the copy is a point-in-time snapshot; new
+                                     # ingests after this line will not be in
+                                     # the index this build produces
+```
+
+**Build**, on the GPU box — it needs nothing but this checkout's `rag/`
+package, `chunks.db`, and its own scratch `DATA_ROOT` to write the index into.
+It does **not** need a `.env`, `CLERK_JWT_ISSUER`, or anything else from the
+FastAPI app: `build_index.py` only ever constructs `rag.core.services`, which
+resolves its own configuration from `rag/core/config.py` and never imports
+`app.config`.
+
+```bash
+DATA_ROOT=/build SQLITE_PATH=/build/sqlite/chunks.db \
+FAISS_INDEX_FACTORY="OPQ64_1024,IVF8192,PQ64" EMBED_DEVICE=cuda \
+  .venv/bin/python -m rag.scripts.build_index --all --yes
+```
+
+This produces `/build/faiss/owllex.faiss` and `/build/faiss/owllex.meta.json`
+— the two artifacts to ship back. Nothing else `build_index.py` writes
+(the embedding checkpoint under `/build/faiss/owllex.build_checkpoint/`)
+needs to leave the GPU box.
+
+**Ship back and install**, on this box:
+
+```bash
+sudo systemctl stop owllex-ingest
+scp gpu-box:/build/faiss/owllex.faiss gpu-box:/build/faiss/owllex.meta.json /data/faiss/
+sudo systemctl start owllex-ingest
+sudo systemctl restart owllex-rag   # loads the new index into RAM
+```
+
+**The safety net.** If the GPU box's `EMBED_MODEL`/`EMBED_DIM` ever drifts
+from this box's configuration, `startup()`'s embedding-signature check
+refuses to serve the mismatched index rather than returning nonsense
+neighbours — this is the same check `rebuild_index.py` relies on, comparing
+the signature recorded in `chunks.db`'s `meta` table against the embedder
+this process is configured to run. It fires on the GPU box too, immediately,
+if the copied `chunks.db` already carries a signature the GPU box's own
+config doesn't match — before anything is embedded, not after a wasted run.
+
+**Chunks/second.** No number is recorded here yet: reproducing this task's
+own dry run only proved the round trip mechanically (deterministic test
+embedder, no GPU available in that environment) rather than the real
+per-model throughput the Tier 3 planning assumption in `FAISS_ARCHITECTURE.md`
+should eventually be re-derived from. Record `embedded %d/%d chunks (%.1f/s)`
+from a real GPU run's log here once one has been done.
+
+---
+
+## Scraping (PRODUCTION_TODO.md T12)
+
+`rag/scrapping/sources/sci-judgments/download.ts` launches a real, visible
+Chromium (`headless: false`) because scr.sci.gov.in's bot defence fails
+headless Chromium outright, and a human has to solve the CAPTCHA inside that
+window. A bare VPS has no display for it to open on.
+
+**One-time setup**, on the VPS:
+
+```bash
+sudo apt-get install -y xvfb x11vnc websockify novnc
+cd /opt/owllex && npx playwright install --with-deps chromium
+```
+
+`npm ci` alone is not enough for this: `playwright`, `tsx`, and `lmdb` are
+regular `dependencies` (not `devDependencies`) precisely because `deploy.sh`
+step 7 runs `npm ci --omit=dev` — moving them was part of T12, since the
+scraper toolchain the omit-dev install claims to set up cannot import any of
+the three otherwise.
+
+**Run a session**, on the VPS:
+
+```bash
+sudo -u owllex ./deploy/scrape-session.sh sci:download -- 25
+```
+
+This starts Xvfb (the virtual display), x11vnc (serves it over VNC), and
+websockify + noVNC (bridges VNC to a plain browser tab), then runs the
+scraper against that display. From a laptop, in a separate terminal:
+
+```bash
+ssh -L 6080:127.0.0.1:6080 <user>@<vps-host>
+open http://127.0.0.1:6080/vnc.html
+```
+
+Solve the CAPTCHA and run a search in the tab that opens; `download.ts` takes
+over as soon as results appear. Both the VNC and noVNC listeners bind
+`127.0.0.1` only, reachable exclusively through the SSH tunnel above —
+**never expose 5900 or 6080 publicly**, that is an unauthenticated remote
+desktop onto the corpus server.
+
+If nobody solves the CAPTCHA, `download.ts` no longer hangs forever holding
+the browser open: it gives up after `SCRAPE_SOLVE_TIMEOUT_MS` (default 15
+minutes) and exits cleanly. This matters most for the admin panel's "SC
+Judgment Scraper" tab, which launches `download.ts` directly (no
+`scrape-session.sh`, since that panel already runs on a box with a display)
+as an unattended child process with no one necessarily watching it.
+
+Downloaded PDFs are archived under `rag/scrapping/data/raw/sci/` and copied
+into `INBOX_ROOT/sci/` as they land — see Bulk ingest above; the scraper
+never calls the serving API (T11).
 
 ---
 

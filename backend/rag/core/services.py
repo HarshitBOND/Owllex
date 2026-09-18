@@ -61,7 +61,15 @@ def build_services(config: RagConfig | None = None, embedder: Embedder | None = 
 
     return RagServices(
         config=config,
-        metadata=SqliteStore(config.sqlite_path, busy_timeout_ms=config.sqlite_busy_timeout_ms),
+        metadata=SqliteStore(
+            config.sqlite_path,
+            busy_timeout_ms=config.sqlite_busy_timeout_ms,
+            zstd_level=config.chunk_text_zstd_level,
+            zstd_dict_size=config.chunk_text_zstd_dict_size,
+            page_size=config.sqlite_page_size,
+            mmap_size_mb=config.sqlite_mmap_size_mb,
+            cache_size_mb=config.sqlite_cache_size_mb,
+        ),
         hashes=HashIndex(config.lmdb_path, map_size_mb=config.lmdb_map_size_mb),
         embedder=embedder,
         indexes=VectorIndexRegistry(
@@ -72,19 +80,28 @@ def build_services(config: RagConfig | None = None, embedder: Embedder | None = 
             flush_every=config.faiss_flush_every,
             flush_max=config.faiss_flush_max,
             nprobe=config.faiss_nprobe,
+            mmap=config.faiss_mmap,
         ),
-        documents=DocumentStore(config, compressor=_build_compressor()),
+        documents=DocumentStore(config, compressor=_build_compressor(config)),
         user_documents=UserDocumentStore(config),
     )
 
 
-def _build_compressor():
-    """Ghostscript recompression, if this image has it. Optional by design."""
+def _build_compressor(config: RagConfig):
+    """Ghostscript recompression, if this image has it. Optional by design.
+
+    ``compress_pdf`` takes ``config`` explicitly (see its docstring) so this
+    import never reaches into ``app.config`` -- build_services() must be
+    constructible with only rag/core's own configuration, since
+    rag/scripts/build_index.py (PRODUCTION_TODO.md T10) and every other
+    offline rag/ script run it with no FastAPI app, and therefore none of its
+    settings, in the picture at all.
+    """
     try:
         from rag.app.ingest.compress import compress_pdf
     except ImportError:
         return None
-    return compress_pdf
+    return lambda src_path: compress_pdf(src_path, config)
 
 
 def startup(services: RagServices, *, read_only: bool = False) -> None:
@@ -104,6 +121,21 @@ def startup(services: RagServices, *, read_only: bool = False) -> None:
     """
     config = services.config
     logger.info("Starting RAG stack (DATA_ROOT=%s, read_only=%s)", config.data_root, read_only)
+    # PRODUCTION_TODO.md T19: the resolved configuration that most determines
+    # whether this process is serving the right thing, at the right speed, off
+    # the right disks -- logged once, unconditionally, at INFO rather than
+    # left to be inferred from behaviour. embed_model/index_factory/nprobe are
+    # the three FAISS_ARCHITECTURE.md sizing decisions a wrong .env silently
+    # gets wrong (T19's own "Why"); the two tier roots and storage_is_split
+    # are what T4b's split-host validation is checking in the first place --
+    # an operator staring at a boot log should not have to also read
+    # rag/core/config.py to know which volume anything landed on.
+    logger.info(
+        "RAG config: embed_model=%s embed_dim=%d faiss_index_factory=%s faiss_nprobe=%d "
+        "faiss_mmap=%s ssd_data_root=%s hdd_data_root=%s storage_is_split=%s",
+        config.embed_model, config.embed_dim, config.faiss_index_factory, config.faiss_nprobe,
+        config.faiss_mmap, config.ssd_data_root, config.hdd_data_root, config.storage_is_split,
+    )
 
     ensure_directories(config)
     _check_storage_writable(config)

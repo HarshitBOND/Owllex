@@ -24,7 +24,14 @@ npm run scrape:sci:download -- 25
 Both open a browser window and wait. Solve the CAPTCHA and run a real search;
 `download.ts` watches the results table and takes over as soon as rows appear
 (no terminal interaction needed, so it can also be launched from the admin
-panel's "SC Judgment Scraper" tab, which runs it as a child process).
+panel's "SC Judgment Scraper" tab, which runs it as a child process). If
+nobody solves the CAPTCHA, `download.ts` gives up after
+`SCRAPE_SOLVE_TIMEOUT_MS` (default 15 minutes, PRODUCTION_TODO.md T12) and
+exits cleanly rather than holding the browser open forever.
+
+Both need a real Chromium window, which a VPS with no display cannot open —
+`../../../deploy/scrape-session.sh` gives it a virtual one and a way to watch
+it over an SSH tunnel; see `deploy/README.md`'s Scraping section.
 
 ## The one non-obvious mechanic
 
@@ -41,13 +48,15 @@ for it to actually disappear before touching the next row.
 CNR, title, and the listing-page text (which holds the coram, decision date,
 case number and headnote summary, all worth keeping).
 
-Each PDF is also handed straight to the backend's `/api/v1/rag/ingest`
-endpoint as it downloads the same pipeline the admin "RAG Ingest" tab
-uses so it lands in the knowledge base (chunked, embedded, stored in Chroma)
-without a separate batch step. This needs `BACKEND_INTERNAL_TOKEN` (matching
-the backend's `RAVENSLAW_INTERNAL_TOKEN`) and `NEXT_PUBLIC_BACKEND_API` in the
-environment; without them, ingestion is skipped with a warning and the PDF is
-still downloaded and kept on disk/R2 for a manual retry.
+Each PDF is also copied into `INBOX_ROOT/sci/` as it downloads, the same drop
+directory a manual bulk import uses and the same court-hint convention
+`ingest_worker.py` reads from a top-level subdirectory name, so it lands in
+the knowledge base without a separate batch step (PRODUCTION_TODO.md T11: the
+scraper never calls the serving API directly -- `owllex-ingest.service` drains
+the inbox on its own schedule, so a slow OCR run never blocks a user query).
+Never fatal: if the inbox isn't writable, queueing is skipped with a warning
+and the PDF is still downloaded and kept in `../../data/raw/sci/` for a manual
+retry.
 
 ## Files
 

@@ -310,15 +310,64 @@ def _collection_health(config, services, collection: str) -> dict[str, Any]:
 
     expected = services.metadata.stats(collection)["chunk_count"]
     entry["sqlite_chunks"] = expected
+    status = STATUS_OK
+    details: list[str] = []
+
     if expected != index.ntotal:
-        entry["status"] = STATUS_DEGRADED
-        entry["detail"] = (
+        status = STATUS_DEGRADED
+        details.append(
             f"drift: SQLite has {expected} chunks, FAISS has {index.ntotal} vectors. "
             f"Run rag/scripts/rebuild_index.py --collection {collection}."
         )
-    else:
-        entry["status"] = STATUS_OK
+
+    # PRODUCTION_TODO.md T9b: quantizer drift, for a compressed (IVF-based)
+    # factory. Trained once on the corpus as it existed that day, so a corpus
+    # that grows court by court eventually collapses new material into
+    # whichever handful of lists happen to be nearest the old centroids --
+    # neither the SQLite-count check above nor a deleted-vector percentage
+    # catches that; it is silent on both sides (slow queries on the overfull
+    # lists, missed recall on everything that landed there instead).
+    quantizer_drift = index.drift_stats()
+    if quantizer_drift is not None:
+        severity = _quantizer_drift_severity(quantizer_drift)
+        quantizer_drift["severity"] = severity
+        entry["quantizer_drift"] = quantizer_drift
+        if severity != "ok":
+            # "degraded" escalates the endpoint's own status; "warn" is
+            # reported (severity, and in `detail`) without doing so -- it is
+            # an early signal an operator can act on before it matters, not
+            # yet the thing monitoring should page on.
+            if severity == "degraded" and status == STATUS_OK:
+                status = STATUS_DEGRADED
+            details.append(
+                f"quantizer drift ({severity}): max/mean list size "
+                f"{quantizer_drift.get('max_mean_ratio')}, "
+                f"{quantizer_drift.get('added_since_training_pct')}% vectors added since "
+                f"training -- retrain with rag/scripts/build_index.py (no re-embedding needed)."
+            )
+
+    entry["status"] = status
+    if details:
+        entry["detail"] = " ".join(details)
     return entry
+
+
+def _quantizer_drift_severity(stats: dict[str, Any]) -> str:
+    """``ok`` / ``warn`` / ``degraded`` per PRODUCTION_TODO.md T9b's thresholds.
+
+    Either signal can trip a threshold on its own -- an overfull list and a
+    corpus that has grown a lot since training are two different symptoms of
+    the same cause, not one score. ``warn`` surfaces in the response without
+    escalating the endpoint's overall status past what SQLite/FAISS drift
+    already might have set it to; ``degraded`` does.
+    """
+    ratio = stats.get("max_mean_ratio")
+    added_pct = stats.get("added_since_training_pct")
+    if (ratio is not None and ratio > 10) or (added_pct is not None and added_pct > 200):
+        return "degraded"
+    if (ratio is not None and ratio > 3) or (added_pct is not None and added_pct > 50):
+        return "warn"
+    return "ok"
 
 
 # ─── Storage ─────────────────────────────────────────────────────────────────

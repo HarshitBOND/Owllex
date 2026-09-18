@@ -10,7 +10,15 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-const ENV_KEYS = ["DATA_ROOT", "HDD_DATA_ROOT", "SSD_DATA_ROOT", "LEGAL_CORPUS_ROOT", "PDF_ROOT", "BACKUP_ROOT"]
+const ENV_KEYS = [
+  "DATA_ROOT",
+  "HDD_DATA_ROOT",
+  "SSD_DATA_ROOT",
+  "LEGAL_CORPUS_ROOT",
+  "PDF_ROOT",
+  "BACKUP_ROOT",
+  "INBOX_ROOT",
+]
 const savedEnv: Record<string, string | undefined> = {}
 
 let root: string
@@ -90,6 +98,23 @@ describe("paths.ts on a split host", () => {
     const { pdfRoot, backupRoot } = await import("../../backend/rag/scrapping/paths.js")
     expect(pdfRoot()).toBe(join(root, "single-volume", "legal_corpus"))
     expect(backupRoot()).toBe(join(root, "single-volume", "backups"))
+  })
+
+  it("resolves the inbox under HDD_DATA_ROOT, matching rag/core/config.py's inbox_root default", async () => {
+    process.env.DATA_ROOT = join(root, "data-root-should-not-be-used")
+    process.env.HDD_DATA_ROOT = join(root, "hdd")
+    delete process.env.INBOX_ROOT
+
+    const { inboxRoot } = await import("../../backend/rag/scrapping/paths.js")
+    expect(inboxRoot()).toBe(join(root, "hdd", "inbox"))
+  })
+
+  it("an explicit INBOX_ROOT always wins", async () => {
+    process.env.HDD_DATA_ROOT = join(root, "hdd")
+    process.env.INBOX_ROOT = join(root, "wherever-the-operator-said")
+
+    const { inboxRoot } = await import("../../backend/rag/scrapping/paths.js")
+    expect(inboxRoot()).toBe(join(root, "wherever-the-operator-said"))
   })
 })
 

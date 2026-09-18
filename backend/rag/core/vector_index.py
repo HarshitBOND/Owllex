@@ -28,13 +28,23 @@ import json
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 
 logger = logging.getLogger("ravenslaw.rag.faiss")
+
+# PRODUCTION_TODO.md T17: how often a loaded index re-`stat`s its sidecar to
+# notice another process's flush. A `stat()` is cheap enough to do on every
+# search, but that would still be one extra syscall per query for no benefit
+# between flushes (which, per FAISS_FLUSH_EVERY/FAISS_FLUSH_MAX, are at most
+# every few seconds even under heavy ingest) -- so this throttles the *check*,
+# not the reload itself: a generation change is always picked up on the first
+# search at or after this many seconds have elapsed since the last check.
+_RELOAD_CHECK_INTERVAL_SECONDS = 2.0
 
 # FAISS's own minimum training points per centroid before it starts warning and
 # producing a degenerate quantizer (PRODUCTION_TODO.md T9a). Duplicated from
@@ -165,6 +175,7 @@ class VectorIndex:
         flush_every: int = 1,
         flush_max: int = 100_000,
         nprobe: int = 16,
+        mmap: bool = False,
     ) -> None:
         self.collection = collection
         self.path = Path(path)
@@ -173,6 +184,14 @@ class VectorIndex:
         self.signature = signature
         self.index_factory = index_factory
         self.nprobe = nprobe
+        # PRODUCTION_TODO.md T17: read the index with faiss.IO_FLAG_MMAP
+        # instead of fully deserialising it into RAM. Only probed inverted
+        # lists are then touched per search instead of the whole file, which
+        # is what keeps resident memory near the coarse quantizer's size
+        # rather than the whole corpus at tier 3/4. Must be False in whichever
+        # process writes (see _acquire_write_lock and the reload note below) --
+        # FAISS does not support mutating a memory-mapped index in place.
+        self._mmap = mmap
         self._flush_every = max(1, flush_every)
         # Never below the floor: a caller that deliberately passes a huge
         # flush_every (rebuild_index.py's staging index uses 10**9 to defer
@@ -194,6 +213,25 @@ class VectorIndex:
         # add/remove/flush -- see `_acquire_write_lock`.
         self.lock_path = self.path.with_suffix(".lock")
         self._lock_file = None
+        # PRODUCTION_TODO.md T9b: the corpus size (and, best-effort, the
+        # document date range of the training sample) as of the last time a
+        # non-flat factory was trained. Compared against the live `ntotal` to
+        # report how much the corpus has grown since -- a compressed index's
+        # quantizer is trained once, on the corpus as it existed that day, and
+        # nothing else records what "that day" looked like. Populated either
+        # by `train()`/`_train()`, or from the sidecar when an existing index
+        # with these fields already recorded is loaded -- see `_verify_meta`.
+        self.trained_at_ntotal: int | None = None
+        self.training_date_range: tuple[str, str] | None = None
+
+        # PRODUCTION_TODO.md T17: monotonically bumped by every `flush()` and
+        # persisted in the sidecar, so a reader that opened the file at an
+        # older generation can tell -- without diffing contents -- that a
+        # newer one exists on disk. `_last_reload_check` throttles how often a
+        # search bothers to `stat()` the sidecar; see
+        # `_RELOAD_CHECK_INTERVAL_SECONDS`.
+        self._generation: int = 0
+        self._last_reload_check: float = 0.0
 
     # ─── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -207,7 +245,7 @@ class VectorIndex:
 
             if self.path.exists():
                 self._verify_meta()
-                index = faiss.read_index(str(self.path))
+                index = self._read_index_from_disk(faiss)
                 if index.d != self.dimension:
                     raise RuntimeError(
                         f"{self.path} was built with dimension {index.d}, but EMBED_DIM is "
@@ -237,6 +275,19 @@ class VectorIndex:
         base = faiss.index_factory(self.dimension, self.index_factory, faiss.METRIC_INNER_PRODUCT)
         return faiss.IndexIDMap2(base)
 
+    def _read_index_from_disk(self, faiss):
+        """`faiss.read_index`, memory-mapped when configured (T17).
+
+        ``IO_FLAG_MMAP`` makes FAISS touch only the pages a search actually
+        probes instead of deserialising the whole file into RAM -- at tier 4
+        the difference is the ~124 GB FAISS_ARCHITECTURE.md §6 budgets versus
+        the coarse quantizer alone (a few GB). Only meaningful for a factory
+        with inverted lists to page in lazily; harmless to pass regardless.
+        """
+        if self._mmap:
+            return faiss.read_index(str(self.path), faiss.IO_FLAG_MMAP)
+        return faiss.read_index(str(self.path))
+
     def _verify_meta(self) -> None:
         """Refuse to load an index built by a different model or factory.
 
@@ -259,6 +310,25 @@ class VectorIndex:
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning("Unreadable index metadata %s: %s", self.meta_path, exc)
             return
+
+        # Carried forward regardless of whether the checks below pass -- these
+        # are informational (T9b's drift signals), not something to verify,
+        # and a process that loads an already-trained index still needs them
+        # to compute drift later.
+        stored_trained_at = meta.get("trained_at_ntotal")
+        if isinstance(stored_trained_at, int):
+            self.trained_at_ntotal = stored_trained_at
+        stored_date_range = meta.get("training_date_range")
+        if isinstance(stored_date_range, list) and len(stored_date_range) == 2:
+            self.training_date_range = (stored_date_range[0], stored_date_range[1])
+
+        # T17: baseline generation for the reload check below. Absent on an
+        # index written before this field existed -- 0 is correct there too,
+        # since flush() will write generation 1 on its own first write and
+        # nothing on disk claims a newer one in the meantime.
+        stored_generation = meta.get("generation")
+        if isinstance(stored_generation, int):
+            self._generation = stored_generation
 
         stored = meta.get("signature")
         if stored and stored != self.signature:
@@ -315,6 +385,19 @@ class VectorIndex:
         its first write instead of silently clobbering whichever one flushes
         last. Acquired lazily (not in `load()`) so a read-only process, like
         the API serving search, never contends for it at all.
+
+        PRODUCTION_TODO.md T17: this guard is **per-process, not a global
+        ban on writing** -- it does not know or care whether this process
+        also happens to be reading with ``FAISS_MMAP`` on. The design it
+        enforces is a role split, not a mode split: the ingest worker writes
+        and runs with ``FAISS_MMAP=false`` (mmap and mutation do not mix, and
+        the worker never searches, so it has nothing to gain from mmap
+        anyway); the API mmaps and never calls `add`/`remove`/`flush` at all,
+        so it never reaches this method; `backup_now.py` (T2a) opens
+        `read_only=True`, so it never reaches it either. A process on the
+        wrong side of that split -- an API instance that somehow tried to
+        write, or two ingest workers started at once -- is exactly what this
+        lock exists to fail loudly rather than let corrupt silently.
         """
         if self._lock_file is not None:
             return
@@ -349,7 +432,13 @@ class VectorIndex:
             self._unflushed += len(embedding_ids)
             self._maybe_flush()
 
-    def train(self, vectors: np.ndarray) -> None:
+    def train(
+        self,
+        vectors: np.ndarray,
+        *,
+        trained_at_ntotal: int | None = None,
+        training_date_range: tuple[str, str] | None = None,
+    ) -> None:
         """Explicitly train a non-flat factory on a bulk sample.
 
         For a bulk build (``rag/scripts/build_index.py``), which must train on
@@ -360,6 +449,13 @@ class VectorIndex:
         PRODUCTION_TODO.md T9/T9a). A no-op if the index is already trained
         (e.g. every call after the first, or a factory like ``Flat`` that
         never needs training), so callers can invoke it unconditionally.
+
+        ``trained_at_ntotal``/``training_date_range`` (T9b) record what the
+        corpus looked like at training time, for the drift signals in
+        :meth:`drift_stats`. The caller passes them because only it knows the
+        true corpus size the training sample was drawn from (the sample
+        itself may be a fraction of it) and, from SQLite, the sample's date
+        range -- neither is derivable from ``vectors`` alone.
         """
         vectors = self._as_matrix(vectors)
         with self._lock:
@@ -367,7 +463,9 @@ class VectorIndex:
             index = self.index
             if index.is_trained:
                 return
-            self._train(vectors)
+            self._train(vectors, trained_at_ntotal=trained_at_ntotal)
+            if training_date_range is not None:
+                self.training_date_range = training_date_range
             self._dirty = True
 
     def remove(self, embedding_ids: Sequence[int]) -> int:
@@ -385,7 +483,7 @@ class VectorIndex:
                 self._maybe_flush()
             return removed
 
-    def _train(self, vectors: np.ndarray) -> None:
+    def _train(self, vectors: np.ndarray, *, trained_at_ntotal: int | None = None) -> None:
         """Train a non-flat factory (IVF/PQ) before its first insert.
 
         Deliberately not buffered: silently holding vectors back until enough
@@ -426,6 +524,16 @@ class VectorIndex:
             )
         logger.info("Training %s on %d vectors", self.collection, vectors.shape[0])
         self.index.train(vectors)
+        # PRODUCTION_TODO.md T9b: the baseline `drift_stats` measures growth
+        # against. `add()`'s implicit path has no better number than "however
+        # many vectors are in the batch that triggered training" -- that
+        # whole batch is what gets added immediately afterwards. The explicit
+        # bulk path (`train()`) passes the true final corpus size instead,
+        # since its training sample is deliberately smaller than what will
+        # actually be added.
+        self.trained_at_ntotal = (
+            trained_at_ntotal if trained_at_ntotal is not None else vectors.shape[0]
+        )
 
     # ─── Reads ───────────────────────────────────────────────────────────────
 
@@ -462,6 +570,8 @@ class VectorIndex:
         """
         import faiss
 
+        self._maybe_reload()
+
         if scope is None:
             scope = (
                 SearchFilter.everything()
@@ -494,6 +604,76 @@ class VectorIndex:
             for i, s in zip(ids[0], scores[0])
             if i != -1
         ]
+
+    def _maybe_reload(self) -> None:
+        """Pick up a newer generation flushed by another process (T17).
+
+        The hazard this exists for: ``flush()`` writes a temp file and
+        ``os.replace``s it over the live one. Rename swaps the directory
+        entry to a new inode; it does not touch a file this process already
+        opened -- ``faiss.read_index`` (mmap or not) keeps reading the old
+        inode's bytes forever. Reproduced on faiss 1.15.0: a reader opened at
+        ntotal 2000 still reports 2000, and cannot see ids the writer added
+        past that point, after the writer's ``os.replace`` -- silently and
+        permanently, until the reader process restarts. That is worst for a
+        mmapped reader (T17's whole point is to *not* reload the file into
+        RAM), but a fully-loaded, non-mmap reader is exactly as stale --
+        `read_index` without the mmap flag also never looks at the file
+        again -- so this check is not gated on ``self._mmap``.
+
+        Throttled to at most once per ``_RELOAD_CHECK_INTERVAL_SECONDS`` so a
+        hot search path pays a ``stat()`` only occasionally, not per query.
+        The actual swap happens under ``self._lock``, the same lock `search()`
+        holds for the whole duration of the native FAISS call below -- so a
+        reload can never happen while a search on the old handle is
+        in-flight; it simply waits for the lock like any other writer would,
+        and the old handle is only dropped (and eligible for GC) once no
+        thread can still be inside a call using it.
+        """
+        if self._index is None:
+            return
+        now = time.monotonic()
+        with self._lock:
+            if now - self._last_reload_check < _RELOAD_CHECK_INTERVAL_SECONDS:
+                return
+            self._last_reload_check = now
+            if not self.meta_path.exists():
+                return
+            try:
+                meta = json.loads(self.meta_path.read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Could not read %s for reload check: %s", self.meta_path, exc)
+                return
+            generation = meta.get("generation")
+            if not isinstance(generation, int) or generation <= self._generation:
+                return
+
+            import faiss
+
+            try:
+                new_index = self._read_index_from_disk(faiss)
+            except Exception:
+                logger.exception(
+                    "Failed to reload FAISS index %s at generation %d; keeping the "
+                    "previous handle (generation %d)",
+                    self.collection, generation, self._generation,
+                )
+                return
+            if new_index.d != self.dimension:
+                logger.error(
+                    "Refusing to reload %s: on-disk dimension %d does not match "
+                    "configured EMBED_DIM %d", self.path.name, new_index.d, self.dimension,
+                )
+                return
+
+            old_generation = self._generation
+            old_ntotal = self.ntotal
+            self._index = new_index
+            self._generation = generation
+            logger.info(
+                "Reloaded FAISS index %s: generation %d -> %d (%d -> %d vectors)",
+                self.collection, old_generation, generation, old_ntotal, int(new_index.ntotal),
+            )
 
     def _build_params(self, faiss, scope: "SearchFilter"):
         """Turn a scope into FAISS search parameters plus the objects to keep alive.
@@ -556,6 +736,76 @@ class VectorIndex:
         keepalive.append(params)
         return params, tuple(keepalive)
 
+    def ivf_list_stats(self) -> dict[str, Any] | None:
+        """Inverted-list size distribution for an IVF-based factory.
+
+        ``None`` for Flat/HNSW/plain-PQ factories, which have no inverted
+        lists to imbalance.
+
+        PRODUCTION_TODO.md T9b: the real quantizer-drift failure mode is list
+        *imbalance* from training on one distribution and then adding
+        another -- not fragmentation from deletes. ``remove_ids`` genuinely
+        compacts an IVF index (verified: deleting half of 4,000 vectors took
+        ``sum(list_size)`` from 4,000 to 2,000 and shrank the file
+        proportionally), so a deleted-vector percentage is not the signal to
+        alarm on; a lopsided ``max/mean`` ratio is.
+        """
+        import faiss
+
+        with self._lock:
+            if self._index is None:
+                return None
+            try:
+                ivf = faiss.extract_index_ivf(self._index)
+            except RuntimeError:
+                return None
+            nlist = int(ivf.nlist)
+            if nlist == 0:
+                return None
+            sizes = [ivf.invlists.list_size(i) for i in range(nlist)]
+
+        total = sum(sizes)
+        largest = max(sizes)
+        mean = total / nlist
+        return {
+            "nlist": nlist,
+            "max_list_size": largest,
+            "mean_list_size": round(mean, 2),
+            "empty_lists": sum(1 for size in sizes if size == 0),
+            "max_mean_ratio": round(largest / mean, 2) if mean else None,
+        }
+
+    def drift_stats(self) -> dict[str, Any] | None:
+        """Quantizer-drift signals: list imbalance and growth since training.
+
+        ``None`` when the factory has no IVF component -- see
+        :meth:`ivf_list_stats`. The two numbers are independent and either
+        can indicate drift on its own: an overfull list scans too much of the
+        corpus per query (latency), while a court's worth of vectors that all
+        landed in a handful of lists ``nprobe`` never happens to probe means
+        recall for exactly that material is worst (PRODUCTION_TODO.md T9b).
+        Callers should check both rather than folding them into one score.
+        """
+        stats = self.ivf_list_stats()
+        if stats is None:
+            return None
+
+        stats["trained_at_ntotal"] = self.trained_at_ntotal
+        stats["training_date_range"] = (
+            list(self.training_date_range) if self.training_date_range else None
+        )
+        if self.trained_at_ntotal:
+            added = self.ntotal - self.trained_at_ntotal
+            stats["added_since_training"] = added
+            stats["added_since_training_pct"] = round(added / self.trained_at_ntotal * 100, 1)
+        else:
+            # No recorded baseline (an index built before this field existed,
+            # or one whose sidecar was lost) -- report the imbalance signal
+            # alone rather than a misleading 0%/None growth figure.
+            stats["added_since_training"] = None
+            stats["added_since_training_pct"] = None
+        return stats
+
     def _as_matrix(self, vectors: np.ndarray) -> np.ndarray:
         matrix = np.asarray(vectors, dtype=np.float32)
         if matrix.ndim == 1:
@@ -606,6 +856,11 @@ class VectorIndex:
             tmp_path = self.path.with_suffix(".faiss.tmp")
             faiss.write_index(self._index, str(tmp_path))
             os.replace(tmp_path, self.path)
+            # T17: bumped on every flush, not only when it changes something a
+            # reader would notice by content -- a monotonic counter is what
+            # lets a reader tell "there is a newer file" apart from "I have
+            # not looked in a while" without reading and diffing it.
+            self._generation += 1
             self.meta_path.write_text(
                 json.dumps(
                     {
@@ -615,6 +870,11 @@ class VectorIndex:
                         "index_factory": self.index_factory,
                         "nprobe": self.nprobe,
                         "ntotal": int(self._index.ntotal),
+                        "trained_at_ntotal": self.trained_at_ntotal,
+                        "training_date_range": (
+                            list(self.training_date_range) if self.training_date_range else None
+                        ),
+                        "generation": self._generation,
                     },
                     indent=2,
                 )
@@ -649,6 +909,7 @@ class VectorIndexRegistry:
         flush_every: int = 1,
         flush_max: int = 100_000,
         nprobe: int = 16,
+        mmap: bool = False,
         collections: Sequence[str] = COLLECTIONS,
     ) -> None:
         self._root = Path(root)
@@ -658,6 +919,7 @@ class VectorIndexRegistry:
         self._flush_every = flush_every
         self._flush_max = flush_max
         self._nprobe = nprobe
+        self._mmap = mmap
         self._collections = tuple(collections)
         self._indexes: dict[str, VectorIndex] = {}
         self._lock = threading.Lock()
@@ -683,6 +945,7 @@ class VectorIndexRegistry:
                     flush_every=self._flush_every,
                     flush_max=self._flush_max,
                     nprobe=self._nprobe,
+                    mmap=self._mmap,
                 )
                 self._indexes[collection] = index
         return index.load()

@@ -16,6 +16,7 @@ import multiprocessing
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -157,6 +158,114 @@ The appellant challenged a land acquisition award. The Court held that a lapsed
 notification cannot be revived by an administrative circular. The verification
 phrase is amberlatticeacquire.
 """
+
+
+# ─── Config defaults aligned with the architecture (PRODUCTION_TODO.md T19) ──
+
+
+class TestConfigDefaults(unittest.TestCase):
+    def test_embed_model_defaults_to_the_servable_model_not_the_gpu_one(self):
+        """A host that boots without EMBED_MODEL set must get the ~80ms-per-
+        query 0.6b model FAISS_ARCHITECTURE.md recommends for serving, not
+        the ~2.5s-per-query 8b one -- and must match .env.example's own
+        default, which was already correct before this fix."""
+        tmp = tempfile.TemporaryDirectory()
+        previous = {"DATA_ROOT": os.environ.get("DATA_ROOT"), "EMBED_MODEL": os.environ.get("EMBED_MODEL")}
+        os.environ["DATA_ROOT"] = tmp.name
+        os.environ.pop("EMBED_MODEL", None)
+        try:
+            self.assertEqual(RagConfig.from_env().embed_model, "qwen3-embedding-0.6b")
+        finally:
+            tmp.cleanup()
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_upload_dir_derives_from_the_hdd_tier_on_a_split_host(self):
+        """app/config.py used to read DATA_ROOT directly for UPLOAD_DIR while
+        every other bulk path derives from rag/core/config.py's two-tier
+        split, so on a split host upload staging silently landed on whatever
+        DATA_ROOT pointed at instead of HDD_DATA_ROOT. Settings() is a frozen
+        dataclass whose class-level field defaults are evaluated once, at
+        `app.config`'s first import -- this needs a real subprocess (like
+        `test_allocate_faiss_ids_is_atomic_across_real_processes` above) to
+        exercise a fresh import against different env vars; patching
+        os.environ in-process and constructing a second Settings() would not
+        re-run the class-body expression that computed UPLOAD_DIR."""
+        with tempfile.TemporaryDirectory() as tmp:
+            hdd, ssd, legacy = Path(tmp) / "hdd", Path(tmp) / "ssd", Path(tmp) / "legacy"
+            for d in (hdd, ssd, legacy):
+                d.mkdir()
+            env = dict(os.environ)
+            env.update(
+                {
+                    "DATA_ROOT": str(legacy),
+                    "HDD_DATA_ROOT": str(hdd),
+                    "SSD_DATA_ROOT": str(ssd),
+                    "RAVENSLAW_DEBUG": "false",
+                    "RAVENSLAW_INTERNAL_TOKEN": "x",
+                    "RAVENSLAW_CORS_ORIGINS": "https://example.com",
+                    "RAVENSLAW_TRUSTED_HOSTS": "example.com",
+                    "CLERK_JWT_ISSUER": "https://test.clerk.example.com",
+                }
+            )
+            env.pop("RAVENSLAW_UPLOAD_DIR", None)
+            backend_root = str(Path(__file__).resolve().parents[1])
+            script = (
+                f"import sys; sys.path.insert(0, {backend_root!r}); "
+                "from app.config import settings; print(settings.UPLOAD_DIR)"
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", script], env=env, capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            upload_dir = result.stdout.strip()
+            self.assertEqual(upload_dir, str(hdd / "tmp" / "uploads"))
+            # The bug this regression test exists to catch: landing under the
+            # legacy single-volume root instead of the HDD tier.
+            self.assertNotIn(str(legacy), upload_dir)
+
+    def test_startup_logs_the_resolved_faiss_and_storage_configuration(self):
+        """An operator reading the boot log, not the source, must be able to
+        tell which embedding model/index factory/nprobe/tier roots actually
+        got resolved -- see this task's own Change item 4."""
+        tmp = Path(tempfile.mkdtemp(prefix="rag_test_t19_"))
+        env = {
+            "DATA_ROOT": str(tmp),
+            "EMBED_MODEL": "deterministic-test",
+            "EMBED_DIM": "64",
+            "PARSER_BACKEND": "pypdfium",
+            "FAISS_FLUSH_EVERY": "1",
+        }
+        previous = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        try:
+            config = RagConfig.from_env()
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        set_config(config)
+        services = services_module.build_services(config, embedder=DeterministicEmbedder(dimension=64))
+        try:
+            with self.assertLogs("ravenslaw.rag.services", level="INFO") as ctx:
+                services_module.startup(services, read_only=True)
+            combined = "\n".join(ctx.output)
+            self.assertIn("embed_model=deterministic-test", combined)
+            self.assertIn(f"faiss_index_factory={config.faiss_index_factory}", combined)
+            self.assertIn(f"faiss_nprobe={config.faiss_nprobe}", combined)
+            self.assertIn(f"ssd_data_root={config.ssd_data_root}", combined)
+            self.assertIn(f"hdd_data_root={config.hdd_data_root}", combined)
+            self.assertIn("storage_is_split=False", combined)
+        finally:
+            services_module.shutdown(services)
+            set_config(None)
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 # ─── Court routing ───────────────────────────────────────────────────────────
@@ -313,6 +422,290 @@ class TestSqliteStore(unittest.TestCase):
         self.assertEqual(record.citation, "2026 INSC 793")
 
 
+# ─── SQLite pragma tuning (PRODUCTION_TODO.md T18) ───────────────────────────
+
+
+class TestSqlitePragmaTuning(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmp.name) / "chunks.db"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_fresh_database_reports_the_configured_pragmas(self):
+        """T18's own Verify command, as a permanent regression: page_size
+        must land on a brand-new database (its only real effect -- see
+        SqliteStore._connect), and mmap_size/cache_size/journal_mode must be
+        whatever was configured, on every connection."""
+        store = SqliteStore(
+            self.db_path, page_size=8192, mmap_size_mb=256, cache_size_mb=32,
+        )
+        store.initialize()
+        try:
+            conn = store.connection
+            self.assertEqual(conn.execute("PRAGMA page_size").fetchone()[0], 8192)
+            self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+            # mmap_size is rounded down to a page-size multiple by SQLite --
+            # assert it lands within one page of the requested byte count
+            # rather than requiring an exact match.
+            mmap_size = conn.execute("PRAGMA mmap_size").fetchone()[0]
+            requested = 256 * 1024 * 1024
+            self.assertGreater(mmap_size, requested - 8192)
+            self.assertLessEqual(mmap_size, requested)
+            # cache_size is negative KB by convention (see SqliteStore._connect).
+            self.assertEqual(conn.execute("PRAGMA cache_size").fetchone()[0], -32 * 1024)
+        finally:
+            store.close()
+
+    def test_page_size_does_not_take_effect_on_an_existing_database(self):
+        """The fact vacuum_page_size.py exists for: once a database has
+        tables, PRAGMA page_size is a silent no-op, not an error -- this is
+        what makes a full rebuild the only way to change it."""
+        store = SqliteStore(self.db_path, page_size=4096)
+        store.initialize()
+        store.close()
+
+        reopened = SqliteStore(self.db_path, page_size=8192)
+        reopened.initialize()
+        try:
+            self.assertEqual(reopened.connection.execute("PRAGMA page_size").fetchone()[0], 4096)
+        finally:
+            reopened.close()
+
+
+class TestVacuumPageSize(unittest.TestCase):
+    """rag/scripts/vacuum_page_size.py -- the migration path for a database
+    that already has data at the wrong page size."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmp.name) / "chunks.db"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _seed(self, page_size: int) -> None:
+        store = SqliteStore(self.db_path, page_size=page_size)
+        store.initialize()
+        store.upsert_document(document_id="D1", collection=PUBLIC_COLLECTION, title="Seed v. Data")
+        ids = list(store.allocate_faiss_ids(2))
+        store.replace_chunks("D1", PUBLIC_COLLECTION, [("alpha", 1), ("bravo", 1)], ids)
+        store.close()
+
+    def test_rebuild_changes_the_page_size_and_preserves_every_row(self):
+        from rag.scripts.vacuum_page_size import current_page_size, rebuild_at_page_size
+
+        self._seed(page_size=4096)
+        self.assertEqual(current_page_size(self.db_path), 4096)
+
+        rebuild_at_page_size(self.db_path, 8192)
+
+        self.assertEqual(current_page_size(self.db_path), 8192)
+        verify = SqliteStore(self.db_path)
+        try:
+            self.assertEqual(verify.stats()["chunk_count"], 2)
+            ids = verify.connection.execute("SELECT faiss_id FROM chunks ORDER BY faiss_id").fetchall()
+            record = verify.chunks_by_faiss_ids([r["faiss_id"] for r in ids])
+            self.assertEqual(sorted(r.chunk_text for r in record.values()), ["alpha", "bravo"])
+        finally:
+            verify.close()
+        # No stale WAL/SHM sidecars left over from the file this replaced.
+        self.assertFalse(Path(str(self.db_path) + "-wal").exists())
+        self.assertFalse(Path(str(self.db_path) + "-shm").exists())
+
+    def test_rebuild_is_idempotent_when_already_at_the_target(self):
+        from rag.scripts.vacuum_page_size import current_page_size, rebuild_at_page_size
+
+        self._seed(page_size=8192)
+        rebuild_at_page_size(self.db_path, 8192)  # would be a bug to call this, but must not corrupt
+        self.assertEqual(current_page_size(self.db_path), 8192)
+        verify = SqliteStore(self.db_path)
+        try:
+            self.assertEqual(verify.stats()["chunk_count"], 2)
+        finally:
+            verify.close()
+
+
+# ─── chunk_text compression (PRODUCTION_TODO.md T16, step 1) ────────────────
+
+
+class TestChunkTextCompression(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = SqliteStore(Path(self.tmp.name) / "chunks.db")
+        self.store.initialize()
+
+    def tearDown(self):
+        self.store.close()
+        self.tmp.cleanup()
+
+    def _document(self, document_id="D1", **kwargs):
+        self.store.upsert_document(
+            document_id=document_id,
+            collection=kwargs.pop("collection", PUBLIC_COLLECTION),
+            **kwargs,
+        )
+
+    def _insert_legacy_plain_text_chunk(self, document_id, chunk_index, faiss_id, text):
+        """Write a chunk row the way every row looked before T16 -- chunk_text
+        as a plain TEXT value, bypassing SqliteStore.replace_chunks (which now
+        always compresses). Simulates a database from before this feature
+        existed, which the compression backfill must still be able to reach.
+        """
+        with self.store.connection:
+            self.store.connection.execute(
+                "INSERT INTO chunks(chunk_id, document_id, collection, owner_id, "
+                "chunk_index, chunk_text, page_number, faiss_id, created_at) "
+                "VALUES (?,?,?,NULL,?,?,NULL,?,'now')",
+                (f"{document_id}_{chunk_index}", document_id, PUBLIC_COLLECTION, chunk_index, text, faiss_id),
+            )
+
+    def test_chunk_text_round_trips_exactly_including_overlap_duplication(self):
+        """Byte-exact round trip, including the kind of text CHUNK_OVERLAP
+        produces: two chunks sharing a repeated substring, and non-ASCII text
+        (Devanagari appears throughout the real corpus)."""
+        self._document()
+        shared = "the appellant's counsel submitted that the impugned order "
+        texts = [
+            shared + "was passed without jurisdiction.",
+            shared + "was passed without jurisdiction. Further, it relied upon " + "न्याय",
+            "",
+            "a" * 5000,
+        ]
+        ids = list(self.store.allocate_faiss_ids(len(texts)))
+        self.store.replace_chunks("D1", PUBLIC_COLLECTION, [(t, None) for t in texts], ids)
+
+        # Stored as compressed blobs, not plain text.
+        rows = self.store.connection.execute(
+            "SELECT faiss_id, typeof(chunk_text) AS t FROM chunks ORDER BY faiss_id"
+        ).fetchall()
+        self.assertTrue(all(r["t"] == "blob" for r in rows), rows)
+
+        hydrated = self.store.chunks_by_faiss_ids(ids)
+        for text, faiss_id in zip(texts, ids):
+            self.assertEqual(hydrated[faiss_id].chunk_text, text)
+
+        by_document = dict(self.store.chunks_for_document("D1"))
+        for text, faiss_id in zip(texts, ids):
+            self.assertEqual(by_document[faiss_id], text)
+
+    def test_compressed_storage_is_materially_smaller(self):
+        """T16's actual point: legal-English chunk text compresses well."""
+        self._document()
+        # A realistic-shaped, repetitive 2KB chunk -- the corpus's actual unit.
+        text = ("This Court, in exercise of its jurisdiction, holds that the "
+                "impugned order suffers from a patent illegality. ") * 20
+        ids = list(self.store.allocate_faiss_ids(1))
+        self.store.replace_chunks("D1", PUBLIC_COLLECTION, [(text, None)], ids)
+
+        stored = self.store.connection.execute(
+            "SELECT chunk_text FROM chunks WHERE faiss_id = ?", (ids[0],)
+        ).fetchone()["chunk_text"]
+        self.assertLess(len(stored), len(text.encode("utf-8")) // 2)
+
+    def test_search_lexical_still_matches_compressed_chunks(self):
+        """FTS5 indexes the decompressed text (via the sync triggers' zstd
+        decompress call), not the compressed bytes sitting in chunk_text."""
+        self._document()
+        ids = list(self.store.allocate_faiss_ids(1))
+        self.store.replace_chunks(
+            "D1", PUBLIC_COLLECTION, [("jurisdiction under Article 226", None)], ids
+        )
+        hits = self.store.search_lexical("jurisdiction", SearchFilter.everything(), 5)
+        self.assertEqual([f for f, _ in hits], ids)
+
+    def test_backfill_compresses_legacy_plain_text_rows(self):
+        """The migration half of T16: rows written before this feature must
+        end up compressed too, without a re-ingest, and stay correct in both
+        the dense-hydration and lexical-search paths."""
+        self._document()
+        ids = list(self.store.allocate_faiss_ids(2))
+        self._insert_legacy_plain_text_chunk("D1", 0, ids[0], "alpha legacy chunk")
+        self._insert_legacy_plain_text_chunk("D1", 1, ids[1], "bravo legacy chunk")
+
+        before = self.store.connection.execute(
+            "SELECT typeof(chunk_text) AS t FROM chunks ORDER BY faiss_id"
+        ).fetchall()
+        self.assertTrue(all(r["t"] == "text" for r in before))
+
+        self.store._ensure_zstd_dictionary()
+        self.store._backfill_chunk_compression(batch_size=1)  # force more than one batch
+
+        after = self.store.connection.execute(
+            "SELECT typeof(chunk_text) AS t FROM chunks ORDER BY faiss_id"
+        ).fetchall()
+        self.assertTrue(all(r["t"] == "blob" for r in after))
+
+        hydrated = self.store.chunks_by_faiss_ids(ids)
+        self.assertEqual(hydrated[ids[0]].chunk_text, "alpha legacy chunk")
+        self.assertEqual(hydrated[ids[1]].chunk_text, "bravo legacy chunk")
+
+        # The UPDATE that compressed each row went through chunks_fts_update,
+        # which re-derives the FTS entry from the *decompressed* new value --
+        # so lexical search must still find both, not just the ones written
+        # after this feature landed.
+        hits = self.store.search_lexical("legacy", SearchFilter.everything(), 5)
+        self.assertEqual(sorted(f for f, _ in hits), sorted(ids))
+
+        # Idempotent and terminates: a second pass has nothing left to do and
+        # must not rescan (marked done -- see the method's own docstring for
+        # why that matters at scale).
+        self.assertIsNotNone(self.store.get_meta("chunk_text_compression_done"))
+        self.store._backfill_chunk_compression()
+
+    def test_zstd_dictionary_trains_when_enough_samples_exist(self):
+        """Enough pre-existing plain-text rows -> a real dictionary is
+        trained, persisted, and used for subsequent compression."""
+        self._document()
+        ids = list(self.store.allocate_faiss_ids(40))
+        for i, faiss_id in enumerate(ids):
+            self._insert_legacy_plain_text_chunk(
+                "D1", i, faiss_id,
+                f"Judgment paragraph {i}: the tribunal considered the evidence on record.",
+            )
+
+        self.store._ensure_zstd_dictionary()
+
+        self.assertIsNotNone(self.store._zstd_dict)
+        self.assertEqual(self.store.get_meta("chunk_text_zstd_dict_trained"), "1")
+        self.assertTrue(self.store.get_meta("chunk_text_zstd_dict_b64"))
+
+        # New writes compress under the trained dictionary and still round-trip.
+        new_ids = list(self.store.allocate_faiss_ids(1, private=False))
+        self.store.replace_chunks("D1", PUBLIC_COLLECTION, [("fresh chunk", None)], new_ids)
+        self.assertEqual(
+            self.store.chunks_by_faiss_ids(new_ids)[new_ids[0]].chunk_text, "fresh chunk"
+        )
+
+    def test_zstd_dictionary_training_is_skipped_gracefully_with_too_few_samples(self):
+        """A fresh or tiny database has nothing worth training a dictionary
+        on. Compression must still work, just without one -- see T16's
+        Change section on this being a legitimate degraded mode."""
+        self._document()
+        ids = list(self.store.allocate_faiss_ids(1))
+        self._insert_legacy_plain_text_chunk("D1", 0, ids[0], "only one legacy chunk")
+
+        self.store._ensure_zstd_dictionary()
+
+        self.assertIsNone(self.store._zstd_dict)
+        self.assertEqual(self.store.get_meta("chunk_text_zstd_dict_trained"), "1")
+        self.assertEqual(self.store.get_meta("chunk_text_zstd_dict_b64"), "")
+
+        # Compression without a dictionary still round-trips correctly.
+        new_ids = list(self.store.allocate_faiss_ids(1))
+        self.store.replace_chunks("D1", PUBLIC_COLLECTION, [("no dict chunk", None)], new_ids)
+        self.assertEqual(
+            self.store.chunks_by_faiss_ids(new_ids)[new_ids[0]].chunk_text, "no dict chunk"
+        )
+
+    def test_decode_chunk_text_passes_plain_strings_through_unchanged(self):
+        """Defends the dual-format read path directly: a value that is
+        already plain text (a row the backfill has not reached yet, or one a
+        test/incident inserted by hand) is returned as-is, not fed to zstd."""
+        self.assertEqual(self.store.decode_chunk_text("already plain"), "already plain")
+
+
 # ─── Lexical (BM25/FTS5) retrieval lane (PRODUCTION_TODO.md T7) ──────────────
 
 
@@ -409,8 +802,14 @@ class TestLexicalSearch(unittest.TestCase):
         self.assertEqual(len(rows), 3)
 
         # The insert trigger already synced these; wipe the FTS side to
-        # reproduce "written before chunks_fts existed".
-        self.store.connection.execute("DELETE FROM chunks_fts")
+        # reproduce "written before chunks_fts existed". Uses FTS5's
+        # 'delete-all' special command rather than a bare DELETE: since T16,
+        # chunks.chunk_text holds compressed bytes, and a bare DELETE FROM an
+        # external-content fts5 table re-tokenizes the *current* content-table
+        # value to find what to remove -- which is exactly the compressed
+        # bytes, not the plain text that was actually indexed. 'delete-all'
+        # resets the shadow index directly and never reads the content table.
+        self.store.connection.execute("INSERT INTO chunks_fts(chunks_fts) VALUES ('delete-all')")
         self.store.connection.commit()
         self.store.set_meta("fts_backfill_rowid", "0")
 
@@ -432,7 +831,8 @@ class TestLexicalSearch(unittest.TestCase):
             "SELECT rowid FROM chunks ORDER BY rowid"
         ).fetchall()
 
-        self.store.connection.execute("DELETE FROM chunks_fts")
+        # See the sibling test above for why 'delete-all' and not a bare DELETE.
+        self.store.connection.execute("INSERT INTO chunks_fts(chunks_fts) VALUES ('delete-all')")
         self.store.connection.commit()
         self.store.set_meta("fts_backfill_rowid", str(rows[0]["rowid"]))
 
@@ -716,8 +1116,162 @@ class TestVectorIndex(unittest.TestCase):
         self.assertTrue(index.index.is_trained)
         registry.close()
 
+    def test_ivf_list_stats_is_none_for_a_flat_factory(self):
+        """Flat has no inverted lists to imbalance -- there is nothing to
+        report, not a zeroed-out stats dict."""
+        index = self._seed()
+        self.assertIsNone(index.ivf_list_stats())
+        self.assertIsNone(index.drift_stats())
 
-# ─── Ingest job queue (rag/scripts/ingest_worker.py) ─────────────────────────
+    def test_quantizer_drift_appears_after_adding_a_shifted_distribution(self):
+        """PRODUCTION_TODO.md T9b: train an IVF index on one distribution,
+        add a second, unrelated one, and the list-imbalance and
+        growth-since-training drift signals must both show it."""
+        registry = VectorIndexRegistry(
+            self.root, dimension=32, signature="drift@32", index_factory="IVF16,Flat"
+        )
+        index = registry.get(PUBLIC_COLLECTION)
+
+        # Uniform in [0, 1)^32 -- k-means over 16 centroids on this spreads
+        # roughly evenly, so list sizes start out close to balanced.
+        rng = np.random.default_rng(0)
+        initial = rng.random((700, 32)).astype("float32")
+        index.add(list(range(1, 701)), initial)
+
+        before = index.drift_stats()
+        self.assertIsNotNone(before)
+        self.assertEqual(before["trained_at_ntotal"], 700)
+        self.assertEqual(before["added_since_training"], 0)
+        self.assertEqual(before["added_since_training_pct"], 0.0)
+        # Not asserting "ok" outright -- k-means on a small random sample can
+        # be somewhat uneven -- only that it starts well under the threshold
+        # the shifted batch below is designed to blow past.
+        self.assertLess(before["max_mean_ratio"], 5)
+
+        # Tightly clustered, and far outside the training distribution's
+        # range -- nearest to only one or two of the trained centroids, so
+        # (almost) all of it lands in a small number of lists.
+        shift_rng = np.random.default_rng(1)
+        shifted = (10.0 + shift_rng.random((2000, 32)) * 0.01).astype("float32")
+        index.add(list(range(701, 2701)), shifted)
+
+        after = index.drift_stats()
+        self.assertEqual(after["trained_at_ntotal"], 700)
+        self.assertEqual(after["added_since_training"], 2000)
+        self.assertAlmostEqual(after["added_since_training_pct"], 2000 / 700 * 100, places=1)
+        self.assertGreater(after["max_mean_ratio"], before["max_mean_ratio"])
+        self.assertGreater(after["max_mean_ratio"], 10)
+
+        from app.health_routes import _quantizer_drift_severity
+
+        self.assertEqual(_quantizer_drift_severity(after), "degraded")
+        registry.close()
+
+    def test_drift_survives_reload_from_the_sidecar(self):
+        """`trained_at_ntotal`/`training_date_range` are written to the meta
+        sidecar and must be readable back after a restart -- a process that
+        only ever loads an already-trained index still needs them to report
+        drift."""
+        registry = VectorIndexRegistry(
+            self.root, dimension=32, signature="drift-reload@32", index_factory="IVF16,Flat"
+        )
+        index = registry.get(PUBLIC_COLLECTION)
+        batch = np.random.default_rng(0).random((700, 32)).astype("float32")
+        index.train(batch, trained_at_ntotal=700, training_date_range=("1998", "2024"))
+        index.add(list(range(1, 701)), batch)
+        index.flush()
+        registry.close()
+
+        reopened = VectorIndexRegistry(
+            self.root, dimension=32, signature="drift-reload@32", index_factory="IVF16,Flat"
+        )
+        reloaded = reopened.get(PUBLIC_COLLECTION)
+        self.assertEqual(reloaded.trained_at_ntotal, 700)
+        self.assertEqual(reloaded.training_date_range, ("1998", "2024"))
+        drift = reloaded.drift_stats()
+        self.assertEqual(drift["trained_at_ntotal"], 700)
+        self.assertEqual(drift["training_date_range"], ["1998", "2024"])
+        reopened.close()
+
+    def test_mmap_and_non_mmap_readers_return_identical_results(self):
+        """PRODUCTION_TODO.md T17: IO_FLAG_MMAP changes how the index's bytes
+        get into memory, not what a query returns."""
+        self._seed().flush()
+        query = self.embedder.embed_query("alpha bravo")
+
+        mmap_registry = VectorIndexRegistry(self.root, dimension=32, signature="test@32", mmap=True)
+        plain_registry = VectorIndexRegistry(self.root, dimension=32, signature="test@32", mmap=False)
+        try:
+            mmap_hits = mmap_registry.get(PUBLIC_COLLECTION).search(query, 3)
+            plain_hits = plain_registry.get(PUBLIC_COLLECTION).search(query, 3)
+            self.assertTrue(mmap_hits)
+            self.assertEqual(
+                [(hit.faiss_id, round(hit.score, 6)) for hit in mmap_hits],
+                [(hit.faiss_id, round(hit.score, 6)) for hit in plain_hits],
+            )
+        finally:
+            mmap_registry.close()
+            plain_registry.close()
+
+    def test_mmap_reader_reloads_a_writers_flush_without_restarting(self):
+        """The hazard T17 introduces if left unfixed: `flush()`'s `os.replace`
+        swaps a directory entry, not a mapping this process already opened.
+        Reproduced on faiss 1.15.0 before VectorIndex._maybe_reload existed:
+        a reader opened at ntotal 2000 kept reporting 2000, and could not see
+        an id the writer added past that point -- silently and permanently,
+        until the reader process restarted. A search must pick up a new
+        generation instead."""
+        writer = self._seed()
+        writer.flush()
+
+        reader_registry = VectorIndexRegistry(self.root, dimension=32, signature="test@32", mmap=True)
+        reader_registry.load_all()
+        reader = reader_registry.get(PUBLIC_COLLECTION)
+        try:
+            self.assertEqual(reader.ntotal, 3)
+
+            # A second process's write, from the reader's point of view.
+            writer.add([104], self.embedder.embed_documents(["golf hotel"]))
+            writer.flush()
+
+            # Stale until something checks -- ntotal alone never triggers a
+            # reload, only search() does.
+            self.assertEqual(reader.ntotal, 3)
+
+            # Force the throttle interval to 0 so the very next search checks
+            # immediately, rather than a real test sleeping past
+            # _RELOAD_CHECK_INTERVAL_SECONDS.
+            with mock.patch("rag.core.vector_index._RELOAD_CHECK_INTERVAL_SECONDS", 0):
+                hits = reader.search(self.embedder.embed_query("golf hotel"), 4)
+
+            self.assertEqual(reader.ntotal, 4)
+            self.assertIn(104, [hit.faiss_id for hit in hits])
+        finally:
+            reader_registry.close()
+
+    def test_reload_check_is_throttled_between_searches(self):
+        """A `stat()`-and-maybe-reload on every single query would cost a
+        syscall per request for no benefit between flushes -- the check must
+        be throttled, not run unconditionally."""
+        self._seed().flush()
+        reader_registry = VectorIndexRegistry(self.root, dimension=32, signature="test@32", mmap=True)
+        reader_registry.load_all()
+        reader = reader_registry.get(PUBLIC_COLLECTION)
+        try:
+            query = self.embedder.embed_query("alpha")
+            reader.search(query, 3)  # first search always checks -- see _last_reload_check's 0.0 default
+            first_check = reader._last_reload_check
+            self.assertGreater(first_check, 0.0)
+
+            reader.search(query, 3)  # microseconds later, well inside the throttle window
+            self.assertEqual(
+                reader._last_reload_check, first_check,
+                "a second search inside the throttle window re-checked the sidecar",
+            )
+        finally:
+            reader_registry.close()
+
+
 
 
 class TestIngestJobQueue(RagStackTestCase):
@@ -821,6 +1375,137 @@ class TestIngestJobQueue(RagStackTestCase):
         self.assertIsNotNone(record)
         self.assertEqual(record.court, "sci")
         self.assertFalse(organic.exists())
+
+
+class TestIngestWorkerScan(RagStackTestCase):
+    """PRODUCTION_TODO.md T11a: the inbox scan must be bounded, and an
+    operator-notes directory must never be read as a corpus drop."""
+
+    def _drop(self, relative: str, text: str = "note") -> Path:
+        path = self.config.inbox_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        # Past the worker's 5s "still being written" settle window.
+        stale = time.time() - 10
+        os.utime(path, (stale, stale))
+        return path
+
+    def test_pending_files_stops_scanning_once_the_limit_is_reached(self):
+        """A directory that sorts after enough files already satisfy `limit`
+        must never be entered at all -- the scan cost must not depend on how
+        much is sitting further down the tree."""
+        from rag.scripts import ingest_worker
+
+        for i in range(3):
+            self._drop(f"doc{i}.txt", f"document {i}")
+        # Sorts after "doc0".."doc2" by name, so a depth-first, name-ordered
+        # walk would only reach it after the limit is already satisfied by
+        # the three files above.
+        self._drop("zzz_heavy/should_not_be_scanned.txt", "should never be read")
+
+        scanned_dirs = []
+        real_scandir = os.scandir
+
+        def spy_scandir(path):
+            scanned_dirs.append(str(path))
+            return real_scandir(path)
+
+        with mock.patch("rag.scripts.ingest_worker.os.scandir", side_effect=spy_scandir):
+            result = ingest_worker._pending_files(self.config.inbox_root, limit=3)
+
+        self.assertEqual(len(result), 3)
+        self.assertFalse(any("zzz_heavy" in d for d in scanned_dirs))
+
+    def test_pending_files_limit_zero_is_unbounded(self):
+        from rag.scripts import ingest_worker
+
+        for i in range(5):
+            self._drop(f"doc{i}.txt", f"document {i}")
+
+        result = ingest_worker._pending_files(self.config.inbox_root, limit=0)
+        self.assertEqual(len(result), 5)
+
+    def test_notes_directory_is_never_ingested(self):
+        from rag.scripts import ingest_worker
+
+        self._drop("notes/README.md", "operator scratch notes, not a judgment")
+
+        self.assertEqual(ingest_worker._pending_files(self.config.inbox_root), [])
+
+    def test_ingestignore_adds_more_skipped_directories(self):
+        from rag.scripts import ingest_worker
+
+        self._drop("scratch/draft.txt", "work in progress")
+        self._drop("sci/judgment.txt", JUDGMENT)
+        (self.config.inbox_root / ingest_worker.INGESTIGNORE_FILENAME).write_text(
+            "# operator scratch area, not a corpus drop\nscratch\n", encoding="utf-8"
+        )
+
+        result = ingest_worker._pending_files(self.config.inbox_root)
+
+        self.assertEqual([p.name for p in result], ["judgment.txt"])
+
+    def test_drain_flushes_every_faiss_flush_every_documents_not_only_at_pass_end(self):
+        """A worker killed mid-pass must lose at most FAISS_FLUSH_EVERY
+        documents' vectors, not everything back to the previous pass."""
+        from rag.scripts import ingest_worker
+
+        # RagStackTestCase (and its self.services, still open) pins
+        # FAISS_FLUSH_EVERY=1 so every other test's on-disk assertions see
+        # synchronous writes; this test is specifically about the >1 cadence,
+        # so it needs its own config *and* its own DATA_ROOT -- LMDB refuses
+        # to open the same environment path twice in one process (see
+        # TestBackups's Result for T2a, same constraint).
+        second_root = Path(tempfile.mkdtemp(prefix="rag_test_flush_"))
+        env = {
+            "DATA_ROOT": str(second_root),
+            "EMBED_MODEL": "deterministic-test",
+            "EMBED_DIM": "64",
+            "PARSER_BACKEND": "pypdfium",
+            "FAISS_FLUSH_EVERY": "2",
+        }
+        previous = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        try:
+            config = RagConfig.from_env()
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        set_config(config)
+        services = services_module.build_services(
+            config, embedder=DeterministicEmbedder(dimension=config.embed_dim)
+        )
+        services_module.startup(services)
+        try:
+            for i in range(5):
+                path = config.inbox_root / f"doc{i}.txt"
+                path.write_text(f"{JUDGMENT}\nunique marker {i}", encoding="utf-8")
+                stale = time.time() - 10
+                os.utime(path, (stale, stale))
+
+            flush_ntotals = []
+            real_flush_all = services.indexes.flush_all
+
+            def spy_flush_all():
+                real_flush_all()
+                flush_ntotals.append(services.indexes.get(PUBLIC_COLLECTION).ntotal)
+
+            with mock.patch.object(services.indexes, "flush_all", side_effect=spy_flush_all):
+                processed = ingest_worker._drain(services, config.inbox_root, PUBLIC_COLLECTION, 0)
+
+            self.assertEqual(processed, 5)
+            # Mid-pass flushes after documents 2 and 4, plus the existing
+            # end-of-pass flush: 3 calls, not 1.
+            self.assertEqual(len(flush_ntotals), 3)
+            self.assertTrue(flush_ntotals[0] > 0)
+        finally:
+            services_module.shutdown(services)
+            set_config(self.config)
+            shutil.rmtree(second_root, ignore_errors=True)
 
 
 # ─── Pipeline ────────────────────────────────────────────────────────────────
@@ -931,6 +1616,167 @@ class TestIngestionPipeline(RagStackTestCase):
             "SELECT DISTINCT page_number FROM chunks WHERE document_id = 'DOC1'"
         ).fetchall()
         self.assertTrue(all(row["page_number"] is not None for row in rows))
+
+
+# ─── Lane routing (PRODUCTION_TODO.md T14) ───────────────────────────────────
+
+# No recognisable court, no marker phrase, well under DENSE_LANE_MIN_CHARS (the
+# "900-char procedural order" the task itself calls out as the case a
+# length-only rule would still have to get right by falling through to it).
+SHORT_PROCEDURAL_ORDER = """IN THE COURT OF THE DISTRICT JUDGE, SAKET
+Case No. 1234/2026
+
+List the matter on 12.03.2026 for further hearing. The counsel for the
+respondent is directed to file a reply within two weeks. Registry to issue
+notice. Matter adjourned to the next date. The verification phrase is
+crimsonwillowadjourn.
+"""
+
+# No recognisable court and short, but carries one of the marker phrases.
+SHORT_ORDER_WITH_CORAM = (
+    "Coram: Two hon'ble members heard the parties briefly today. The matter "
+    "stands over for compliance. The verification phrase is duskembercoram."
+)
+
+# High Court in the front matter -- must be dense whatever its length.
+SHORT_HC_JUDGMENT = """IN THE HIGH COURT OF DELHI AT NEW DELHI
+CM(M) 221/2026
+
+The petition challenges an interim order. The verification phrase is
+tealcopperhighcourt.
+"""
+
+# No court, no phrase, one page -- but at or above DENSE_LANE_MIN_CHARS.
+LONG_ORDER_NO_MARKERS = (
+    "The registry has set a compliance date for further hearing in this file. "
+    * 60
+)
+
+
+class TestLaneRouting(RagStackTestCase):
+    def test_supreme_court_document_is_dense_regardless_of_length(self):
+        path = self._document("sc.txt", JUDGMENT)
+        self._pipeline().ingest(path, document_id="SC1")
+        record = self.services.metadata.get_document("SC1")
+        self.assertEqual(record.lane, "dense")
+        self.assertEqual(record.lane_reason, "court:sci")
+
+    def test_high_court_document_is_dense_regardless_of_length(self):
+        path = self._document("hc.txt", SHORT_HC_JUDGMENT)
+        self._pipeline().ingest(path, document_id="HC1")
+        record = self.services.metadata.get_document("HC1")
+        self.assertEqual(record.lane, "dense")
+        self.assertEqual(record.lane_reason, "court:hc/delhi")
+
+    def test_short_procedural_order_with_no_court_is_lexical(self):
+        path = self._document("procedural.txt", SHORT_PROCEDURAL_ORDER)
+        self._pipeline().ingest(path, document_id="LEX1")
+        record = self.services.metadata.get_document("LEX1")
+        self.assertEqual(record.lane, "lexical")
+        self.assertEqual(record.lane_reason, "default")
+
+    def test_more_pages_than_the_threshold_is_dense_even_without_a_court(self):
+        pages = [self._document(f"page{i}.txt", f"Page {i}: nothing decisive occurs here.")
+                 for i in range(4)]
+        self._pipeline().ingest(pages, document_id="PAGES1")
+        record = self.services.metadata.get_document("PAGES1")
+        self.assertEqual(record.lane, "dense")
+        self.assertEqual(record.lane_reason, "pages")
+
+    def test_a_marker_phrase_is_dense_even_when_short_and_courtless(self):
+        path = self._document("coram.txt", SHORT_ORDER_WITH_CORAM)
+        self._pipeline().ingest(path, document_id="PHRASE1")
+        record = self.services.metadata.get_document("PHRASE1")
+        self.assertEqual(record.lane, "dense")
+        self.assertEqual(record.lane_reason, "phrase:coram")
+
+    def test_length_alone_routes_dense_when_nothing_else_fires(self):
+        path = self._document("long.txt", LONG_ORDER_NO_MARKERS)
+        self._pipeline().ingest(path, document_id="LONG1")
+        record = self.services.metadata.get_document("LONG1")
+        self.assertEqual(record.lane, "dense")
+        self.assertEqual(record.lane_reason, "length")
+
+    def test_lexical_lane_document_gets_no_vectors(self):
+        index = self.services.indexes.get(PUBLIC_COLLECTION)
+        before = index.ntotal
+        path = self._document("procedural.txt", SHORT_PROCEDURAL_ORDER)
+        result = self._pipeline().ingest(path, document_id="LEX1").to_dict()
+        self.assertEqual(index.ntotal, before)
+        self.assertGreater(result["chunk_count"], 0)
+
+    def test_lexical_lane_document_still_has_a_faiss_id_and_is_in_fts(self):
+        """The schema requires one (NOT NULL UNIQUE); it is simply never
+        added to the FAISS index -- see chunks_partition_insert."""
+        path = self._document("procedural.txt", SHORT_PROCEDURAL_ORDER)
+        self._pipeline().ingest(path, document_id="LEX1")
+        row = self.services.metadata.connection.execute(
+            "SELECT faiss_id FROM chunks WHERE document_id = 'LEX1'"
+        ).fetchone()
+        self.assertIsNotNone(row["faiss_id"])
+
+        fts_row = self.services.metadata.connection.execute(
+            "SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH 'crimsonwillowadjourn'"
+        ).fetchone()
+        self.assertIsNotNone(fts_row)
+
+    def test_lexical_lane_document_is_still_returned_by_search(self):
+        path = self._document("procedural.txt", SHORT_PROCEDURAL_ORDER)
+        self._pipeline().ingest(path, document_id="LEX1")
+
+        lexical_hits = self._retriever().search_lexical("crimsonwillowadjourn", top_k=3)
+        self.assertEqual([h.document_id for h in lexical_hits], ["LEX1"])
+
+        # The fused path (dense + lexical) must surface it too: a lexical-lane
+        # document has no vector to match, but its BM25 hit still gets fused in.
+        fused_hits = self._retriever().search("crimsonwillowadjourn", k=3)
+        self.assertEqual([h.document_id for h in fused_hits], ["LEX1"])
+
+    def test_promotion_embeds_and_flips_a_lexical_document_to_dense(self):
+        from rag.scripts.promote_lane import promote_document
+
+        path = self._document("procedural.txt", SHORT_PROCEDURAL_ORDER)
+        self._pipeline().ingest(path, document_id="LEX1")
+
+        index = self.services.indexes.get(PUBLIC_COLLECTION)
+        before_record = self.services.metadata.get_document("LEX1")
+        self.assertEqual(before_record.lane, "lexical")
+        before_ntotal = index.ntotal
+
+        promoted = promote_document(self.services, "LEX1")
+
+        self.assertEqual(promoted, before_record.chunk_count)
+        self.assertEqual(index.ntotal, before_ntotal + promoted)
+
+        after_record = self.services.metadata.get_document("LEX1")
+        self.assertEqual(after_record.lane, "dense")
+        self.assertEqual(after_record.lane_reason, "promoted:default")
+
+        # Now reachable by dense search too, not only BM25.
+        hits = self._retriever().search("crimsonwillowadjourn", k=3)
+        self.assertEqual([h.document_id for h in hits], ["LEX1"])
+
+    def test_promotion_of_an_already_dense_document_is_a_no_op(self):
+        from rag.scripts.promote_lane import promote_document
+
+        path = self._document("sc.txt", JUDGMENT)
+        self._pipeline().ingest(path, document_id="SC1")
+        self.assertEqual(promote_document(self.services, "SC1"), 0)
+        self.assertEqual(self.services.metadata.get_document("SC1").lane, "dense")
+
+    def test_promotion_of_an_unknown_document_is_a_no_op(self):
+        from rag.scripts.promote_lane import promote_document
+
+        self.assertEqual(promote_document(self.services, "NOPE"), 0)
+
+    def test_lane_histogram_counts_by_lane_and_reason(self):
+        self._pipeline().ingest(self._document("sc.txt", JUDGMENT), document_id="SC1")
+        self._pipeline().ingest(
+            self._document("procedural.txt", SHORT_PROCEDURAL_ORDER), document_id="LEX1"
+        )
+        histogram = self.services.metadata.lane_histogram()
+        self.assertEqual(histogram.get("dense:court:sci"), 1)
+        self.assertEqual(histogram.get("lexical:default"), 1)
 
 
 # ─── Retrieval ───────────────────────────────────────────────────────────────
@@ -1621,10 +2467,12 @@ class TestBuildIndex(RagStackTestCase):
         overrides.setdefault("FAISS_INDEX_FACTORY", "IVF16,PQ16x4fs")
         return super()._config(**overrides)
 
-    def _seed_chunks(self, n: int, *, collection=PUBLIC_COLLECTION, document_id="BULK") -> list[int]:
+    def _seed_chunks(
+        self, n: int, *, collection=PUBLIC_COLLECTION, document_id="BULK", doc_date=None
+    ) -> list[int]:
         ids = list(self.services.metadata.allocate_faiss_ids(n))
         self.services.metadata.upsert_document(
-            document_id=document_id, collection=collection, status=STATUS_COMPLETE
+            document_id=document_id, collection=collection, status=STATUS_COMPLETE, doc_date=doc_date
         )
         self.services.metadata.replace_chunks(
             document_id, collection, [(f"chunk {document_id} {i} legal text", None) for i in range(n)],
@@ -1773,9 +2621,9 @@ class TestBuildIndex(RagStackTestCase):
         sampled = {}
         real_train = VectorIndex.train
 
-        def spying_train(self, vectors):
+        def spying_train(self, vectors, **kwargs):
             sampled["size"] = vectors.shape[0]
-            return real_train(self, vectors)
+            return real_train(self, vectors, **kwargs)
 
         with mock.patch.object(VectorIndex, "train", spying_train):
             build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
@@ -1784,11 +2632,157 @@ class TestBuildIndex(RagStackTestCase):
         # governs, capped at what's actually available (700).
         self.assertEqual(sampled["size"], min(n, self.config.faiss_train_threshold))
 
+    def test_a_build_records_trained_at_ntotal_and_the_training_date_range(self):
+        """PRODUCTION_TODO.md T9b Change 1: the sidecar must record what the
+        corpus looked like at training time, not just its current state, so
+        later drift can be measured against it."""
+        n = 700
+        # Bulk of the corpus undated, plus two documents at either end of a
+        # wide range -- the recorded range must be the min and max actually
+        # present, not e.g. always "this year".
+        self._seed_chunks(n - 2, document_id="BULK")
+        self._seed_chunks(1, document_id="OLDEST", doc_date="1998-03-15")
+        self._seed_chunks(1, document_id="NEWEST", doc_date="2024-11-02")
+        self.services.indexes.close()
+
+        build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        index = self.services.indexes.get(PUBLIC_COLLECTION)
+        self.assertEqual(index.trained_at_ntotal, n)
+        # Best-effort and sample-based (see build_index.py's
+        # TRAINING_DATE_RANGE_SAMPLE_CAP) -- with every chunk looked up here
+        # (n well under the cap), the two dated documents must both surface.
+        self.assertIsNotNone(index.training_date_range)
+        self.assertEqual(index.training_date_range, ("1998", "2024"))
+
+        meta = json.loads(index.meta_path.read_text())
+        self.assertEqual(meta["trained_at_ntotal"], n)
+        self.assertEqual(meta["training_date_range"], ["1998", "2024"])
+
+    def test_health_check_reports_quantizer_drift_after_build_index(self):
+        """End-to-end version of the VectorIndex-level drift test: after a
+        real build_index.py run, growing the corpus with an unrelated
+        distribution must show up in /health/vector's response, not just in
+        the VectorIndex object directly."""
+        from app.health_routes import STATUS_DEGRADED, _check_vector
+
+        n = 700
+        self._seed_chunks(n)
+        self.services.indexes.close()
+        build_index_collections(self.services, list(LOGICAL_COLLECTIONS))
+
+        services_module.set_services(self.services)
+        self.addCleanup(services_module.set_services, None)
+
+        payload = _check_vector()
+        entry = payload["collections"][GLOBAL_COLLECTION]
+        self.assertIn("quantizer_drift", entry)
+        # Not asserting "ok" here -- the deterministic test embedder is a
+        # bag-of-words hash over shared filler text ("chunk BULK <i> legal
+        # text"), so its actual list balance at build time isn't something
+        # this test should depend on. What must hold regardless of that is
+        # the growth-since-training fraction, which is pure arithmetic.
+        self.assertEqual(entry["quantizer_drift"]["added_since_training_pct"], 0.0)
+
+        # Add a large batch on top -- unrelated to whatever the corpus's own
+        # embeddings look like, this alone must push growth-since-training
+        # past the degraded threshold (+200%) and be visible in the response.
+        index = self.services.indexes.get(PUBLIC_COLLECTION)
+        shift_rng = np.random.default_rng(1)
+        shifted = (10.0 + shift_rng.random((2000, 32)) * 0.01).astype("float32")
+        new_ids = list(self.services.metadata.allocate_faiss_ids(2000))
+        index.add(new_ids, shifted)
+
+        payload = _check_vector()
+        entry = payload["collections"][GLOBAL_COLLECTION]
+        drift = entry["quantizer_drift"]
+        self.assertEqual(drift["added_since_training"], 2000)
+        self.assertGreater(drift["added_since_training_pct"], 200)
+        self.assertEqual(drift["severity"], "degraded")
+        self.assertEqual(entry["status"], STATUS_DEGRADED)
+        self.assertEqual(payload["status"], STATUS_DEGRADED)
+
     @staticmethod
     def _read_ntotal(path) -> int:
         import faiss
 
         return int(faiss.read_index(str(path)).ntotal)
+
+
+class TestBuildIndexRunsWithoutTheFastAPIApp(unittest.TestCase):
+    """PRODUCTION_TODO.md T10: build_index.py must be runnable on a rented GPU
+    box that has only rag/ and a copy of chunks.db -- no Next.js frontend, no
+    Clerk, no FastAPI app in the picture at all.
+
+    Before this task, `rag.core.services.build_services()` -> `DocumentStore`'s
+    compressor imported `app.config.settings` for three PDF-compression
+    numbers, which since T4a raises `RuntimeError` unless CLERK_JWT_ISSUER and
+    RAVENSLAW_CORS_ORIGINS are configured -- settings that have nothing to do
+    with embedding and that a GPU box has no reason to carry. That made the
+    whole offline build path unusable exactly where T10 says to use it.
+
+    Run as a real subprocess, not in-process: this test session has already
+    imported app.config elsewhere (other test files boot the FastAPI app), so
+    an in-process check of "was app.config ever imported" would be
+    meaningless regardless of whether this bug is fixed -- see
+    TestConfigRequiresAnIssuerInProduction in test_security.py for the same
+    reasoning applied to app.config's own frozen dataclass defaults.
+    """
+
+    BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+    SCRIPT = """
+import sys
+sys.path.insert(0, ".")
+from rag.core import services as services_module
+from rag.core.embeddings import DeterministicEmbedder
+from rag.core.sqlite_store import STATUS_COMPLETE
+from rag.core.vector_index import PUBLIC_COLLECTION, LOGICAL_COLLECTIONS
+import rag.scripts.build_index as build_index_module
+
+config = services_module.get_config()
+services = services_module.build_services(config, embedder=DeterministicEmbedder(dimension=config.embed_dim))
+services_module.startup(services)
+
+n = 50
+ids = list(services.metadata.allocate_faiss_ids(n))
+services.metadata.upsert_document(document_id="BULK", collection=PUBLIC_COLLECTION, status=STATUS_COMPLETE)
+services.metadata.replace_chunks(
+    "BULK", PUBLIC_COLLECTION, [(f"chunk {i} legal text", None) for i in range(n)], ids, owner_id=None,
+)
+services.indexes.close()
+
+written = build_index_module.build_collections(services, list(LOGICAL_COLLECTIONS))
+assert written == n, f"expected {n} vectors, built {written}"
+
+# The actual regression: this must never have needed the FastAPI app's own
+# settings module, which requires production auth config this box has none of.
+assert "app.config" not in sys.modules, "build_services() pulled in app.config"
+print("BUILD_OK", written)
+"""
+
+    def test_build_index_boots_and_builds_with_no_app_config_env_at_all(self):
+        with tempfile.TemporaryDirectory(prefix="owllex_t10_gpu_box_") as data_root:
+            result = subprocess.run(
+                [sys.executable, "-c", self.SCRIPT],
+                cwd=self.BACKEND_ROOT,
+                env={
+                    "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                    "DATA_ROOT": data_root,
+                    "EMBED_MODEL": "deterministic-test",
+                    "EMBED_DIM": "32",
+                    "PARSER_BACKEND": "pypdfium",
+                    # Deliberately absent: RAVENSLAW_DEBUG, RAVENSLAW_CORS_ORIGINS,
+                    # RAVENSLAW_TRUSTED_HOSTS, CLERK_JWT_ISSUER,
+                    # RAVENSLAW_INTERNAL_TOKEN -- none of app.config's required
+                    # production settings. A rag-only box has no .env for them.
+                },
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        self.assertEqual(result.returncode, 0, f"stdout={result.stdout!r} stderr={result.stderr!r}")
+        self.assertIn("BUILD_OK 50", result.stdout)
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ Design notes worth keeping in mind before changing this file:
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import sqlite3
@@ -41,11 +42,44 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import zstandard as zstd
+
 logger = logging.getLogger("ravenslaw.rag.sqlite")
 
 from rag.core.vector_index import PRIVATE_ID_MIN, PUBLIC_ID_MIN, SearchFilter
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+# ─── chunk_text compression (PRODUCTION_TODO.md T16, step 1) ────────────────
+#
+# chunk_text is stored as a zstd-compressed blob rather than plain text --
+# 4-6x smaller for 2KB legal-English chunks, which is ~90% of the metadata
+# database's size at scale (T16's "Why"). The column keeps its TEXT type
+# affinity in the DDL (a full ALTER to BLOB would mean rebuilding the whole
+# table); SQLite stores BLOB values in a TEXT-affinity column unchanged
+# regardless, so this is a data-format change, not a schema one, and is
+# rolled out as a resumable backfill (_backfill_chunk_compression) rather
+# than a numbered _MIGRATIONS step -- see that method's docstring.
+#
+# A dictionary trained once on the first boot's existing corpus (whatever is
+# still plain text at that point) buys most of the ratio back on individual
+# 2KB chunks, which are too small alone for zstd to find much redundancy in.
+# It is persisted in `meta` (and therefore in every sqlite backup, see T2a)
+# because without it the compressed data cannot be read back at all.
+_ZSTD_DICT_META_KEY = "chunk_text_zstd_dict_b64"
+_ZSTD_DICT_TRAINED_META_KEY = "chunk_text_zstd_dict_trained"
+_ZSTD_DICT_SAMPLE_LIMIT = 20_000
+_ZSTD_DICT_MIN_SAMPLES = 32
+_CHUNK_COMPRESSION_ROWID_META_KEY = "chunk_text_compression_rowid"
+_CHUNK_COMPRESSION_DONE_META_KEY = "chunk_text_compression_done"
+
+
+def _zstd_compress_text(text: str, level: int, zdict: "zstd.ZstdCompressionDict | None") -> bytes:
+    return zstd.ZstdCompressor(level=level, dict_data=zdict).compress(text.encode("utf-8"))
+
+
+def _zstd_decompress_text(blob: bytes, zdict: "zstd.ZstdCompressionDict | None") -> str:
+    return zstd.ZstdDecompressor(dict_data=zdict).decompress(bytes(blob)).decode("utf-8")
 
 # Upper bound of the private partition. int64 is signed, so this is where ids
 # would wrap into negatives -- FAISS treats -1 as "no result", so an id must
@@ -77,6 +111,14 @@ CREATE TABLE IF NOT EXISTS documents (
     content_hash  TEXT,
     document_type TEXT,
     doc_date      TEXT,
+    -- Which retrieval lane this document was routed to at ingest -- 'dense'
+    -- (embedded + FTS5) or 'lexical' (FTS5 only). See
+    -- rag/app/ingest/pipeline.py::_route_lane and PRODUCTION_TODO.md T14.
+    -- lane_reason records which rule fired, so a mis-routed corpus is
+    -- diagnosable and a wrong call is recoverable (rag/scripts/promote_lane.py)
+    -- without a training set or a re-ingest.
+    lane          TEXT NOT NULL DEFAULT 'dense',
+    lane_reason   TEXT,
     source_url    TEXT,
     storage_ref   TEXT,
     corpus_id     TEXT,
@@ -181,6 +223,10 @@ CREATE INDEX IF NOT EXISTS idx_documents_corpus       ON documents(corpus_id, cl
 CREATE INDEX IF NOT EXISTS idx_documents_owner        ON documents(owner_id, visibility, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_documents_owner_cat    ON documents(owner_id, category, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_documents_visibility   ON documents(visibility);
+-- Reporting the dense/lexical split (PRODUCTION_TODO.md T14 "Done when") is a
+-- GROUP BY lane over the whole table; without an index that's a full scan at
+-- every tier this system targets.
+CREATE INDEX IF NOT EXISTS idx_documents_lane         ON documents(lane);
 -- The tenant-isolation lookup: SELECT faiss_id FROM chunks WHERE owner_id = ?.
 -- Covering (owner_id, faiss_id), so building an allow-list is an index-only
 -- scan that never touches the chunk rows themselves -- which matters because
@@ -297,26 +343,51 @@ END;
 -- is expressed as an INSERT of the special 'delete' command so FTS5 can
 -- remove the old tokenisation, and an update is a delete-then-insert rather
 -- than an in-place change.
+--
+-- chunk_text is zstd-compressed (PRODUCTION_TODO.md T16) but FTS5 must index
+-- plain text -- it cannot tokenise a compressed blob, and it is contentless
+-- for chunk_text (content='chunks'), so this is the only place that text
+-- ever gets rebuilt from the compressed column. rag_zstd_decompress is a
+-- Python function registered on every connection in SqliteStore._connect().
+-- The typeof() guard is what lets one trigger definition serve a database
+-- mid-migration: a row not yet reached by the compression backfill still
+-- carries plain TEXT and must be passed through unchanged, not decompressed.
 CREATE TRIGGER chunks_fts_insert
 AFTER INSERT ON chunks
 FOR EACH ROW
 BEGIN
-    INSERT INTO chunks_fts(rowid, chunk_text) VALUES (new.rowid, new.chunk_text);
+    INSERT INTO chunks_fts(rowid, chunk_text) VALUES (
+        new.rowid,
+        CASE WHEN typeof(new.chunk_text) = 'blob'
+             THEN rag_zstd_decompress(new.chunk_text) ELSE new.chunk_text END
+    );
 END;
 
 CREATE TRIGGER chunks_fts_delete
 AFTER DELETE ON chunks
 FOR EACH ROW
 BEGIN
-    INSERT INTO chunks_fts(chunks_fts, rowid, chunk_text) VALUES ('delete', old.rowid, old.chunk_text);
+    INSERT INTO chunks_fts(chunks_fts, rowid, chunk_text) VALUES (
+        'delete', old.rowid,
+        CASE WHEN typeof(old.chunk_text) = 'blob'
+             THEN rag_zstd_decompress(old.chunk_text) ELSE old.chunk_text END
+    );
 END;
 
 CREATE TRIGGER chunks_fts_update
 AFTER UPDATE ON chunks
 FOR EACH ROW
 BEGIN
-    INSERT INTO chunks_fts(chunks_fts, rowid, chunk_text) VALUES ('delete', old.rowid, old.chunk_text);
-    INSERT INTO chunks_fts(rowid, chunk_text) VALUES (new.rowid, new.chunk_text);
+    INSERT INTO chunks_fts(chunks_fts, rowid, chunk_text) VALUES (
+        'delete', old.rowid,
+        CASE WHEN typeof(old.chunk_text) = 'blob'
+             THEN rag_zstd_decompress(old.chunk_text) ELSE old.chunk_text END
+    );
+    INSERT INTO chunks_fts(rowid, chunk_text) VALUES (
+        new.rowid,
+        CASE WHEN typeof(new.chunk_text) = 'blob'
+             THEN rag_zstd_decompress(new.chunk_text) ELSE new.chunk_text END
+    );
 END;
 """
 
@@ -421,9 +492,24 @@ def _migrate_v2_to_v3(conn: "sqlite3.Connection") -> None:
         )
 
 
+def _migrate_v3_to_v4(conn: "sqlite3.Connection") -> None:
+    """Add the dense/lexical lane columns (PRODUCTION_TODO.md T14).
+
+    Every row that exists at v3 was ingested before the lane split existed, so
+    it was embedded unconditionally -- 'dense' with no recorded reason is the
+    only truthful backfill.
+    """
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(documents)")}
+    if "lane" not in columns:
+        conn.execute("ALTER TABLE documents ADD COLUMN lane TEXT NOT NULL DEFAULT 'dense'")
+    if "lane_reason" not in columns:
+        conn.execute("ALTER TABLE documents ADD COLUMN lane_reason TEXT")
+
+
 _MIGRATIONS: dict[int, "Callable[[sqlite3.Connection], None]"] = {
     1: _migrate_v1_to_v2,
     2: _migrate_v2_to_v3,
+    3: _migrate_v3_to_v4,
 }
 
 
@@ -444,6 +530,11 @@ class DocumentRecord:
     content_hash: str | None
     document_type: str | None
     doc_date: str | None
+    lane: str
+    """'dense' (embedded + FTS5) or 'lexical' (FTS5 only). See T14."""
+    lane_reason: str | None
+    """Which routing rule fired -- e.g. 'court:sci', 'pages', 'phrase:held',
+    'length', 'default', or 'promoted:<previous reason>'."""
     source_url: str | None
     storage_ref: str | None
     corpus_id: str | None
@@ -491,8 +582,17 @@ class ChunkRecord:
     file_path: str | None
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "ChunkRecord":
-        return cls(**{f: row[f] for f in cls.__dataclass_fields__})
+    def from_row(
+        cls, row: sqlite3.Row, *, decode_chunk_text: "Callable[[Any], str] | None" = None
+    ) -> "ChunkRecord":
+        """``decode_chunk_text`` un-compresses ``row['chunk_text']`` (T16) --
+        pass :meth:`SqliteStore.decode_chunk_text` from a store, or leave it
+        unset only where the caller already guarantees plain text (tests
+        constructing a row by hand)."""
+        data = {f: row[f] for f in cls.__dataclass_fields__}
+        if decode_chunk_text is not None:
+            data["chunk_text"] = decode_chunk_text(data["chunk_text"])
+        return cls(**data)
 
 
 _CHUNK_SELECT = """
@@ -512,14 +612,37 @@ class SqliteStore:
     WAL mode lets those readers run concurrently with the single ingest writer.
     """
 
-    def __init__(self, path: Path | str, busy_timeout_ms: int = 15_000) -> None:
+    def __init__(
+        self,
+        path: Path | str,
+        busy_timeout_ms: int = 15_000,
+        *,
+        zstd_level: int = 19,
+        zstd_dict_size: int = 112_640,
+        page_size: int = 8192,
+        mmap_size_mb: int = 2048,
+        cache_size_mb: int = 64,
+    ) -> None:
         self._path = Path(path)
         self._busy_timeout_ms = busy_timeout_ms
+        # PRODUCTION_TODO.md T18. Only `page_size` has the "must be set before
+        # anything else touches this connection" constraint -- see _connect.
+        self._page_size = page_size
+        self._mmap_size_mb = mmap_size_mb
+        self._cache_size_mb = cache_size_mb
         self._local = threading.local()
         # Serialises id allocation and multi-statement writes. SQLite would
         # serialise them anyway; taking the lock here turns a would-be
         # SQLITE_BUSY under load into a short wait.
         self._write_lock = threading.Lock()
+        # chunk_text compression (T16). Read by every thread's connection via
+        # the closures below, but only ever written once, by
+        # _ensure_zstd_dictionary() during this instance's own initialize() --
+        # see that method for why a later, concurrent write of the same value
+        # from another process is harmless rather than a race.
+        self._zstd_level = zstd_level
+        self._zstd_dict_size = zstd_dict_size
+        self._zstd_dict: "zstd.ZstdCompressionDict | None" = None
 
     # ─── Connection handling ─────────────────────────────────────────────────
 
@@ -530,10 +653,41 @@ class SqliteStore:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, timeout=self._busy_timeout_ms / 1000)
         conn.row_factory = sqlite3.Row
+        # PRODUCTION_TODO.md T18: page_size MUST be the first pragma issued on
+        # a connection, before journal_mode -- SQLite only honours a page_size
+        # change on a database that has no tables yet *and* is not already in
+        # WAL mode; once either is true it is silently ignored (not an error)
+        # for the rest of this connection's life. On a brand-new database (the
+        # only case where this has any effect) this is what makes the very
+        # first CREATE TABLE in initialize() land at the configured page size
+        # instead of SQLite's own 4096 default. On an existing database this
+        # is a costless no-op -- see rag/scripts/vacuum_page_size.py for how
+        # to actually change the page size of one that already has data.
+        conn.execute(f"PRAGMA page_size={self._page_size}")
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute(f"PRAGMA busy_timeout={self._busy_timeout_ms}")
+        # mmap_size: pages read straight from the OS's mapping of the file
+        # instead of copied into SQLite's own pager cache first -- and that
+        # mapping is backed by the shared OS page cache, so this is safe to
+        # set generously (megabytes-to-gigabytes) even with one connection per
+        # thread; it does not multiply resident memory by thread count the
+        # way cache_size below would.
+        conn.execute(f"PRAGMA mmap_size={self._mmap_size_mb * 1024 * 1024}")
+        # cache_size: SQLite's own *private* pager cache, real heap memory,
+        # one allocation per connection -- not shared like mmap_size above.
+        # Negative means kibibytes (the documented way to size this pragma by
+        # memory rather than by page count, so it stays correct regardless of
+        # page_size). Kept modest by default for exactly the reason mmap_size
+        # is not: this store is one connection per thread.
+        conn.execute(f"PRAGMA cache_size=-{self._cache_size_mb * 1024}")
+        # Backs the chunks_fts sync triggers -- see their comment in
+        # _TRIGGERS. A bound method, not a lambda, so it always reads
+        # self._zstd_dict fresh rather than whatever it was at registration
+        # time (None, on every connection's first use, until
+        # _ensure_zstd_dictionary runs during this instance's initialize()).
+        conn.create_function("rag_zstd_decompress", 1, self.decode_chunk_text)
         return conn
 
     @property
@@ -611,7 +765,15 @@ class SqliteStore:
             conn.executescript(_TRIGGERS)
 
         logger.info("SQLite ready at %s (schema v%d)", self._path, stored)
+        # Order matters: FTS must be caught up on plain-text rows before the
+        # dictionary samples them and the compression backfill rewrites them,
+        # or a duplicate rowid would land in chunks_fts twice (once from a
+        # trigger, once from this scan) instead of once. The dictionary must
+        # be resolved before compression starts, since compression needs it,
+        # and training needs rows that are still plain text to sample from.
         self._backfill_fts()
+        self._ensure_zstd_dictionary()
+        self._backfill_chunk_compression()
 
     def _backfill_fts(self, batch_size: int = 2000) -> None:
         """Populate ``chunks_fts`` for rows written before it existed.
@@ -647,7 +809,13 @@ class SqliteStore:
                         return
                     conn.executemany(
                         "INSERT INTO chunks_fts(rowid, chunk_text) VALUES (?, ?)",
-                        [(r["rowid"], r["chunk_text"]) for r in rows],
+                        # decode_chunk_text: a row here may already be a T16
+                        # compressed blob (a database upgraded past this
+                        # feature already, then restarted before catching up
+                        # on some pre-chunks_fts historical rows) or still
+                        # plain text (never touched by either backfill yet).
+                        # It handles both.
+                        [(r["rowid"], self.decode_chunk_text(r["chunk_text"])) for r in rows],
                     )
                     conn.execute(
                         "INSERT INTO meta(key, value) VALUES ('fts_backfill_rowid', ?) "
@@ -665,6 +833,176 @@ class SqliteStore:
                 continue
             if len(rows) < batch_size:
                 return
+
+    def _ensure_zstd_dictionary(self) -> None:
+        """Train the chunk_text compression dictionary, once, ever.
+
+        Runs before :meth:`_backfill_chunk_compression` so it can sample rows
+        that are still plain text. Only the *first* process to reach this on
+        a given database trains anything; every later boot (this process
+        restarting, or the other of the API/ingest pair starting up) just
+        loads whatever got persisted, via ``_ZSTD_DICT_TRAINED_META_KEY`` --
+        training is neither cheap nor idempotent-by-content (it samples up to
+        ``_ZSTD_DICT_SAMPLE_LIMIT`` rows), so it must not repeat on every
+        restart the way the backfills below deliberately do.
+
+        Two processes can still race to be "first" (API and ingest worker
+        both call ``initialize()`` at their own startup). That is harmless
+        here specifically because the sample query has no randomness --
+        plain ``LIMIT``, no ``ORDER BY random()`` -- so two processes reading
+        the same still-untouched rows train byte-identical dictionaries
+        (zstd's dictionary trainer is deterministic for a given input) and
+        their writes to ``meta`` simply agree instead of conflicting.
+        """
+        if self.get_meta(_ZSTD_DICT_TRAINED_META_KEY) is not None:
+            stored = self.get_meta(_ZSTD_DICT_META_KEY)
+            self._zstd_dict = zstd.ZstdCompressionDict(base64.b64decode(stored)) if stored else None
+            return
+
+        samples = [
+            row["chunk_text"].encode("utf-8")
+            for row in self.connection.execute(
+                "SELECT chunk_text FROM chunks WHERE typeof(chunk_text) = 'text' LIMIT ?",
+                (_ZSTD_DICT_SAMPLE_LIMIT,),
+            )
+        ]
+        if not samples:
+            # A database that has never held a single plain-text chunk --
+            # most commonly a brand-new install, where initialize() runs
+            # before the first document is ever ingested. Do NOT lock in
+            # "no dictionary" permanently here: unlike the >0-but-too-few
+            # case below, there is nothing yet to have made a real decision
+            # about. Leave the flags unset so a later call (this process's
+            # own initialize() is the only one that re-runs it, but a fresh
+            # process against a since-populated database will too) gets a
+            # real chance to train once real content exists.
+            return
+
+        trained: bytes | None = None
+        if len(samples) >= _ZSTD_DICT_MIN_SAMPLES:
+            try:
+                trained = zstd.train_dictionary(self._zstd_dict_size, samples).as_bytes()
+            except zstd.ZstdError as exc:
+                # Too little variety in the sample, or too little data for
+                # the requested dict size. Compressing without a dictionary
+                # still works -- it just gets less of the ratio T16 asks
+                # for -- so this is a degraded mode, not a failure.
+                logger.warning(
+                    "zstd dictionary training failed (%s); chunk_text will be "
+                    "compressed without a dictionary", exc,
+                )
+        else:
+            logger.info(
+                "only %d chunk(s) to sample (need %d); chunk_text will be "
+                "compressed without a dictionary until a rebuild retrains it",
+                len(samples), _ZSTD_DICT_MIN_SAMPLES,
+            )
+
+        with self._write() as conn:
+            conn.execute(
+                "INSERT INTO meta(key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (_ZSTD_DICT_META_KEY, base64.b64encode(trained).decode("ascii") if trained else ""),
+            )
+            conn.execute(
+                "INSERT INTO meta(key, value) VALUES (?, '1') "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (_ZSTD_DICT_TRAINED_META_KEY,),
+            )
+        self._zstd_dict = zstd.ZstdCompressionDict(trained) if trained else None
+
+    def _backfill_chunk_compression(self, batch_size: int = 2000) -> None:
+        """Compress every ``chunk_text`` row still stored as plain text.
+
+        Same "batched, watermarked, resumable" shape as :meth:`_backfill_fts`
+        -- a crash or restart mid-backfill picks up from the last committed
+        batch. Differs from it in one way that matters at scale: once every
+        row is compressed, this method must never scan the table again on a
+        later boot just to confirm that -- at tier 3's 450M chunks that scan
+        alone would dominate startup forever. ``_CHUNK_COMPRESSION_DONE_META_KEY``
+        is that "never again" marker, set the moment a scan past the
+        watermark comes back empty.
+
+        Each UPDATE runs through ``chunks_fts_update`` (see ``_TRIGGERS``),
+        which re-derives the FTS entry from the *decompressed* new value --
+        so the lexical index is unaffected by this method ever running, or
+        running twice.
+        """
+        if self.get_meta(_CHUNK_COMPRESSION_DONE_META_KEY) is not None:
+            return
+        while True:
+            last = int(self.get_meta(_CHUNK_COMPRESSION_ROWID_META_KEY) or 0)
+            try:
+                with self._write() as conn:
+                    rows = conn.execute(
+                        "SELECT rowid, chunk_text FROM chunks "
+                        "WHERE rowid > ? AND typeof(chunk_text) = 'text' "
+                        "ORDER BY rowid LIMIT ?",
+                        (last, batch_size),
+                    ).fetchall()
+                    if not rows:
+                        if last == 0 and conn.execute(
+                            "SELECT 1 FROM chunks LIMIT 1"
+                        ).fetchone() is None:
+                            # Never made any progress, and the table has
+                            # never held a single row (any type) either --
+                            # most commonly a brand-new install running its
+                            # very first initialize() before any document
+                            # exists. Don't lock in "done" here: a database
+                            # that predates T16 needs this same empty-scan
+                            # result to mean "confirmed fully migrated", but
+                            # that confirmation is only valid once the table
+                            # has actually been observed to hold data.
+                            return
+                        conn.execute(
+                            "INSERT INTO meta(key, value) VALUES (?, '1') "
+                            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                            (_CHUNK_COMPRESSION_DONE_META_KEY,),
+                        )
+                        return
+                    conn.executemany(
+                        "UPDATE chunks SET chunk_text = ? WHERE rowid = ?",
+                        [
+                            (self._compress_chunk_text(r["chunk_text"]), r["rowid"])
+                            for r in rows
+                        ],
+                    )
+                    conn.execute(
+                        "INSERT INTO meta(key, value) VALUES (?, ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (_CHUNK_COMPRESSION_ROWID_META_KEY, str(rows[-1]["rowid"])),
+                    )
+            except sqlite3.DatabaseError:
+                # Same race as _backfill_fts: another process (API vs. ingest
+                # worker, both migrating at their own startup) already
+                # compressed and committed this batch.
+                logger.info(
+                    "chunk-text compression batch already applied by another "
+                    "process; resuming"
+                )
+                continue
+
+    def _compress_chunk_text(self, text: str) -> bytes:
+        return _zstd_compress_text(text, self._zstd_level, self._zstd_dict)
+
+    def decode_chunk_text(self, raw: "bytes | str") -> str:
+        """Read back a ``chunks.chunk_text`` value, compressed or not.
+
+        Public (unlike ``_compress_chunk_text``) because it has callers
+        outside this class: ``rag/scripts/build_index.py`` and
+        ``rag/scripts/rebuild_index.py`` both bulk-scan ``chunks`` directly
+        with their own pagination for embedding, rather than going through
+        :meth:`chunks_by_faiss_ids`, and it is also what
+        ``rag_zstd_decompress`` (the SQL function backing the FTS sync
+        triggers -- see ``_TRIGGERS``) is bound to.
+
+        A plain ``str`` passes through unchanged -- a legacy row the
+        compression backfill has not reached yet, or a value a test
+        inserted by hand.
+        """
+        if isinstance(raw, str):
+            return raw
+        return _zstd_decompress_text(raw, self._zstd_dict)
 
     # ─── Migrations ──────────────────────────────────────────────────────────
 
@@ -795,6 +1133,8 @@ class SqliteStore:
         content_hash: str | None = None,
         document_type: str | None = None,
         doc_date: str | None = None,
+        lane: str = "dense",
+        lane_reason: str | None = None,
         source_url: str | None = None,
         storage_ref: str | None = None,
         corpus_id: str | None = None,
@@ -806,6 +1146,13 @@ class SqliteStore:
 
         ``created_at`` is preserved on update so a resumed ingest does not
         rewrite when the document first arrived.
+
+        ``lane``/``lane_reason`` are written as given, not ``COALESCE``d like
+        the identity fields above: the pipeline's first call (before routing
+        runs) leaves them at the 'dense' default, and its second call (once
+        :func:`rag.app.ingest.pipeline._route_lane` has decided) always carries
+        the real, current answer -- there is no earlier value worth preserving
+        over it, unlike a court or citation that a caller might genuinely omit.
         """
         now = _now()
         with self._write() as conn:
@@ -814,9 +1161,10 @@ class SqliteStore:
                 INSERT INTO documents (
                     document_id, collection, court, citation, title, file_path,
                     storage_path, visibility,
-                    content_hash, document_type, doc_date, source_url, storage_ref,
+                    content_hash, document_type, doc_date, lane, lane_reason,
+                    source_url, storage_ref,
                     corpus_id, clerk_uid, page_count, status, created_at, updated_at
-                ) VALUES (?,?,?,?,?,?,?,'public',?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,'public',?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(document_id) DO UPDATE SET
                     collection    = excluded.collection,
                     court         = COALESCE(excluded.court, documents.court),
@@ -829,6 +1177,8 @@ class SqliteStore:
                     content_hash  = COALESCE(excluded.content_hash, documents.content_hash),
                     document_type = COALESCE(excluded.document_type, documents.document_type),
                     doc_date      = COALESCE(excluded.doc_date, documents.doc_date),
+                    lane          = excluded.lane,
+                    lane_reason   = excluded.lane_reason,
                     source_url    = COALESCE(excluded.source_url, documents.source_url),
                     storage_ref   = COALESCE(excluded.storage_ref, documents.storage_ref),
                     corpus_id     = COALESCE(excluded.corpus_id, documents.corpus_id),
@@ -840,7 +1190,8 @@ class SqliteStore:
                 (
                     document_id, collection, court, citation, title, file_path,
                     file_path,
-                    content_hash, document_type, doc_date, source_url, storage_ref,
+                    content_hash, document_type, doc_date, lane, lane_reason,
+                    source_url, storage_ref,
                     corpus_id, clerk_uid, page_count, status, now, now,
                 ),
             )
@@ -1182,7 +1533,7 @@ class SqliteStore:
                         collection,
                         owner_id,
                         index,
-                        text,
+                        self._compress_chunk_text(text),
                         page_number,
                         faiss_id,
                         now,
@@ -1198,6 +1549,68 @@ class SqliteStore:
             )
         return stale
 
+    def chunks_for_document(self, document_id: str) -> list[tuple[int, str]]:
+        """``(faiss_id, chunk_text)`` for one document, in chunk order.
+
+        What ``rag/scripts/promote_lane.py`` embeds: a lexical-lane chunk
+        already holds a ``faiss_id`` (the schema requires one regardless of
+        lane -- see the column comment above), it was simply never added to
+        the index, so promotion embeds this text and adds it under the id it
+        already has rather than reallocating one.
+        """
+        rows = self.connection.execute(
+            "SELECT faiss_id, chunk_text FROM chunks WHERE document_id = ? ORDER BY chunk_index",
+            (document_id,),
+        ).fetchall()
+        return [(row["faiss_id"], self.decode_chunk_text(row["chunk_text"])) for row in rows]
+
+    def set_lane(self, document_id: str, lane: str, lane_reason: str | None) -> None:
+        """Change a document's lane without touching any of its other fields.
+
+        Used by ``rag/scripts/promote_lane.py`` after it has added a
+        lexical-lane document's vectors to the index -- at that point the
+        document really is dense, and the update must not go through
+        :meth:`upsert_document`'s ``COALESCE`` logic for the identity fields,
+        which would require re-supplying all of them.
+        """
+        with self._write() as conn:
+            conn.execute(
+                "UPDATE documents SET lane = ?, lane_reason = ?, updated_at = ? WHERE document_id = ?",
+                (lane, lane_reason, _now(), document_id),
+            )
+
+    def lexical_document_ids(self, court: str | None = None) -> list[str]:
+        """Ids of every lexical-lane document, optionally narrowed to one court.
+
+        Feeds ``rag/scripts/promote_lane.py --court``, for bulk-correcting a
+        routing rule that turns out to have been too conservative for a whole
+        court rather than one document.
+        """
+        sql = "SELECT document_id FROM documents WHERE lane = 'lexical'"
+        params: list[Any] = []
+        if court is not None:
+            sql += " AND court = ?"
+            params.append(court)
+        return [row["document_id"] for row in self.connection.execute(sql, params)]
+
+    def lane_histogram(self, collection: str | None = None) -> dict[str, int]:
+        """Count of documents per ``(lane, lane_reason)``, most common first.
+
+        What T14's "Done when" asks to be reported: a split far from the
+        expected ~80 lakh dense estimate means the routing rules need tuning
+        before the GPU spend in T10.
+        """
+        sql = "SELECT lane, lane_reason, COUNT(*) AS n FROM documents"
+        params: list[Any] = []
+        if collection is not None:
+            sql += " WHERE collection = ?"
+            params.append(collection)
+        sql += " GROUP BY lane, lane_reason ORDER BY n DESC"
+        return {
+            f"{row['lane']}:{row['lane_reason']}": row["n"]
+            for row in self.connection.execute(sql, params)
+        }
+
     def chunks_by_faiss_ids(self, faiss_ids: Sequence[int]) -> dict[int, ChunkRecord]:
         """Hydrate FAISS hits. Missing ids are simply absent from the result."""
         if not faiss_ids:
@@ -1210,7 +1623,7 @@ class SqliteStore:
                 f"{_CHUNK_SELECT} WHERE c.faiss_id IN ({placeholders})", batch
             )
             for row in rows:
-                record = ChunkRecord.from_row(row)
+                record = ChunkRecord.from_row(row, decode_chunk_text=self.decode_chunk_text)
                 found[record.faiss_id] = record
         return found
 

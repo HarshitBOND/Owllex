@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 import time
 from pathlib import Path
@@ -50,6 +51,19 @@ ADD_BATCH_SIZE = 1_000_000
 # whatever FAISS_TRAIN_THRESHOLD is configured to, so a too-low setting cannot
 # silently produce a bad index instead of a loud error.
 MIN_TRAINING_VECTORS_PER_CENTROID = 39
+
+# Same year pattern rag/core/paths.py::_year_segment matches -- `doc_date` is
+# free text from whatever the source publishes, not a guaranteed ISO date, so
+# a 4-digit year is the only thing worth extracting from it for T9b's
+# training-sample date range.
+_YEAR_RE = re.compile(r"(1[6-9]\d{2}|2[01]\d{2})")
+
+# How many of the training sample's faiss_ids to actually look up in SQLite
+# for T9b's recorded date range. This is metadata for an operator reading the
+# sidecar, not a value anything computes drift from, so a bounded peek is
+# enough -- capping it keeps a build with hundreds of thousands of training
+# vectors from turning into hundreds of IN() round trips.
+TRAINING_DATE_RANGE_SAMPLE_CAP = 2_000
 
 
 class BuildRefused(RebuildRefused):
@@ -304,7 +318,9 @@ def _embed(services: RagServices, collections: list[str], checkpoint: Checkpoint
             )
             break
 
-        vectors = services.embedder.embed_documents([r["chunk_text"] for r in rows])
+        vectors = services.embedder.embed_documents(
+            [services.metadata.decode_chunk_text(r["chunk_text"]) for r in rows]
+        )
         ids = [r["faiss_id"] for r in rows]
         checkpoint.append(ids, vectors)
         last_faiss_id = ids[-1]
@@ -352,7 +368,50 @@ def _train(services: RagServices, staging: VectorIndex, checkpoint: Checkpoint) 
     sample = np.asarray(checkpoint.vectors[positions])
 
     logger.info("training %s on %d of %d embedded vectors", staging.collection, sample_size, available)
-    staging.train(sample)
+    sample_ids = checkpoint.ids[positions].tolist()
+    date_range = _training_date_range(services.metadata.connection, sample_ids)
+    # `checkpoint.done`, not `sample_size`: the training call only sees a
+    # sample, but every embedded row is what `_add` adds right after, so
+    # that -- not the (possibly much smaller) training sample -- is the
+    # corpus size T9b's drift signals should measure growth against.
+    staging.train(sample, trained_at_ntotal=checkpoint.done, training_date_range=date_range)
+
+
+def _training_date_range(conn, faiss_ids: list[int]) -> tuple[str, str] | None:
+    """Best-effort (min, max) document year covering the given faiss_ids.
+
+    ``documents.doc_date`` is free text from whatever the source publishes --
+    not a guaranteed ISO date -- so this only extracts a 4-digit year rather
+    than trying to sort arbitrary date strings. ``None`` when none of the
+    sampled documents have a recognisable date, which is expected for
+    material that predates this field.
+    """
+    if not faiss_ids:
+        return None
+    if len(faiss_ids) > TRAINING_DATE_RANGE_SAMPLE_CAP:
+        rng = np.random.default_rng(0)
+        faiss_ids = rng.choice(
+            faiss_ids, size=TRAINING_DATE_RANGE_SAMPLE_CAP, replace=False
+        ).tolist()
+
+    years: set[str] = set()
+    batch_size = 500
+    for start in range(0, len(faiss_ids), batch_size):
+        batch = faiss_ids[start : start + batch_size]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"SELECT DISTINCT d.doc_date FROM chunks c JOIN documents d ON d.document_id = c.document_id "
+            f"WHERE c.faiss_id IN ({placeholders}) AND d.doc_date IS NOT NULL",
+            batch,
+        ).fetchall()
+        for (doc_date,) in rows:
+            match = _YEAR_RE.search(str(doc_date))
+            if match:
+                years.add(match.group(1))
+
+    if not years:
+        return None
+    return (min(years), max(years))
 
 
 def _add(staging: VectorIndex, checkpoint: Checkpoint, add_batch_size: int) -> None:

@@ -11,6 +11,16 @@ from dotenv import load_dotenv
 # Load environment variables from backend/.env
 load_dotenv()
 
+# PRODUCTION_TODO.md T19: rag/core/config.py is the one place every bulk
+# storage path is resolved from the two-tier split (SSD_DATA_ROOT/
+# HDD_DATA_ROOT); this was the second config system reading DATA_ROOT
+# directly instead. A lightweight import on purpose -- rag.core.config pulls
+# in nothing beyond os/pathlib/dotenv, unlike rag.core.services or the
+# retrieval/ingest modules (which every other app/*.py file defers importing
+# to function-call time to avoid dragging in FAISS/the embedding model at
+# FastAPI import time), so this does not change that boundary.
+from rag.core.config import get_config as _get_rag_config
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -20,24 +30,33 @@ class Settings:
     DEBUG: bool = os.getenv("RAVENSLAW_DEBUG", "false").lower() == "true"
     ENABLE_SCRAPER_SCHEDULER: bool = os.getenv("ENABLE_SCRAPER_SCHEDULER", "false").lower() == "true"
 
-    # PDF upload staging. Under DATA_ROOT, not next to the code: these are whole
-    # user PDFs, and a 50-document bulk import staged on the boot SSD is both the
-    # wrong disk (see the storage split in rag/core/config.py) and a way to fill
-    # a 40GB root filesystem with files that are deleted seconds later. Resolved
-    # from the environment rather than from __file__ so the code tree can move.
+    # PDF upload staging. Under HDD_DATA_ROOT (rag/core/config.py's bulk tier),
+    # not next to the code: these are whole user PDFs, and a 50-document bulk
+    # import staged on the boot SSD is both the wrong disk and a way to fill a
+    # 40GB root filesystem with files that are deleted seconds later.
+    #
+    # PRODUCTION_TODO.md T19: this used to read DATA_ROOT directly rather than
+    # deriving from rag/core/config.py -- the one place every other bulk path
+    # in this system is resolved from the SSD_DATA_ROOT/HDD_DATA_ROOT split.
+    # On a split host (HDD_DATA_ROOT != DATA_ROOT), that meant upload staging
+    # silently landed on whatever DATA_ROOT still pointed at -- possibly the
+    # legacy single-volume path, or nothing meaningful at all -- instead of
+    # the HDD tier every other bulk path (legal_corpus, faiss, inbox, ...)
+    # resolves onto, and RagConfig.validate()'s "a bulk path must not resolve
+    # onto the SSD" check never got a chance to catch it, because this path
+    # was never resolved through RagConfig to begin with.
     UPLOAD_DIR: str = os.getenv(
         "RAVENSLAW_UPLOAD_DIR",
-        str(Path(os.getenv("DATA_ROOT", "/data").strip() or "/data") / "tmp" / "uploads"),
+        str(_get_rag_config().hdd_data_root / "tmp" / "uploads"),
     )
     MAX_PDF_SIZE_MB: int = int(os.getenv("RAVENSLAW_MAX_PDF_SIZE_MB", "50"))
 
-    # Lossy PDF recompression before archival (see rag/app/ingest/compress.py).
-    # Tuned for maximum storage savings: /screen preset at 72 dpi. Raise this
-    # if 72 proves too coarse for seals and signatures. Disable to store
-    # originals byte-for-byte.
-    PDF_COMPRESSION_ENABLED: bool = os.getenv("RAVENSLAW_PDF_COMPRESSION", "true").lower() == "true"
-    PDF_COMPRESSION_DPI: int = int(os.getenv("RAVENSLAW_PDF_COMPRESSION_DPI", "72"))
-    PDF_COMPRESSION_TIMEOUT_SECONDS: int = int(os.getenv("RAVENSLAW_PDF_COMPRESSION_TIMEOUT", "120"))
+    # Lossy PDF recompression before archival (see rag/app/ingest/compress.py)
+    # is configured through RagConfig.pdf_compression_* (rag/core/config.py),
+    # not here -- PRODUCTION_TODO.md T10. It is a property of the document
+    # store rag/core/services.py builds, and every rag/ script needs to be
+    # constructible without this module (and the production auth settings it
+    # requires below) ever being imported.
 
     # MongoDB (optional)
     MONGODB_URI: str = os.getenv("MONGODB_URI", "")
@@ -69,6 +88,13 @@ class Settings:
     # Security
     RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RAVENSLAW_RATE_LIMIT_WINDOW_SECONDS", "60"))
     RATE_LIMIT_MAX_REQUESTS: int = int(os.getenv("RAVENSLAW_RATE_LIMIT_MAX_REQUESTS", "120"))
+    # PRODUCTION_TODO.md T19a: hard cap on how many distinct client IPs the
+    # in-process rate limiter (app/main.py::_RateLimiter) will track at once,
+    # enforced with LRU eviction regardless of how the periodic sweep timing
+    # lands. 100k IPs x a small deque each is a low-single-digit-MB ceiling,
+    # against the previously-unbounded growth of one entry per distinct IP
+    # ever seen, forever, in a Restart=always unit meant to run for months.
+    RATE_LIMIT_MAX_TRACKED_IPS: int = int(os.getenv("RAVENSLAW_RATE_LIMIT_MAX_TRACKED_IPS", "100000"))
 
     # Bulk import safety
     MAX_CONCURRENT_BULK_IMPORTS: int = int(os.getenv("RAVENSLAW_MAX_CONCURRENT_BULK_IMPORTS", "1"))
@@ -109,14 +135,12 @@ class Settings:
             raise RuntimeError("RAVENSLAW_RATE_LIMIT_WINDOW_SECONDS must be > 0")
         if self.RATE_LIMIT_MAX_REQUESTS <= 0:
             raise RuntimeError("RAVENSLAW_RATE_LIMIT_MAX_REQUESTS must be > 0")
+        if self.RATE_LIMIT_MAX_TRACKED_IPS <= 0:
+            raise RuntimeError("RAVENSLAW_RATE_LIMIT_MAX_TRACKED_IPS must be > 0")
         if self.MAX_CONCURRENT_BULK_IMPORTS <= 0:
             raise RuntimeError("RAVENSLAW_MAX_CONCURRENT_BULK_IMPORTS must be > 0")
         if self.IMPORT_PROGRESS_TTL_SECONDS < 300:
             raise RuntimeError("RAVENSLAW_IMPORT_PROGRESS_TTL_SECONDS must be >= 300")
-        if not 72 <= self.PDF_COMPRESSION_DPI <= 600:
-            raise RuntimeError("RAVENSLAW_PDF_COMPRESSION_DPI must be between 72 and 600")
-        if self.PDF_COMPRESSION_TIMEOUT_SECONDS <= 0:
-            raise RuntimeError("RAVENSLAW_PDF_COMPRESSION_TIMEOUT must be > 0")
 
         trusted_hosts_raw = os.getenv("RAVENSLAW_TRUSTED_HOSTS", "").strip()
         if trusted_hosts_raw:

@@ -27,6 +27,14 @@ EnvironmentFile=/opt/owllex/backend/.env
 Environment=HF_HOME=/data/models
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
+# PRODUCTION_TODO.md T17: this worker is the sole FAISS writer (T2), and FAISS
+# cannot mutate a memory-mapped index in place -- so this must be false
+# regardless of what FAISS_MMAP is set to in the shared .env for the reading
+# side (owllex-rag.service). An `Environment=` line here overrides the
+# EnvironmentFile= above for this unit only, the same pattern HF_HOME already
+# uses on this line, so turning mmap on for the API by editing one shared .env
+# can never silently also turn it on for the writer.
+Environment=FAISS_MMAP=false
 
 ExecStart=/opt/owllex/backend/.venv/bin/python -m rag.scripts.ingest_worker
 

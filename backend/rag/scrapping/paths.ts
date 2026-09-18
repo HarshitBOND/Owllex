@@ -61,3 +61,12 @@ export function pdfRoot(): string {
 export function backupRoot(): string {
   return env("BACKUP_ROOT") || join(hddDataRoot(), "backups");
 }
+
+// Where owllex-ingest.service watches for new documents -- same default as
+// rag/core/config.py's inbox_root (HDD_DATA_ROOT/inbox). A scraper drops a
+// finished PDF here instead of calling the ingest API directly (PRODUCTION_TODO.md
+// T11): a top-level subdirectory matching a known court code (e.g. "sci") is
+// read by the worker as a court hint, same as an operator's manual drop.
+export function inboxRoot(): string {
+  return env("INBOX_ROOT") || join(hddDataRoot(), "inbox");
+}

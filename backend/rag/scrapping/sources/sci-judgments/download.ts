@@ -9,16 +9,15 @@
 //     npm run scrape:sci:download -- 25
 
 import { chromium } from "playwright";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { backupHashIndex, count, has } from "../../hashdb.js";
+import { queueForIngest } from "./inbox.js";
 import { persistDownloadedJudgment } from "./persist.js";
 
 const SEARCH_URL = "https://scr.sci.gov.in/scrsearch/";
 const N = Number(process.argv[2]) || 2; // how many new PDFs to download
-
-const BACKEND_API = process.env.NEXT_PUBLIC_BACKEND_API || "http://localhost:8000";
 
 const SOURCE = "sci";
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,81 +25,11 @@ const SOURCE_DIR = join(__dirname, "..", "..", "data", "raw", SOURCE);
 const PDF_DIR = join(SOURCE_DIR, "pdfs");
 const MANIFEST_PATH = join(SOURCE_DIR, "manifest.jsonl");
 
-// Hands a freshly-downloaded PDF straight to the same admin-upload ingest
-// pipeline the RAG Ingest tab uses, so a scrape run doesn't just fill a disk
-// folder -- each judgment is chunked, embedded, and counted in the knowledge
-// base immediately. Never fatal: a scrape that downloaded the PDF correctly
-// should not fail just because ingestion (or its storage/embedding config) isn't
-// available right now.
-//
-// /ingest only enqueues -- the ingest worker is the sole FAISS writer
-// (PRODUCTION_TODO.md T2) -- so this polls the job to a terminal status the
-// way the Next app does. That wait now happens here, not inside a held-open
-// gunicorn worker thread on the backend, which is most of the way to what T11
-// asks for; it does not by itself stop a slow OCR run from blocking *this*
-// script's own download loop -- that part is still T11's to do.
-async function ingestIntoKnowledgeBase(filePath: string, filename: string): Promise<number | null> {
-  const token = process.env.BACKEND_INTERNAL_TOKEN;
-  if (!token) {
-    console.warn("  Skipping knowledge base ingestion: BACKEND_INTERNAL_TOKEN is not set");
-    return null;
-  }
-
-  try {
-    const form = new FormData();
-    form.append("files", new Blob([readFileSync(filePath)]), filename);
-
-    const response = await fetch(`${BACKEND_API}/api/v1/rag/ingest`, {
-      method: "POST",
-      headers: { "x-internal-token": token },
-      body: form,
-    });
-
-    if (!response.ok) {
-      console.warn(`  Knowledge base ingestion failed (HTTP ${response.status})`);
-      return null;
-    }
-
-    const enqueued = (await response.json()) as { job_id?: string };
-    if (!enqueued.job_id) {
-      console.warn("  Knowledge base ingestion failed: no job_id in response");
-      return null;
-    }
-
-    const deadline = Date.now() + 10 * 60 * 1000;
-    while (Date.now() < deadline) {
-      const jobResponse = await fetch(`${BACKEND_API}/api/v1/rag/jobs/${enqueued.job_id}`, {
-        headers: { "x-internal-token": token },
-      });
-      if (!jobResponse.ok) {
-        console.warn(`  Knowledge base ingestion status check failed (HTTP ${jobResponse.status})`);
-        return null;
-      }
-      const job = (await jobResponse.json()) as {
-        status: string;
-        chunk_count?: number;
-        error?: string;
-      };
-      if (job.status === "duplicate") {
-        console.log("  Already in knowledge base (duplicate content)");
-        return null;
-      }
-      if (job.status === "failed") {
-        console.warn(`  Knowledge base ingestion failed: ${job.error ?? "unknown error"}`);
-        return null;
-      }
-      if (job.status === "complete") {
-        return job.chunk_count ?? 0;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-    console.warn("  Knowledge base ingestion timed out waiting for the ingest worker");
-    return null;
-  } catch (error) {
-    console.warn(`  Knowledge base ingestion error: ${(error as Error).message}`);
-    return null;
-  }
-}
+// Launched from the admin panel with no terminal and no one watching, so a captcha
+// nobody ever solves must not pin a Chromium process open indefinitely (PRODUCTION_TODO.md
+// T12) -- 15 minutes is generous for a human at a keyboard, short enough that an abandoned
+// session frees its browser before it accumulates.
+const SOLVE_TIMEOUT_MS = Number(process.env.SCRAPE_SOLVE_TIMEOUT_MS) || 15 * 60_000;
 
 async function main(): Promise<void> {
   mkdirSync(PDF_DIR, { recursive: true });
@@ -115,9 +44,16 @@ async function main(): Promise<void> {
 
     console.log("Solve the captcha and run a search in the browser window that just opened.");
     // No terminal attached when this runs from the admin panel, so watch the DOM
-    // for results instead of waiting on stdin. No timeout: a human takes as long
-    // as they take to clear the captcha.
-    await page.waitForSelector("#report_body tr input#cnr", { timeout: 0 });
+    // for results instead of waiting on stdin.
+    try {
+      await page.waitForSelector("#report_body tr input#cnr", { timeout: SOLVE_TIMEOUT_MS });
+    } catch {
+      console.error(
+        `No results after ${Math.round(SOLVE_TIMEOUT_MS / 60_000)} minute(s); ` +
+          "nobody solved the captcha in time. Closing the browser.",
+      );
+      return;
+    }
     console.log("Results detected, starting downloads.");
 
     let downloaded = 0;
@@ -201,9 +137,11 @@ async function main(): Promise<void> {
         downloaded++;
         console.log(`[${downloaded}/${N}] Downloaded ${cnr}`);
 
-        const chunkCount = await ingestIntoKnowledgeBase(result.filePath, result.filename);
-        if (chunkCount !== null) {
-          console.log(`  Added to knowledge base (${chunkCount} chunks)`);
+        const queued = queueForIngest(SOURCE, result.filePath, result.filename);
+        if (queued) {
+          console.log(`  Queued for ingestion: ${queued}`);
+        } else {
+          console.warn("  Could not queue for ingestion; PDF is still archived on disk");
         }
       }
 

@@ -52,6 +52,13 @@ logger = logging.getLogger("ravenslaw.rag.ingest")
 
 _HASH_READ_SIZE = 1024 * 1024
 
+LANE_DENSE = "dense"
+LANE_LEXICAL = "lexical"
+
+# Phrases that mark a document as substantive even when it's short and from an
+# unidentified court -- see _route_lane, rule 3.
+_DENSE_LANE_PHRASES = ("held", "coram", "reasoning", "it is ordered")
+
 
 @dataclass(frozen=True)
 class IngestResult:
@@ -207,6 +214,19 @@ class IngestionPipeline:
         document_text = "\n\n".join(pages)
         metadata = extract_metadata(document_text, paths[0].name, court_hint)
 
+        # 3b. Route. Only the public legal corpus is split into lanes -- T14's
+        # cost argument is entirely about that corpus's growth to 10 crore
+        # documents. A private/per-advocate document (collection ==
+        # USER_COLLECTION) is whatever the owner chose to upload -- a lease, a
+        # merger agreement -- and has semantic-search value regardless of its
+        # length or a "court" field that rarely even applies to it, so it stays
+        # dense exactly as before this task. Must run before step 5, since not
+        # embedding the lexical lane is most of the cost saving.
+        if collection == PUBLIC_COLLECTION:
+            lane, lane_reason = _route_lane(metadata.court, len(pages), document_text, config)
+        else:
+            lane, lane_reason = LANE_DENSE, "collection:private"
+
         # 4. Archive the source on the mounted volume.
         file_path = self._archive(paths, content_hash, metadata, court_hint) if persist_source else None
 
@@ -220,6 +240,8 @@ class IngestionPipeline:
             content_hash=content_hash,
             document_type=metadata.document_type,
             doc_date=metadata.date or None,
+            lane=lane,
+            lane_reason=lane_reason,
             storage_ref=file_path,
             source_url=_public_url(file_path),
             corpus_id=extra_metadata.get("corpus_id"),
@@ -228,8 +250,15 @@ class IngestionPipeline:
             status=STATUS_CHUNKED,
         )
 
-        # 5. Embed locally, in batches.
-        vectors = services.embedder.embed_documents([chunk.text for chunk in chunks])
+        # 5. Embed locally, in batches -- skipped for the lexical lane, which
+        # is the point of routing: those chunks are still searchable through
+        # chunks_fts (step 6 writes them there regardless of lane), just never
+        # through the dense index.
+        vectors = (
+            services.embedder.embed_documents([chunk.text for chunk in chunks])
+            if lane == LANE_DENSE
+            else None
+        )
         services.metadata.set_status(document_id, STATUS_EMBEDDED)
 
         # 6. Write chunk rows, then vectors. Any ids left by a previous attempt
@@ -240,6 +269,10 @@ class IngestionPipeline:
         #    Which partition the ids come from is decided by ownership, not by
         #    the caller: a private document's vectors must be unreachable from
         #    the public range, and that is enforced here and again by a trigger.
+        #    Every chunk gets a faiss_id regardless of lane -- the column is
+        #    NOT NULL UNIQUE -- but a lexical-lane id is never added to the
+        #    index below; rag/scripts/promote_lane.py can add it later under
+        #    the same id without reallocating one.
         faiss_ids = list(
             services.metadata.allocate_faiss_ids(len(chunks), private=owner_id is not None)
         )
@@ -253,9 +286,13 @@ class IngestionPipeline:
 
         index = services.indexes.get(collection)
         if stale_ids:
+            # Dropped regardless of this attempt's lane: a document that was
+            # dense before and is lexical now must not leave its old vectors
+            # behind in the index.
             removed = index.remove(stale_ids)
             logger.info("Replaced %d stale vector(s) for %s", removed, document_id)
-        index.add(faiss_ids, vectors)
+        if lane == LANE_DENSE:
+            index.add(faiss_ids, vectors)
         services.metadata.set_status(document_id, STATUS_INDEXED)
 
         # 7. Commit. Only now is the document considered ingested.
@@ -268,8 +305,9 @@ class IngestionPipeline:
         services.metadata.set_status(document_id, STATUS_COMPLETE)
 
         logger.info(
-            "Ingested %s as %s (%d pages, %d chunks, court=%s)",
-            paths[0].name, document_id, len(pages), len(chunks), metadata.court or "unknown",
+            "Ingested %s as %s (%d pages, %d chunks, court=%s, lane=%s/%s)",
+            paths[0].name, document_id, len(pages), len(chunks),
+            metadata.court or "unknown", lane, lane_reason,
         )
 
         return IngestResult(
@@ -340,6 +378,34 @@ class IngestionPipeline:
                 while block := handle.read(_HASH_READ_SIZE):
                     digest.update(block)
         return digest.hexdigest()
+
+
+def _route_lane(court: str, page_count: int, document_text: str, config) -> tuple[str, str]:
+    """Decide whether a document is worth embedding, and record why.
+
+    Rules-based rather than a trained classifier, deliberately: a wrong call
+    here is recoverable by ``rag/scripts/promote_lane.py`` without a training
+    set, a versioning problem, or an explainability problem -- see
+    PRODUCTION_TODO.md T14. First match wins, and court is checked before
+    length on purpose: length only predicts value *within* a court, so a short
+    Supreme Court order and a short district-court adjournment slip must not
+    be routed by the same length cutoff.
+    """
+    if court == "sci" or court.startswith("hc/"):
+        return LANE_DENSE, f"court:{court}"
+
+    if page_count > config.dense_lane_min_pages:
+        return LANE_DENSE, "pages"
+
+    lowered = document_text.lower()
+    for phrase in _DENSE_LANE_PHRASES:
+        if phrase in lowered:
+            return LANE_DENSE, f"phrase:{phrase}"
+
+    if len(document_text) >= config.dense_lane_min_chars:
+        return LANE_DENSE, "length"
+
+    return LANE_LEXICAL, "default"
 
 
 def _as_paths(paths: str | Path | Sequence[str | Path]) -> list[Path]:

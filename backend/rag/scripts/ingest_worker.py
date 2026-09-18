@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import shutil
 import signal
 import sys
@@ -69,7 +70,8 @@ logger = logging.getLogger("ravenslaw.rag.ingest_worker")
 # quarantine directory's real purpose.
 #
 # Note that .md and .txt ARE ingested, so notes written beside a corpus drop will
-# be indexed as documents. Keep operator notes outside the inbox.
+# be indexed as documents unless they live under a skipped directory -- see
+# _ALWAYS_IGNORED_DIRNAMES / INGESTIGNORE_FILENAME below (PRODUCTION_TODO.md T11a).
 SUPPORTED_SUFFIXES = {
     ".pdf",
     # Images are ingestable because a scanned judgment often arrives as one file
@@ -85,6 +87,15 @@ FAILED_DIRNAME = ".failed"
 # rsync into the inbox is still writing.
 _IGNORED_PREFIXES = (".", "~")
 _PARTIAL_SUFFIXES = {".part", ".partial", ".tmp", ".crdownload", ".filepart"}
+
+# Always skipped, anywhere in the tree, so operator files -- a README, a
+# batch manifest, a scratch note -- have somewhere to live without being read
+# as documents (SUPPORTED_SUFFIXES above includes .txt/.md for exactly the
+# court material that legitimately arrives that way). PRODUCTION_TODO.md T11a.
+_ALWAYS_IGNORED_DIRNAMES = frozenset({"notes"})
+# One directory name per line, "#" comments and blank lines ignored. Read
+# fresh on every pass -- no restart needed to add an exclusion.
+INGESTIGNORE_FILENAME = ".ingestignore"
 
 # Written by the API next to an upload's spooled file(s), one per job
 # directory -- never tied to a page's own filename, so it is found the same
@@ -117,7 +128,9 @@ def main(argv: list[str] | None = None) -> int:
         "--collection", default=PUBLIC_COLLECTION, help="target collection"
     )
     parser.add_argument(
-        "--batch", type=int, default=0, help="max documents per pass (0 = unlimited)"
+        "--batch", type=int, default=500,
+        help="max documents per pass, 0 = unlimited (default: 500; see PRODUCTION_TODO.md T11a "
+        "-- bounds inbox-scan cost, not just ingest work, so it should stay finite in production)",
     )
     args = parser.parse_args(argv)
 
@@ -187,8 +200,15 @@ def _drain(services, inbox: Path, collection: str, batch: int) -> int:
 
     pipeline = IngestionPipeline(services)
     processed = 0
+    # Reuses FAISS_FLUSH_EVERY (a vector count elsewhere -- see
+    # VectorIndex._effective_flush_threshold) as a document count here: one
+    # operator-facing knob rather than two, and the exact number matters far
+    # less than "bounded" does. This is independent of _pending_files' own
+    # scan bound below -- a large or unbounded (--batch 0) pass still needs
+    # to flush as it goes, not just once at the end. PRODUCTION_TODO.md T11a.
+    flush_every = max(1, services.config.faiss_flush_every)
 
-    for path in _pending_files(inbox):
+    for path in _pending_files(inbox, batch):
         if _stop_requested:
             break
         if batch and processed >= batch:
@@ -196,6 +216,8 @@ def _drain(services, inbox: Path, collection: str, batch: int) -> int:
             break
         _ingest_one(services, pipeline, path, inbox, collection)
         processed += 1
+        if processed % flush_every == 0:
+            services.indexes.flush_all()
 
     if processed:
         # Persist the vectors added this pass rather than leaving them to the
@@ -206,42 +228,103 @@ def _drain(services, inbox: Path, collection: str, batch: int) -> int:
     return processed
 
 
-def _pending_files(inbox: Path) -> list[Path]:
-    """Ingestable files in the inbox, oldest first.
+def _ingestignore_dirnames(inbox: Path) -> frozenset[str]:
+    """Directory names to skip anywhere in the tree this pass.
 
-    Oldest-first so a queue drains in the order it was filled, and a file dropped
-    during a long import is not starved by later arrivals.
+    Read fresh every call (cheap: one small file, once per pass) rather than
+    cached, so adding a line takes effect on the next pass, not a restart.
     """
-    candidates: list[Path] = []
-    for path in inbox.rglob("*"):
-        if not path.is_file():
-            continue
-        if FAILED_DIRNAME in path.relative_to(inbox).parts:
-            continue
-        if path.name.startswith(_IGNORED_PREFIXES):
-            continue
-        if path.suffix.lower() in _PARTIAL_SUFFIXES:
-            continue
-        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
-            continue
-        if _still_being_written(path):
-            continue
-        candidates.append(path)
+    names = set(_ALWAYS_IGNORED_DIRNAMES)
+    try:
+        text = (inbox / INGESTIGNORE_FILENAME).read_text(encoding="utf-8")
+    except OSError:
+        return frozenset(names)
+    for line in text.splitlines():
+        name = line.split("#", 1)[0].strip()
+        if name:
+            names.add(name)
+    return frozenset(names)
 
+
+def _pending_files(inbox: Path, limit: int = 0) -> list[Path]:
+    """Up to `limit` ingestable files (0 = unlimited), oldest first per directory.
+
+    Walks lazily via `os.scandir` and stops as soon as `limit` candidates are
+    found, so the cost of finding the next batch does not grow with the size
+    of the backlog -- see PRODUCTION_TODO.md T11a (the previous implementation
+    built the full recursive listing, every pass, before sorting any of it).
+    Ordering is oldest-first *within* each directory rather than a total order
+    across the whole tree: the point was fairness among files that arrived
+    together, not a global timestamp order, and a global order is exactly what
+    would force a full scan to establish.
+    """
+    ignored_dirnames = _ingestignore_dirnames(inbox)
+    candidates: list[Path] = []
+
+    def _walk(directory: Path) -> bool:
+        """True once `limit` is reached and the scan should stop descending."""
+        try:
+            entries = list(os.scandir(directory))
+        except OSError:
+            return False
+
+        files: list[Path] = []
+        subdirs: list[Path] = []
+        for entry in entries:
+            if entry.name.startswith(_IGNORED_PREFIXES):
+                continue
+            try:
+                is_dir = entry.is_dir(follow_symlinks=False)
+            except OSError:
+                continue
+            if is_dir:
+                if entry.name == FAILED_DIRNAME or entry.name in ignored_dirnames:
+                    continue
+                subdirs.append(Path(entry.path))
+            else:
+                files.append(Path(entry.path))
+
+        for path in sorted(files, key=_safe_mtime):
+            if not _is_pending_file(path):
+                continue
+            candidates.append(path)
+            if limit and len(candidates) >= limit:
+                return True
+
+        for sub in sorted(subdirs, key=lambda p: p.name):
+            if _walk(sub):
+                return True
+        return False
+
+    _walk(inbox)
+    return candidates
+
+
+def _safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _is_pending_file(path: Path) -> bool:
+    if path.suffix.lower() in _PARTIAL_SUFFIXES:
+        return False
+    if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+        return False
+    if _still_being_written(path):
+        return False
     # A manifest job with more than one page (ordered images of one physical
     # document, or `files` on /ingest) writes every page into the same job
     # directory alongside one job.manifest.json. Only its first page is a
     # pending file in its own right -- the rest are consumed alongside it in
     # _ingest_one so the pipeline sees one document, not several.
-    filtered = []
-    for path in candidates:
-        manifest = _load_manifest(_manifest_for(path))
-        if manifest:
-            pages = manifest.get("paths") or [path.name]
-            if path.name != pages[0]:
-                continue
-        filtered.append(path)
-    return sorted(filtered, key=lambda p: p.stat().st_mtime)
+    manifest = _load_manifest(_manifest_for(path))
+    if manifest:
+        pages = manifest.get("paths") or [path.name]
+        if path.name != pages[0]:
+            return False
+    return True
 
 
 def _manifest_for(path: Path) -> Path:

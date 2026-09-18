@@ -37,6 +37,8 @@ rag = [
     "faiss-cpu>=1.8",
     # O(1) content-hash dedup index -- see rag/core/hash_index.py.
     "lmdb>=1.4",
+    # chunk_text compression, PRODUCTION_TODO.md T16 -- rag/core/sqlite_store.py.
+    "zstandard>=0.22",
     # numpy is FAISS's array interface and the embedder's output type. Pinned
     # below 3 only because faiss-cpu wheels are built against the 2.x ABI.
     "numpy>=1.26,<3",

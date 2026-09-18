@@ -146,7 +146,9 @@ def rebuild_collections(services, collections, batch_size: int, force: bool = Fa
 
         for start in range(0, len(rows), batch_size):
             batch = rows[start : start + batch_size]
-            vectors = services.embedder.embed_documents([r["chunk_text"] for r in batch])
+            vectors = services.embedder.embed_documents(
+                [services.metadata.decode_chunk_text(r["chunk_text"]) for r in batch]
+            )
             staging.add([r["faiss_id"] for r in batch], vectors)
             done += len(batch)
 

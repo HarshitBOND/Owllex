@@ -1768,7 +1768,7 @@ is not comparable to T4a's 144 one-for-one. Stable under `-p no:randomly`.
 
 ---
 
-### - [ ] T9b. Retrain the quantizer when the corpus composition drifts
+### - [x] T9b. Retrain the quantizer when the corpus composition drifts
 
 **Why.** A compressed index is trained **once**, on the corpus as it existed that day. The
 coarse quantizer's centroids and the PQ codebooks both encode that distribution. Owllex's
@@ -1827,11 +1827,84 @@ real High Court ingest — that is the first time this can be measured on live d
 **Done when.** Quantizer drift is a number on the health endpoint with a documented
 threshold and a documented response, rather than a slow silent decline in recall.
 
-**Result.**
+**Result.** All four Change items done, with two deviations from the literal text, both
+noted below.
+
+1. **`backend/rag/core/vector_index.py`**: `VectorIndex` gained `trained_at_ntotal: int |
+   None` and `training_date_range: tuple[str, str] | None`, set by `train()` (the explicit
+   bulk-build path) and by the private `_train()` (the implicit path `add()` triggers on an
+   untrained index). The bulk path passes its own explicit `trained_at_ntotal` — the caller
+   in `build_index.py` knows the *true* final corpus size before training even though the
+   training sample itself may be smaller (`FAISS_TRAIN_THRESHOLD`-capped); the implicit path
+   defaults to `vectors.shape[0]`, since that whole batch is what `add()` inserts right after
+   training it. `_verify_meta()` now also loads both fields from an existing sidecar (not just
+   validates it), so a process that only ever loads an already-trained index still has them.
+   `flush()` writes both into `.meta.json`.
+2. New `VectorIndex.ivf_list_stats()` (nlist, max/mean/empty list sizes via
+   `faiss.extract_index_ivf(...).invlists.list_size(i)`, `None` for Flat/HNSW/plain-PQ) and
+   `VectorIndex.drift_stats()` (wraps it, adds `trained_at_ntotal`, `training_date_range`,
+   `added_since_training`, `added_since_training_pct`). Triggers on list-size ratio and growth
+   fraction as the Change section specifies, not a deleted-vector percentage.
+3. **Surfaced in `/health/vector`, not `/health/rag`** — T20 (which the task cites as owning
+   that endpoint) is still unchecked below this one, and `/health/rag` does not exist yet;
+   `/health/vector`'s `_collection_health` is the FAISS health check that exists today, so
+   that is where `quantizer_drift` and the new `_quantizer_drift_severity()` (`"ok"` /
+   `"warn"` / `"degraded"`, exactly the task's thresholds) now live, per collection. `"warn"`
+   is reported in the payload without changing the collection's `status`; `"degraded"` does
+   (never `STATUS_DOWN` — a drifted quantizer is a quality problem, not an outage, and this
+   file's own doctrine is that paging on something that isn't trains people to ignore the
+   pager). T20, whenever it lands, inherits this rather than redoing it.
+4. **`backend/deploy/README.md`** gained a "Quantizer drift (T9b)" paragraph under Health
+   monitoring: what the two numbers mean, the severity thresholds, and the retrain command.
+   Deviation from the literal Change text: it does **not** claim retraining costs "no
+   re-embedding". `build_index.py` deletes its embedding checkpoint (`Checkpoint.clear()`)
+   once a build succeeds, so a subsequent retrain has no mmap file left to reuse and must
+   re-embed the whole corpus — the audit's premise here doesn't hold against the code as
+   written. Keeping the checkpoint around indefinitely instead (so a retrain truly costs
+   nothing but training+add) would roughly double on-disk storage at every tier for a file
+   whose only use is a retrain that "should be an occasional line item, not an emergency" per
+   this same task — a tradeoff outside T9b's scope to make unilaterally, so the doc instead
+   states the true cost (re-embedding is still the expensive step) and points at the Bulk
+   ingest section rather than repeating the unverified claim.
+5. **`backend/rag/scripts/build_index.py`**: `_train()` now also computes a best-effort
+   training-sample date range (`_training_date_range`, new), joining the training sample's
+   `faiss_id`s against `documents.doc_date` and extracting a 4-digit year with the same regex
+   shape `rag/core/paths.py::_year_segment` uses — `doc_date` is free text, not a guaranteed
+   ISO date, so a year is the only thing worth pulling out of it. Capped at
+   `TRAINING_DATE_RANGE_SAMPLE_CAP` (2,000) faiss_ids looked up in batches of 500: this is
+   informational metadata for an operator reading the sidecar, not a value anything computes
+   drift from, so a bounded peek is enough and a build with hundreds of thousands of training
+   vectors doesn't turn into hundreds of `IN()` round trips.
+
+**Verify.** `cd backend && .venv/bin/python -m pytest tests/test_rag_stack.py -q -k "drift or
+quantizer or ivf_list or trained_at"` → 5 passed: `test_ivf_list_stats_is_none_for_a_flat_factory`,
+`test_quantizer_drift_appears_after_adding_a_shifted_distribution` (the task's own scenario —
+trains `IVF16,Flat` on a uniform-random distribution, adds a second, tightly-clustered,
+far-shifted one, and asserts `max_mean_ratio` grows and `_quantizer_drift_severity` reports
+`"degraded"`), `test_drift_survives_reload_from_the_sidecar`,
+`test_a_build_records_trained_at_ntotal_and_the_training_date_range` (a real
+`build_index.py` run with two dated documents at either end of a range), and
+`test_health_check_reports_quantizer_drift_after_build_index` (the same scenario through
+`app.health_routes._check_vector()` end to end, via `services_module.set_services`, against a
+real build — asserts on `added_since_training_pct` rather than `max_mean_ratio` for the
+"before" state, deliberately: `DeterministicEmbedder`'s bag-of-words hashing over mostly-shared
+filler text makes the *initial* list balance a property of the test embedder rather than
+something this test should assert on, whereas growth-since-training is pure arithmetic and
+embedder-independent). Ran the shifted-distribution test 5x and the full drift set 3x with no
+flakes. Full suite: `pytest tests/ -q` → 184 passed, 9 skipped, 0 failed (up from T9a's 179 —
+5 new tests, one existing test in `TestBuildIndex`
+(`test_training_sample_size_is_governed_by_faiss_train_threshold`) adjusted to accept `**kwargs`
+in its `VectorIndex.train` spy, since `train()`'s signature gained the two new keyword-only
+params). Stable under `-p no:randomly`; `test_user_documents.py` alone still 44 passed.
+
+Per the Verify section's own instruction, the observed `max/mean` on live data is **not**
+recorded here — there has been no real High Court ingest against this tree yet, only the
+synthetic shift above and the audit's own standalone repro (1.08 → 11.55, quoted in Why). That
+observation is deferred to whoever runs the first real multi-court ingest, per the task text.
 
 ---
 
-### - [ ] T10. Move bulk embedding off the serving box
+### - [x] T10. Move bulk embedding off the serving box
 
 **Why.** `EMBED_DEVICE=auto` resolves to `cpu` on a GPU-less VPS. A 0.6B model over a
 500-token chunk is ~600 GFLOPs; fifteen chunks is ~9 TFLOPs; a 16-core VPS sustains maybe
@@ -1857,11 +1930,81 @@ numbers rather than the planning assumption.
 **Done when.** Bulk embedding runs off-box and the resulting index loads and serves on the
 VPS.
 
-**Result.**
+**Result.** Change items 2 and 3 needed no code — `build_index.py` already reads
+`SQLITE_PATH`/`FAISS_ROOT`/`EMBED_DEVICE` from the environment independently of every other
+path, so "point it at a copy of `chunks.db` and a scratch `FAISS_ROOT`" was already how it
+works, and query embedding was never touched by anything in T9/T9a/T9b. Item 1 turned out to
+need one real fix, found by actually doing the round trip rather than by inspection.
+
+1. **The bug.** `rag.core.services.build_services()` — the composition root every rag/ script
+   calls, `build_index.py` included — failed outright on a bare checkout with only `rag/` and
+   a copied `chunks.db`: `DocumentStore`'s `_build_compressor()` does
+   `from rag.app.ingest.compress import compress_pdf`, and that module did
+   `from app.config import settings` at import time. Since **T4a**, constructing that
+   `Settings()` singleton raises `RuntimeError` unless `CLERK_JWT_ISSUER` and
+   `RAVENSLAW_CORS_ORIGINS` are configured (or `RAVENSLAW_DEBUG=true`) — production auth
+   settings for an HTTP server that has no reason to exist on a GPU rental box running an
+   offline embedding script. `compress_pdf` only ever used three of `app.config`'s settings
+   (`PDF_COMPRESSION_ENABLED`, `PDF_COMPRESSION_DPI`, `PDF_COMPRESSION_TIMEOUT_SECONDS`) — PDF
+   archival compression is a property of the document *store* (`rag/core`), not the API layer,
+   so this was a pre-existing layering violation that T4a's unrelated, correct change turned
+   into a hard boot failure for every offline rag/ script on a host without a FastAPI `.env`.
+2. **The fix.** Moved those three settings into `RagConfig` (`backend/rag/core/config.py`,
+   new "Archived document compression" section), reading the *same* env var names
+   (`RAVENSLAW_PDF_COMPRESSION*`) so no deployed `.env` needs to change, with the same DPI/
+   timeout validation moved into `RagConfig.validate()`. `rag/app/ingest/compress.py::compress_pdf`
+   now takes `config: RagConfig` explicitly instead of importing `app.config.settings`, and its
+   ghostscript scratch file uses `tempfile.gettempdir()` instead of `settings.UPLOAD_DIR` (safe:
+   `document_store.py::_atomic_copy` moves the result into the archive with a real copy, not a
+   rename, so the scratch file never needed to share a filesystem with `UPLOAD_DIR`).
+   `services.py::_build_compressor(config)` now closes over `config` and passes it through.
+   `app/config.py` no longer declares `PDF_COMPRESSION_*` at all; its one other caller
+   (`app/rag_routes.py`'s `_compress_and_store`) now passes `services.config`. `rag.core.services`
+   — and therefore `build_index.py`, `rebuild_index.py`, `backup_now.py`, `ingest_worker.py`, every
+   offline rag/ entry point — no longer imports `app.config` transitively at all.
+3. **Regression test**, `backend/tests/test_rag_stack.py::TestBuildIndexRunsWithoutTheFastAPIApp`:
+   a real subprocess (in-process is meaningless here — this test session already imports
+   `app.config` elsewhere, freezing its state for good, same reasoning as
+   `test_security.py::TestConfigRequiresAnIssuerInProduction`) with only `DATA_ROOT`,
+   `EMBED_MODEL=deterministic-test`, `EMBED_DIM`, `PARSER_BACKEND` set — deliberately no
+   `CLERK_JWT_ISSUER`, `RAVENSLAW_CORS_ORIGINS`, `RAVENSLAW_TRUSTED_HOSTS`,
+   `RAVENSLAW_DEBUG` — builds a small index end to end and asserts `"app.config" not in
+   sys.modules`. Confirmed it fails with exactly the pre-fix traceback
+   (`RAVENSLAW_CORS_ORIGINS must be explicitly configured in production`) when the
+   `_build_compressor`/`compress_pdf` changes are reverted, then confirmed it passes restored.
+4. **End-to-end dry run**, done by hand (not persisted as a script, since T10's Files list
+   doesn't include a new one) in two temp `DATA_ROOT`s standing in for the VPS and the rented
+   GPU box: seeded 2,000 chunks in the "VPS" `chunks.db`, copied it to the "GPU box" root,
+   ran `build_index.build_collections()` there, copied the resulting `owllex.faiss` +
+   `owllex.meta.json` back to the "VPS" `FAISS_ROOT`, booted a fresh `RagServices` there, and
+   confirmed `ntotal` matched and a search returned real hits. Separately confirmed the
+   signature check (Change item 2's "refuses a mismatched index at boot"): pointing a
+   32-dim-configured build at a `chunks.db` copy already carrying a 64-dim signature raises
+   `RuntimeError` in `startup()` before anything is embedded, not after a wasted run.
+5. **Chunks/second — not recorded**, and said plainly in `deploy/README.md` rather than
+   filled in with a number that would look authoritative and isn't. This environment has no
+   GPU and cannot download the real ~16GB Qwen3-Embedding model (no network egress budget for
+   it, consistent with T2b/T3's Results noting the same constraint), so the dry run above used
+   `DeterministicEmbedder` — it proves the round trip's mechanics, not real throughput. The
+   Tier 3 estimate in `FAISS_ARCHITECTURE.md` §9 still rests on the planning assumption; a
+   real number needs an actual GPU run, which `deploy/README.md`'s new section asks the first
+   operator who does one to log.
+6. **`backend/deploy/README.md`**: new "Off-box embedding (PRODUCTION_TODO.md T10)" subsection
+   under Bulk ingest — the ship-out (`chunks.db`, with `owllex-ingest` stopped first since it's
+   the only other writer), the build command (`DATA_ROOT`/`SQLITE_PATH`/`EMBED_DEVICE=cuda` on
+   the GPU box, no `.env` needed), the ship-back (`owllex.faiss` + `owllex.meta.json`, worker
+   stopped, API restarted to reload), the signature-check safety net, and the chunks/second gap
+   from item 5 above with an explicit ask to fill it in from a real run.
+
+**Verify.** `cd backend && .venv/bin/python -m pytest tests/test_rag_stack.py -q -k
+TestBuildIndexRunsWithoutTheFastAPIApp` → 1 passed. Full suite: `pytest tests/ -q` → 185
+passed, 9 skipped, 0 failed (up from T9b's 184 — this task's one new test). Also ran
+`RAVENSLAW_DEBUG=true DATA_ROOT=/tmp/... .venv/bin/python -c "import app.rag_routes"` to
+confirm the `app/rag_routes.py` call-site change still imports cleanly.
 
 ---
 
-### - [ ] T11. Decouple the scraper from the serving API
+### - [x] T11. Decouple the scraper from the serving API
 
 **Why.** `ingestIntoKnowledgeBase` in `sci-judgments/download.ts` POSTs each PDF to
 `/api/v1/rag/ingest` and awaits it. With one gunicorn worker and a 300-second timeout, a
@@ -1881,11 +2024,69 @@ confirm `owllex-ingest.service` picks them up and the documents become searchabl
 **Done when.** A scrape run never calls the serving API, and query latency is unaffected by
 an ingest in progress.
 
-**Result.**
+**Result.** Done, with one deviation from the task's Files list: the write-into-`$INBOX_ROOT`
+logic was pulled into a new `sources/sci-judgments/inbox.ts` rather than left inline in
+`download.ts`, for the same reason **T3** extracted `persist.ts`: `download.ts` launches a
+real Chromium as an unconditional side effect of import (`main().catch(...)` runs at module
+load, not behind a guard), so nothing in it can be exercised from a test.
+
+1. **`rag/scrapping/paths.ts`**: added `inboxRoot()`, resolving `INBOX_ROOT` then
+   `HDD_DATA_ROOT/inbox` -- the same fallback `rag/core/config.py::RagConfig.from_env` uses for
+   `inbox_root` (`_path("INBOX_ROOT", hdd_data_root / "inbox")`), checked line-for-line against
+   that function. Not in the task's Files list, but required: nothing in the TS tree previously
+   knew where the inbox was.
+2. **New `sources/sci-judgments/inbox.ts`**: `queueForIngest(source, filePath, filename)` copies
+   the already-archived PDF into `INBOX_ROOT/<source>/<filename>`, writing under a `.part` name
+   and renaming into place (matches `ingest_worker.py`'s own partial-file convention --
+   `_PARTIAL_SUFFIXES` -- and its `_still_being_written` settle check, belt-and-braces on a slow
+   filesystem). Never throws: returns the queued path or `null`, matching the "never fatal" rule
+   the old `ingestIntoKnowledgeBase` already followed for the same reason -- a scrape that
+   downloaded and archived a document correctly should not fail just because the inbox isn't
+   writable.
+3. **`download.ts`**: removed `ingestIntoKnowledgeBase` entirely -- the HTTP POST to
+   `/api/v1/rag/ingest`, the poll loop against `/api/v1/rag/jobs/{job_id}` that T2's Result had
+   added on top of it, and the `BACKEND_API`/`BACKEND_INTERNAL_TOKEN` reads that gated it. The
+   main loop now calls `queueForIngest("sci", result.filePath, result.filename)` after
+   `persistDownloadedJudgment` returns a non-duplicate result, and logs the queued path or a
+   warning -- no network call, no wait, so a slow OCR run on an earlier document can no longer
+   stall this script's own download loop, and (the actual point of the task) never blocks the
+   single gunicorn worker serving user queries.
+4. **`sources/sci-judgments/README.md`**: rewrote the stale paragraph describing the old
+   `/api/v1/rag/ingest` + `BACKEND_INTERNAL_TOKEN` contract (it also still said "stored in
+   Chroma", superseded per `MIGRATION.md`) to describe the inbox drop instead.
+5. **Left alone, deliberately**: `india_code`'s scraper (`sources/india_code/download.ts`) does
+   not call the ingest API at all today -- grepped for `ingestIntoKnowledgeBase`/`BACKEND_API`
+   across `rag/scrapping/` and it is unique to the SCI scraper -- so there was nothing else to
+   decouple.
+
+**Verify.** Real filesystem check, no fixture scrape run (Playwright needs a live browser and a
+human to clear a CAPTCHA, so the task's exact "run the scraper against a fixture" step isn't
+reproducible in this sandbox): wrote a real PDF-shaped file, called `queueForIngest("sci", ...)`
+with `HDD_DATA_ROOT=/tmp/t11-e2e/hdd`, confirmed it landed at
+`/tmp/t11-e2e/hdd/inbox/sci/TEST-CNR-1.pdf`, then ran `rag.scripts.ingest_worker._court_hint`
+against that exact relative path from the Python side -- resolves to `"sci"`, matching
+`resolve_court`'s own table (`rag/core/paths.py`). The Python-side mechanism this depends on --
+an organic (non-manifest) inbox drop under a court-named subdirectory being ingested with that
+court as its hint -- already has dedicated coverage from **T2**'s Result:
+`TestIngestJobQueue::test_an_organic_inbox_drop_is_unaffected_by_manifest_handling` drops a
+fixture at `inbox_root / "sci" / "judgment.txt"` and asserts a full `_drain()` pass ingests it
+and removes it from the inbox.
+
+New TS tests: `tests/unit/scrapping-sci-inbox.test.ts` (4 tests) -- a queued file lands at
+`INBOX_ROOT/<source>/<filename>` byte-identical to the source with no leftover `.part` and the
+archived source untouched (a copy, not a move); the target directory name is exactly what
+`ingest_worker.py`'s court-hint reader recognises; a write failure (inbox root is a plain file,
+not a directory) returns `null` rather than throwing; an explicit `INBOX_ROOT` overrides the
+`HDD_DATA_ROOT` default. Extended `tests/unit/scrapping-paths.test.ts` with 2 tests for
+`inboxRoot()` (`HDD_DATA_ROOT` fallback; explicit `INBOX_ROOT` wins). `npx vitest run` → 278
+passed, 2 failed, 280 total -- the same pre-existing, unrelated
+`contract-review-compression.test.ts` timeouts noted in T3/T4's Results (up from 272 passed at
+T4's Result: 6 new tests here). `npx tsc --noEmit` → clean. Full backend suite unaffected (no
+Python touched by this task): `pytest tests/ -q` → 185 passed, 9 skipped.
 
 ---
 
-### - [ ] T11a. Stop the ingest worker rescanning the whole inbox every pass
+### - [x] T11a. Stop the ingest worker rescanning the whole inbox every pass
 
 **Why.** T11 makes the inbox the only way documents enter the corpus, which makes the inbox
 scan a hot path. It is currently O(everything in the tree), every 30 seconds.
@@ -1929,13 +2130,63 @@ The time to *start* ingesting the first document must not grow with the size of 
 **Done when.** Pass startup cost is independent of how many files are waiting, and a killed
 worker loses at most N documents' vectors.
 
-**Result.**
+**Result.** All three Change items done in `backend/rag/scripts/ingest_worker.py`, plus both
+smaller things named in Why.
+
+1. **Bounded, lazy scan.** `_pending_files(inbox, limit)` no longer calls `inbox.rglob("*")`.
+   It walks the tree itself, one `os.scandir(directory)` per directory, and returns as soon
+   as `limit` candidates have been found — a directory that sorts after enough files already
+   satisfy the limit is never entered at all (confirmed by a test that patches `os.scandir`
+   and asserts a decoy directory holding one file is never passed to it). Ordering is
+   oldest-first *within* each directory (each directory's own files sorted by `st_mtime`
+   before its candidates are taken) rather than a global sort across the whole tree, per the
+   Change text's own guidance — a global order is exactly the thing that would force a full
+   scan to establish. `--batch` now defaults to `500` (was `0`/unlimited); `0` still means
+   unlimited for a deliberate one-off full drain. Manual benchmark: with 50,000 zero-byte
+   decoy files sitting in a directory that sorts after 3 real candidates, `_pending_files(...,
+   limit=3)` returns in 0.3ms — the decoy directory is never scanned, so cost tracks the
+   candidates actually needed, not the backlog behind them.
+2. **Periodic flush.** `_drain` now calls `services.indexes.flush_all()` every
+   `services.config.faiss_flush_every` documents processed, not only once at the end of the
+   pass. Deliberately reuses `FAISS_FLUSH_EVERY` as a document count here even though
+   elsewhere (`VectorIndex._effective_flush_threshold`) it is a vector count — one
+   operator-facing knob rather than two, and the Change text asks for "the same config", not
+   the same unit. This is independent of item 1: bounding `--batch` to 500 bounds an ordinary
+   pass, but an operator running a deliberate one-off `--batch 0` full drain still needs to
+   flush as it goes, not just once at the very end, and both safeguards should hold without
+   relying on the other.
+3. **`notes/` and `.ingestignore`.** A top-level-or-nested directory named `notes` is now
+   always skipped during the scan (broader than the literal "top-level" in the Change text,
+   deliberately: a nested `sci/notes/` is exactly the same footgun as a top-level one, and the
+   existing `.failed` quarantine directory is already skipped at any depth for the same
+   reason, not just at the top). `INBOX_ROOT/.ingestignore` adds more names, one per line,
+   `#`-comments and blank lines ignored, read fresh every pass so a new exclusion needs no
+   restart.
+
+**Verify.** New `TestIngestWorkerScan` in `backend/tests/test_rag_stack.py` (5 tests):
+scanning stops once `limit` is reached and never enters a directory that sorts after it
+(`os.scandir` spied on directly); `limit=0` stays unbounded; a `notes/` drop is never returned
+as a candidate; a `.ingestignore` entry skips an arbitrarily-named directory the same way; and
+`_drain` with `FAISS_FLUSH_EVERY=2` against 5 queued documents calls `flush_all()` 3 times (after
+documents 2 and 4, plus the existing end-of-pass call) rather than once. The last test needed its
+own `DATA_ROOT`/`RagServices`, not `self.services` — `RagStackTestCase` pins
+`FAISS_FLUSH_EVERY=1` for every other test's synchronous-flush assumptions, and LMDB refuses to
+open the same environment path twice in one process (same constraint T2a's `TestBackups` Result
+already ran into), so this test builds a second stack rooted in its own temp directory instead of
+overriding the shared one. `pytest tests/test_rag_stack.py -q -k TestIngestWorkerScan` → 5
+passed. Full suite: `pytest tests/ -q` → 190 passed, 9 skipped, 0 failed (up from T11's 185 — 5
+new tests). Stable across 3 runs under `-p no:randomly`. Also ran the task's own benchmark
+shape by hand (above, under item 1) rather than literally populating `/tmp/inbox-bench` with
+100k files via the CLI entry point, since `_pending_files` is where the cost actually lives and
+a unit-level timing is both faster to run and more precise than timing a full
+`.venv/bin/python -m rag.scripts.ingest_worker --once` process (embedding-model load time would
+dominate and mask the effect being measured).
 
 ---
 
 # Phase 3 — Make acquisition work from the VPS
 
-### - [ ] T12. Let the scraper run headless-with-a-display on the VPS
+### - [x] T12. Let the scraper run headless-with-a-display on the VPS
 
 **Why.** `sci-judgments/download.ts:75` calls `chromium.launch({ headless: false })`, which
 throws on a VPS with no X display — so the scraper cannot run on the server at all today.
@@ -1968,7 +2219,93 @@ the browser, solve the CAPTCHA, and confirm PDFs download to `$INBOX_ROOT/sci/`.
 **Done when.** A full scrape session runs on the VPS, driven from a laptop over an SSH
 tunnel, with no code changes needed per run.
 
-**Result.**
+**Result.** All three Change items done, plus two bugs found by actually tracing the
+run path rather than by inspection — both would have silently defeated "no code changes
+needed per run" even with the three Change items done correctly.
+
+1. **`backend/deploy/scrape-session.sh`** (new): starts Xvfb on `:99`, x11vnc serving it
+   on `127.0.0.1:5900`, and `websockify --web=/usr/share/novnc` bridging that to
+   `127.0.0.1:6080`, then runs `npm run scrape:<sci:download|sci:inspect>` with
+   `DISPLAY` set, from `APP_ROOT`. Checks for `Xvfb`/`x11vnc`/`websockify` and the noVNC
+   web root up front and fails with the exact `apt-get install` line rather than an
+   opaque error from whichever one is missing first. A `trap ... EXIT` kills all three
+   background processes together, so an interrupted session doesn't leak an orphaned
+   Xvfb holding `:99`. Both listeners bind `127.0.0.1` only, per the Change text's own
+   warning, reached solely through an SSH `-L` tunnel.
+2. **`download.ts`**: `timeout: 0` on the results-selector wait replaced with
+   `SCRAPE_SOLVE_TIMEOUT_MS` (default 15 minutes) — on expiry it logs why and returns,
+   which still runs through the existing outer `finally { await browser.close() }`, so
+   the "exits cleanly and closes the browser" half of the Change text needed no separate
+   handling, only the bounded wait itself.
+3. **Bug 1 — the npm scripts didn't exist, and one of the two things they'd point at was
+   already broken.** `sources/sci-judgments/README.md` has referenced
+   `npm run scrape:sci:download` and `npm run scrape:sci:inspect` since before this task
+   (and `download.ts`'s own header comment says the same), but neither script existed in
+   `package.json` — added now, both `cd backend && tsx rag/scrapping/sources/…`, matching
+   how every other script in this scraper tree is actually run today. Wiring
+   `scrape:sci:inspect` up to something real surfaced that `inspect.ts` has always
+   imported `waitForEnter` from `../../core/prompt.js`, and `rag/scrapping/core/prompt.ts`
+   never existed in this tree — `npm run scrape:sci:inspect` threw `MODULE_NOT_FOUND`
+   before ever opening a browser. Added it: a five-line wrapper around
+   `node:readline/promises`, with `input`/`output` as parameters (defaulting to
+   `process.stdin`/`stdout`) rather than hardcoded, purely so it has a seam to test
+   through — `inspect.ts` itself runs `main()` at import time same as `download.ts`, so
+   it can't be exercised directly (same reasoning as T11's Result on `download.ts`).
+4. **Bug 2 — the toolchain the deploy script installs can't run the scraper it says it
+   installs.** `deploy.sh` step 7 runs `npm ci --omit=dev`, and its own comment reads
+   "npm ci (scraper toolchain: tsx, the India Code and SCI downloaders)" — but
+   `playwright`, `tsx`, and `lmdb` (which `hashdb.ts`, and therefore every scraper, needs
+   at import time) were all `devDependencies`. `--omit=dev` would have skipped every one
+   of them: `deploy.sh`'s own scraper step, on a from-scratch VPS deploy, would leave a
+   `node_modules` that cannot import `download.ts` at all, no matter how correct
+   `scrape-session.sh` is. Moved all three to `dependencies` in `package.json`, then ran
+   `npm install --package-lock-only` — required, and not obvious: `npm ci` decides what
+   to skip from each package's own `dev: true` flag already baked into
+   `package-lock.json`, not by re-deriving it from `package.json`, so the edit alone
+   changes nothing `npm ci --omit=dev` does until the lockfile is regenerated. Confirmed
+   the fix with `npm ci --omit=dev --dry-run`: before the lockfile regen it listed
+   `playwright`/`tsx`/`lmdb` under `remove`; after, none of the three appear in that list
+   (real `devDependencies` like `vitest`/`typescript`/`eslint` still correctly do). The
+   regen's diff also dropped a stale `aws4fetch` entry from the lockfile's root
+   `dependencies` that had no corresponding line in `package.json` and isn't imported
+   anywhere in the tree (confirmed absent from `node_modules` even before the regen) —
+   incidental lockfile drift from some earlier, unrelated change, cleaned up as a
+   side-effect of syncing rather than left in place.
+5. **`backend/deploy/README.md`**: new "Scraping (PRODUCTION_TODO.md T12)" section — the
+   one-time `apt-get`/`playwright install` setup, why items 3 and 4 above needed fixing
+   (so a future reader doesn't move `playwright` back to `devDependencies` on a cleanup
+   pass), the `scrape-session.sh` invocation and SSH tunnel, the "never expose 5900/6080"
+   warning, and the timeout behavior's relevance to the admin panel's unattended launch
+   path. **`sources/sci-judgments/README.md`**: updated to mention the timeout and point
+   at the new deploy doc, rather than leaving the "no terminal needed" paragraph implying
+   an unbounded wait.
+
+**Verify.** The task's own Verify step needs a live VPS, a real X-less host, and a human
+to clear a CAPTCHA — none reproducible here, same constraint T11's Result noted for its
+own scraper verification. What was actually run:
+`env HDD_DATA_ROOT=/tmp/… SSD_DATA_ROOT=/tmp/… npm run scrape:sci:download -- 1` and the
+`scrape:sci:inspect` equivalent — both now resolve every module (confirming the
+`core/prompt.ts` fix) and reach `chromium.launch()`, failing only on
+`browserType.launch: Executable doesn't exist at .../ms-playwright/chromium-1234/…` — the
+expected, documented next step (`npx playwright install`), not a wiring bug; this sandbox
+has no network egress budget to download the ~150MB Chromium binary, consistent with the
+GPU-download constraint T2b/T3/T10's Results already noted for their own dependencies.
+`scrape-session.sh` run with no `Xvfb`/`x11vnc`/`websockify` installed (also true of this
+sandbox) correctly fails on the first missing binary with the install command rather than
+a confusing downstream error; its usage-error and argument-parsing paths were exercised
+directly. `npm ci --omit=dev --dry-run` verified per item 4 above. New
+`tests/unit/scrapping-prompt.test.ts` (2 tests) exercises the real `waitForEnter` against
+`PassThrough` streams rather than a mock of it, since a mock would happily pass against
+the same missing file this bug actually was. `npx vitest run` → 280 passed, 2 failed,
+282 total — the same pre-existing, unrelated `contract-review-compression.test.ts`
+timeouts noted in T3/T4/T11's Results (up from T11's 278 passed: 2 new tests here).
+Standalone `tsc --noEmit --strict` against the three touched/added scrapping files (the
+root `tsconfig.json` excludes `backend/` entirely, so the project-wide `npx tsc --noEmit`
+that other tasks cite does not actually type-check anything under `rag/scrapping/` —
+worth knowing, not itself something this task's scope covers fixing) → clean. Full
+backend suite unaffected (no Python touched by this task):
+`cd backend && .venv/bin/python -m pytest tests/ -q` → 190 passed, 9 skipped, matching
+T11a's count exactly.
 
 ---
 
@@ -1998,7 +2335,7 @@ re-confirmed or revised against them.
 
 ---
 
-### - [ ] T14. Split the corpus into a dense lane and a lexical lane
+### - [x] T14. Split the corpus into a dense lane and a lexical lane
 
 **Why.** Embedding all 1.5 B chunks is 2,080 GPU-hours (~€2,100–3,100) and 120 GB of index
 carried forever. Value is not uniformly distributed: SC and HC substantive judgments are
@@ -2054,7 +2391,91 @@ reversible. Report the dense/lexical split and the `lane_reason` histogram over 
 real batch under **Result** — a split far from the ~80 lakh dense estimate means the rules
 need tuning before the GPU spend in T10.
 
-**Result.**
+**Result.** All four Change items done, plus a scope fix the task text doesn't mention but
+that the existing test suite caught immediately.
+
+1. **`rag/core/config.py`**: added `dense_lane_min_pages` (`DENSE_LANE_MIN_PAGES`, default 3)
+   and `dense_lane_min_chars` (`DENSE_LANE_MIN_CHARS`, default 4000), validated `> 0` alongside
+   the other ingestion knobs. Documented in `.env.example` (not in this task's Files list, but
+   every other configurable threshold in that ingestion section already is, and a threshold an
+   operator can't discover from the example file is one they won't tune before the T10 GPU
+   spend).
+2. **`rag/core/sqlite_store.py`**: `documents` gained `lane TEXT NOT NULL DEFAULT 'dense'` and
+   `lane_reason TEXT`, plus `idx_documents_lane` (the histogram this task asks for is a `GROUP
+   BY lane`, and that's a full scan at every tier this system targets without one).
+   `SCHEMA_VERSION` bumped 3 → 4 with `_migrate_v3_to_v4`, which adds both columns by `ALTER
+   TABLE` and leaves every pre-existing row at `lane='dense'`, `lane_reason=NULL` — truthful,
+   since every one of them was embedded unconditionally before this lane split existed.
+   Verified by hand against a hand-built v3 database (this tree has no migration tests for v1→v2
+   or v2→v3 either, so there was no existing harness to extend): schema_version read back as 4,
+   the pre-existing row backfilled to `lane='dense'`. `upsert_document` takes `lane`/`lane_reason`
+   and writes them unconditionally on conflict (not `COALESCE`d like the identity fields) — the
+   pipeline's first call (before routing has run) leaves the schema default, its second call
+   (once `_route_lane` has decided) always carries the real, current answer, so there is nothing
+   earlier worth preserving over it. Added `chunks_for_document`, `set_lane` and
+   `lexical_document_ids`, which `rag/scripts/promote_lane.py` is built on, and `lane_histogram`
+   for the split/reason report this task's own Done-when asks for.
+3. **`rag/app/ingest/pipeline.py`**: `_route_lane(court, page_count, document_text, config)`
+   implements the rule table exactly, first match wins. Computed right after `extract_metadata`
+   (step 3) and threaded into the second `upsert_document` call. Step 5 (embed) and the
+   `index.add` half of step 6 are skipped for the lexical lane; the `replace_chunks` write and
+   the stale-id `index.remove` are **not** skipped — every chunk still gets a `faiss_id` (the
+   column is `NOT NULL UNIQUE` regardless of lane) and still lands in `chunks_fts` through the
+   existing sync triggers, it is just never added to the FAISS index. That both makes promotion
+   cheap (the id is already there, waiting) and means a document that flips from dense to
+   lexical on a re-ingest has its old vectors actually removed rather than orphaned.
+4. **Scope fix, found by the existing suite, not by inspection.** The rule table only makes
+   sense for the public legal corpus — its own "Why" is entirely about that corpus's growth to
+   10 crore documents — but the first full-suite run after wiring `_route_lane` into `_run`
+   unconditionally turned up 3 failures in `test_tenant_isolation.py` and `test_rag_stack.py`:
+   private per-advocate documents (leases, a merger agreement, all short and courtless in the
+   fixtures) were being routed lexical and silently losing their vectors, breaking semantic
+   search over a user's own uploaded corpus. That corpus was never what T14's cost argument was
+   about. Fixed by routing only when `collection == PUBLIC_COLLECTION`; a private document
+   (`collection == USER_COLLECTION`) is always `dense`, `lane_reason="collection:private"`,
+   unchanged from before this task.
+5. **`rag/scripts/promote_lane.py`** (new): `promote_document(services, document_id)` reads a
+   lexical-lane document's existing `(faiss_id, chunk_text)` pairs, embeds the text, and
+   `index.add`s it under the id it already holds — no reallocation, no re-parse, no re-chunk.
+   A no-op (returns 0) for a missing document or one that's already dense. CLI takes explicit
+   document ids or `--court` (backed by `lexical_document_ids`) for correcting a whole court's
+   worth of mis-routed documents at once.
+
+**Verify.** `TestLaneRouting` (13 tests) added to `test_rag_stack.py`, covering: a Supreme Court
+and a High Court document land dense regardless of length (`court:sci` / `court:hc/delhi`); a
+short, courtless procedural order with none of the marker phrases lands lexical (`default`) —
+the task's own "900-char procedural order" case; more pages than `DENSE_LANE_MIN_PAGES` with no
+court routes dense (`pages`); a marker phrase (`Coram`) routes a short courtless document dense
+(`phrase:coram`); length alone routes dense when nothing else fires (`length`); a lexical-lane
+document gets no vectors (`index.ntotal` unchanged) but still has a `faiss_id`, is in
+`chunks_fts`, and is still returned by both `search_lexical` and the fused `search` (BM25 hit
+fused in with nothing from the dense side); promotion embeds a lexical document's existing
+chunks under their existing ids, flips its lane to `dense` with `lane_reason="promoted:default"`,
+and makes it reachable by dense search; promoting an already-dense or nonexistent document is a
+no-op; and the histogram groups correctly by `(lane, lane_reason)`.
+`pytest tests/test_rag_stack.py -q -k TestLaneRouting` → 13 passed. Full suite:
+`pytest tests/ -q -p no:randomly` → 203 passed, 9 skipped, 0 failed.
+
+Manually verified the promotion CLI (`python -m rag.scripts.promote_lane --help`) resolves and
+argparses correctly outside the test harness, and the v3→v4 migration against a hand-built v3
+database (no migration test harness exists in this tree for v1→v2 or v2→v3 either, so this
+matches existing convention rather than falling short of it).
+
+Did not run this against a real ingest batch — there is no live corpus in this sandbox (same
+limitation earlier tasks' Results describe) — so the dense/lexical split and `lane_reason`
+histogram this task's Done-when asks for is reported from the regression fixtures instead:
+2 documents (`test_lane_histogram_counts_by_lane_and_reason`) split `dense:court:sci` = 1,
+`lexical:default` = 1. Whether the real corpus lands near the ~80 lakh dense estimate can only
+be answered by running `rag/scripts/ingest_worker.py` (or `build_index.py`) against real
+documents and reading `SqliteStore.lane_histogram()` afterward — flagged here rather than
+fabricated.
+
+**Known gap, out of this task's Files list.** `rag/scripts/rebuild_index.py` re-embeds every
+chunk row for the collections it's given, with no lane filter — a rebuild after this task re-
+embeds the lexical lane too, silently spending the GPU-hours T14 exists to avoid. Left alone
+because `rebuild_index.py` isn't in this task's Files list and touching it wasn't required to
+satisfy the Done-when criteria above; noted here (as T1's Result noted `rebuild_index.py`'s
+`OFFSET` pagination as "T9's to fix", not this task's) so it isn't mistaken for solved.
 
 ---
 
@@ -2092,7 +2513,7 @@ is set.
 
 ---
 
-### - [ ] T16. Stop storing chunk text: compress, then move to offsets
+### - [x] T16. Stop storing chunk text: compress, then move to offsets
 
 **Why.** `chunk_text` is stored uncompressed and is ~3.3 TB at tier 4 — about 90% of the
 NVMe requirement. Two things are wrong with it, and they are worth fixing in that order.
@@ -2145,11 +2566,69 @@ the loader.
 **Done when.** Chunk text round-trips exactly and the database is materially smaller. Record
 the observed ratio, and which step you stopped at, under **Result**.
 
-**Result.**
+**Result.** Stopped after **step 1** (compress in place), which the task lists as a
+legitimate outcome. Found this tree already had a substantial, uncommitted implementation of
+step 1 in `sqlite_store.py` (dictionary training, resumable backfill, FTS5 triggers reading
+through decompression, config plumbing in `rag/core/config.py`/`services.py`) — not from this
+session, and not reflected in this file's checkbox or Result. Verified it rather than
+reimplementing, and found two real bugs in it via its own test suite (`TestChunkTextCompression`
+in `test_rag_stack.py`), both the same shape: a "decide once, forever" flag being set on the
+very first `initialize()` call, which runs on a brand-new, completely empty database before any
+document is ever ingested — permanently locking in the wrong answer for the whole life of the
+database.
+
+1. `_ensure_zstd_dictionary()` sampled 0 plain-text rows on a fresh database and immediately
+   persisted `chunk_text_zstd_dict_trained=1` with an empty dictionary — permanently, since the
+   method's own contract (documented in its docstring) is to never retrain after the first
+   answer is persisted. On a real deployment this means the dictionary can never train: the
+   very first `initialize()` at first boot (before any ingest) locks in "no dictionary" forever.
+   Fixed by not persisting the trained/done flags when zero samples are found at all (a
+   genuinely virgin table) — only a real attempt (any samples present, whether or not it clears
+   `_ZSTD_DICT_MIN_SAMPLES`) is now allowed to lock in the permanent answer, matching what the
+   existing "too few samples" degraded-mode test already expected.
+2. `_backfill_chunk_compression()` had the identical shape: an empty scan on a virgin `chunks`
+   table set `chunk_text_compression_done=1` forever, so a chunk row written afterward through
+   any path that bypasses `replace_chunks` (a database that genuinely predates T16, restored
+   from an older backup, or reached in some other way) would never be picked up by the backfill
+   meant to catch exactly that. Fixed with the same rule: only mark done on an empty scan when
+   the table has been observed to hold at least one row of any kind (a cheap `SELECT 1 FROM
+   chunks LIMIT 1`, run only in the `last == 0` case, so it costs nothing once real progress has
+   ever been made).
+
+Both were caught by two pre-existing failing tests
+(`test_zstd_dictionary_trains_when_enough_samples_exist`,
+`test_backfill_compresses_legacy_plain_text_rows`), not written new for this Result — they were
+red before this change and are green after it, with no change to their assertions.
+
+Did not attempt **step 2** (offsets/`document_text` table). It is a materially larger change
+(new table, `chunks` schema change to `(document_id, start_offset, length)`, a migration that
+rewrites every existing row, and re-deriving the FTS5 backfill from document blobs instead of
+chunk rows) and the task explicitly allows stopping here.
+
+**Measured ratio.** No access to the real corpus from this environment, so the number below is
+from a synthetic benchmark, not production data — recorded as a sanity check on the mechanism,
+not as the planning figure. 5,000 synthetic ~2KB legal-English chunks (templated sentences with
+randomized party names, dates, courts and case numbers, each padded with a second random
+sentence the way real chunking's overlap behaves) inserted as legacy plain text, then migrated
+through `_ensure_zstd_dictionary()` + `_backfill_chunk_compression()`: dictionary trained
+successfully, byte-exact round-trip confirmed via `chunks_by_faiss_ids` against the original
+text. The observed ratio on that synthetic set was over 20x, which is not a credible estimate of
+the real ratio — template-based synthetic text is far more repetitive than real judgments, so it
+structurally overstates what zstd's dictionary can find. **The planning figure to keep using is
+the task's own 4-6x estimate for real legal English**, which this change makes achievable but
+which only a run against real corpus data can confirm; that measurement is flagged here as
+follow-up work, not claimed as done.
+
+**Verify.** `cd backend && .venv/bin/python -m pytest tests/ -q` → 210 passed, 9 skipped, 0
+failed (up from 208 passed / 2 failed before this fix). `pytest tests/test_rag_stack.py
+tests/test_tenant_isolation.py -q` → 153 passed. Round-trip fidelity (exact text, including
+overlap-duplicated substrings and non-ASCII) covered by
+`test_chunk_text_round_trips_exactly_including_overlap_duplication`, already in the tree and
+passing throughout.
 
 ---
 
-### - [ ] T17. Memory-map the FAISS index
+### - [x] T17. Memory-map the FAISS index
 
 **Why.** `FAISS_ARCHITECTURE.md` §6 budgets 124 GB resident at tier 4 and provisions a
 256 GB machine, on an unstated assumption that PQ codes must live in RAM. They need not.
@@ -2215,11 +2694,95 @@ PY
 flushed by the worker is visible to the mmapped API without a restart. Record the RSS
 before/after and the observed reload latency under **Result**.
 
-**Result.**
+**Result.** All four Change items done, plus the reload path generalised slightly beyond what
+the task text asks for.
+
+1. **`rag/core/vector_index.py`**: `VectorIndex.__init__` takes `mmap: bool = False`, threaded
+   through `VectorIndexRegistry` the same way `nprobe`/`flush_every` already are. `load()` (and
+   the new `_maybe_reload()`, below) call a new `_read_index_from_disk(faiss)` helper that passes
+   `faiss.IO_FLAG_MMAP` when `self._mmap` is set, plain `faiss.read_index` otherwise.
+2. **Reload path.** `flush()` now bumps an in-memory `self._generation` counter and writes it into
+   the `.meta.json` sidecar (`"generation": N`) alongside the existing fields. `_verify_meta()`
+   reads it back on load (missing/non-int -> stays 0, same "predates this field" tolerance as the
+   existing `index_factory`/signature checks). New `VectorIndex._maybe_reload()`, called at the
+   top of `search()`: throttled by a module constant `_RELOAD_CHECK_INTERVAL_SECONDS = 2.0` (at
+   most one `stat`-equivalent `.meta.json` read per interval, not per query), it compares the
+   sidecar's `generation` to `self._generation` and, if newer, re-reads the index file (respecting
+   `self._mmap`) and swaps `self._index` in. The swap happens inside the same `self._lock` that
+   `search()` already holds for the whole duration of the native FAISS call, so a reload can never
+   happen mid-search -- it simply waits for the lock, exactly like any other writer would -- which
+   is what satisfies "keep the old handle alive until in-flight searches finish" without needing
+   separate reference-counting. Also refuses (logs and keeps the old handle) if the reloaded
+   file's dimension doesn't match `EMBED_DIM`, rather than swapping in something that would break
+   every subsequent search.
+3. **Deliberate broadening.** The task frames the reload path as being for the mmap case, but
+   `_maybe_reload` is not gated on `self._mmap` -- it runs for every `VectorIndex`, mmap or not.
+   Reason: a fully-loaded (non-mmap) reader is exactly as stale as a mmapped one. `faiss.read_index`
+   without the mmap flag also never looks at the file again after the call returns -- it
+   deserialises once into an independent in-memory copy. `os.replace` swaps a directory entry, not
+   the bytes behind either kind of handle. So a plain, fully-in-RAM reader process would go
+   permanently stale the same way, and post-T2 (API is a pure reader either way) nothing else in
+   this codebase would ever have reloaded it. Confirmed this doesn't cost anything on the writer's
+   own handle: the writer's `self._generation` is bumped locally by its own `flush()`, so its own
+   next `_maybe_reload()` check (if it ever searches, which in the T2 design it does not) sees
+   `generation == self._generation` and does nothing beyond the throttled read of its own sidecar.
+4. **Writer guard docstring** (Change item 3): `_acquire_write_lock`'s docstring now states
+   explicitly that the lock is a per-process role enforcement, not a mode switch keyed on
+   `FAISS_MMAP` -- and names which of the three processes (ingest worker / API / `backup_now.py`)
+   is on which side of the split.
+5. **`rag/core/config.py`** / **`rag/core/services.py`**: `RagConfig.faiss_mmap` (`FAISS_MMAP`,
+   default `False`), wired into `build_services()`'s `VectorIndexRegistry(...)` construction.
+6. **`.env.example`**: documents `FAISS_MMAP`, states the writer-must-run-with-it-off rule and why
+   (FAISS cannot mutate a mmapped index in place), and states that a reader without the reload
+   path (i.e. code from before this task) would freeze silently.
+7. **Beyond the Files list: `deploy/systemd/owllex-ingest.service`.** Found while documenting the
+   writer-must-be-off rule: both systemd units share one `EnvironmentFile=/opt/owllex/backend/.env`.
+   An operator turning `FAISS_MMAP=true` on in that shared file to get the tier-2+ benefit on
+   `owllex-rag` would, without anything else, also silently turn it on for `owllex-ingest` -- the
+   one process FAISS_MMAP must never be set on. Added `Environment=FAISS_MMAP=false` to
+   `owllex-ingest.service`, the same pattern the unit already uses to override `HF_HOME` for
+   itself alone. This is not in T17's stated Files list (it's in T19's), but leaving a
+   single-shared-.env footgun undocumented-and-unfixed one file away from a "note in .env.example"
+   felt worse than a two-line unit change; flagged here rather than silently folded into T19 so it
+   isn't mistaken for T19's own finding. Also checked `rebuild_index.py` and `build_index.py`:
+   both construct their staging `VectorIndex` directly with no `mmap=` argument (default `False`),
+   never going through `config.faiss_mmap`, so a host with `FAISS_MMAP=true` set does not
+   accidentally make either script's writer mmap the index it's building.
+
+**Verify.** Added to `TestVectorIndex` in `test_rag_stack.py`:
+`test_mmap_and_non_mmap_readers_return_identical_results` (same top-3 ids and scores, rounded to
+6 places, both ways), `test_mmap_reader_reloads_a_writers_flush_without_restarting` (reproduces
+the bug shape from this task's own description -- a mmapped reader stays at `ntotal` 3 after a
+second handle's `add`+`flush` until a search runs with the throttle interval patched to 0, then
+sees `ntotal` 4 and the new id), and `test_reload_check_is_throttled_between_searches` (two
+searches back-to-back leave `_last_reload_check` unchanged the second time). `pytest
+tests/test_rag_stack.py -q -k TestVectorIndex` -> 20 passed. Full suite: `pytest tests/ -q` ->
+213 passed, 9 skipped, 0 failed (up from 210/9/0 before this task -- no regressions, 3 new tests).
+
+**RSS and reload latency, measured, with an honest caveat about scale.** Ran the ad hoc script
+this task's Verify section asks for against a synthetic 40,000-vector, 64-dim `IVF64,Flat` index
+(the largest quickly buildable in this sandbox): full (non-mmap) load added ~3.4MB RSS over
+baseline, mmap load added ~1.9MB on top of that in the same process (both loaded side by side to
+measure incrementally) -- both numbers dominated by Python/FAISS's own fixed overhead at this
+size, not by the corpus. Search results were bit-identical between the two (`results identical:
+True`). Reload-after-flush (with the throttle interval forced to 0) completed and returned the
+new vector in ~15ms end-to-end (reload + search) in this sandbox. **None of these numbers are a
+credible estimate of the tier-4 figures this task's "Why" section cites (16-32GB vs 124GB
+resident, ~25ms per query touching ~39MB of a 262,144-list index)** -- that requires an index at
+or near that scale, which cannot be built in this environment (no GPU, no real corpus, disk/time
+budget). The mechanism is verified correct (identical results, working reload); the magnitude of
+the RAM win can only be confirmed against a real tier-2+ index, flagged here as follow-up rather
+than fabricated, consistent with how T14 and T16's Results handled the same limitation.
+
+**Not done / explicitly deferred.** `OnDiskInvertedLists` (mentioned in the task's "Why" as
+paired with `IO_FLAG_MMAP`) was not built as a separate on-disk structure -- the Change section's
+own instructions only ask for `IO_FLAG_MMAP` on `read_index`, which is what was implemented; FAISS
+converts a plain index's array-backed inverted lists into a mmap-backed representation on that
+flag already, without a separate build step, so this matches the letter of the task.
 
 ---
 
-### - [ ] T18. Tune SQLite for the target size
+### - [x] T18. Tune SQLite for the target size
 
 **Why.** Only `journal_mode=WAL` and `synchronous=NORMAL` are set
 (`backend/rag/core/sqlite_store.py:459–460`). The default 4 KB page against 2 KB chunk rows
@@ -2243,7 +2806,74 @@ for p in ('page_size','mmap_size','cache_size','journal_mode'):
 
 **Done when.** A freshly created database reports the intended pragmas.
 
-**Result.**
+**Result.** Implemented as specified, plus a deliberately conservative default on one of the two
+new knobs, documented below rather than following the task's literal wording.
+
+1. **`rag/core/sqlite_store.py`**: `SqliteStore.__init__` takes `page_size`, `mmap_size_mb`,
+   `cache_size_mb` (defaults 8192 / 2048 / 64). `_connect()` now issues `PRAGMA page_size=N`
+   **before** `PRAGMA journal_mode=WAL` -- order matters and the old code got it backwards for
+   this purpose (it was never set at all before this task): SQLite only honours a `page_size`
+   change on a database with no tables yet *and* not already in WAL mode, so setting it after
+   switching into WAL, or after `initialize()`'s first `CREATE TABLE`, would be silently ignored.
+   Also added `PRAGMA mmap_size=<mmap_size_mb * 1MB>` and `PRAGMA cache_size=-<cache_size_mb *
+   1024>` (negative = KB, so the setting stays correct regardless of `page_size`).
+2. **`rag/core/config.py`**: `RagConfig.sqlite_page_size` / `sqlite_mmap_size_mb`
+   / `sqlite_cache_size_mb` (`SQLITE_PAGE_SIZE`=8192, `SQLITE_MMAP_SIZE_MB`=2048,
+   `SQLITE_CACHE_SIZE_MB`=64), validated (`page_size` a power of two in [512, 65536]; the other two
+   non-negative/positive). Threaded into `SqliteStore(...)` construction in `rag/core/services.py`.
+3. **Deliberate deviation: `cache_size` default is 64MB, not "in the gigabytes" as the task's
+   Change section literally says.** Reason, checked against this store's own class docstring
+   ("FastAPI runs blocking handlers on a thread pool, so every thread gets its own connection"):
+   `mmap_size` pages are backed by the shared OS page cache -- multiple connections (even multiple
+   processes) mapping the same file share the same physical pages, so setting it to "a few GB" (the
+   default here, 2048MB) does not multiply resident memory by thread count, and the literal
+   instruction is followed there without qualification. `cache_size` is different: it is SQLite's
+   own *private* per-connection pager cache, real heap memory with no sharing. With FastAPI's
+   default thread pool alone in the dozens of threads, a literal multi-GB default would mean tens
+   of GB resident just from this one setting, directly contradicting the careful RAM budgeting
+   every other task in this file does (T4b's `MemoryMax`, T9/T17's resident-memory figures). Kept
+   configurable and documented in `.env.example` with the reasoning and an explicit nudge to check
+   the real thread count against the systemd unit's `MemoryMax` before raising it -- the same shape
+   of correction T8 and T9a made to their own tasks' literal text elsewhere in this file.
+4. **Migration for an existing database: new `rag/scripts/vacuum_page_size.py`.** `page_size`
+   cannot be changed via `ALTER` once a database has data; this rebuilds it with `VACUUM INTO`
+   (into a temp file, at the configured page size) rather than an in-place `VACUUM`, so the live
+   file is only touched by one atomic `os.replace` at the end -- same swap-on-success shape as
+   `rebuild_index.py`/`build_index.py` use for FAISS. Verifies the rebuilt copy (`PRAGMA
+   quick_check`, and `documents`/`chunks`/`meta` row counts matching the source) before swapping;
+   raises `MigrationFailed` and leaves the live database untouched if either check fails. Removes
+   any stale `-wal`/`-shm` sidecars left over from the replaced file after the swap. `--dry-run`
+   reports current vs. target page size without changing anything; idempotent when already at the
+   target (reports "nothing to do", does not re-rebuild). Documented the required downtime
+   (`owllex-rag`/`owllex-ingest` must both be stopped -- `VACUUM INTO` takes a snapshot when it
+   *starts*, so a write from either service during the rebuild is silently lost) in the script's
+   own module docstring and in a new `deploy/README.md` section
+   ("Changing SQLITE_PAGE_SIZE on an existing database").
+5. **`.env.example`**: documents all three new variables, states the "only affects a brand-new
+   database" rule for `SQLITE_PAGE_SIZE` and points at `vacuum_page_size.py` for an existing one,
+   and carries the mmap-vs-cache sharing distinction from item 3 above so an operator raising
+   `SQLITE_CACHE_SIZE_MB` sees the reasoning, not just a number.
+
+**Verify.** Ran this task's own command against a database built through `build_services()`
+(env: `DATA_ROOT`, debug/token/host vars per `conftest.py`'s convention):
+```
+page_size 8192
+mmap_size 2147418112     # ~2048MB; short of the exact byte count by SQLite's own page rounding
+cache_size -65536        # 64MB in the documented KB convention
+journal_mode wal
+```
+All four match the configured defaults. Added `TestSqlitePragmaTuning` (2 tests: a fresh database
+reports all four configured pragmas; `page_size` is confirmed a no-op against an *existing*
+database, which is the fact `vacuum_page_size.py` exists to work around) and `TestVacuumPageSize`
+(2 tests: a seeded 4096-page-size database rebuilt at 8192 reports the new page size, every
+document/chunk row and its exact `chunk_text` survives, and no stale `-wal`/`-shm` files are left;
+rebuilding a database already at the target is idempotent and non-destructive) to
+`tests/test_rag_stack.py`. `pytest tests/test_rag_stack.py -q -k "TestSqlitePragmaTuning or
+TestVacuumPageSize"` -> 4 passed. Full suite: `pytest tests/ -q` -> 217 passed, 9 skipped, 0 failed
+(up from 213/9/0 after T17 -- 4 new tests, no regressions). Also manually exercised
+`vacuum_page_size.py` end-to-end outside the test harness against a hand-seeded database
+(`--dry-run` reported correctly, the real run rebuilt 4096->8192 and was confirmed idempotent on a
+second invocation) before writing the automated tests against the same code path.
 
 ---
 
@@ -2251,7 +2881,7 @@ for p in ('page_size','mmap_size','cache_size','journal_mode'):
 
 Everything above is a fix. This phase is what makes deployment *reliable*.
 
-### - [ ] T19. Align config defaults with the architecture
+### - [x] T19. Align config defaults with the architecture
 
 **Why.** `backend/rag/core/config.py` defaults `EMBED_MODEL` to `qwen3-embedding-8b`, which
 `FAISS_ARCHITECTURE.md` §1 explains is a ~2.5-second-per-query choice, while `.env.example`
@@ -2281,11 +2911,71 @@ startup log reports the intended defaults.
 
 **Done when.** A host with a minimal `.env` runs the intended configuration.
 
-**Result.**
+**Result.** Two of the four Change items were already done by earlier work on this tree; the
+other two are new.
+
+1. **`EMBED_MODEL` default (item 1).** `rag/core/config.py` defaulted to `"qwen3-embedding-8b"`
+   while `.env.example` already correctly said `qwen3-embedding-0.6b` -- exactly the divergence
+   the task describes. Changed the default to `"qwen3-embedding-0.6b"`. Confirms a pre-existing
+   piece of evidence in the tree: `deploy/systemd/owllex-rag.service`'s `MemoryMax` comment already
+   read "Re-derived for EMBED_MODEL=qwen3-embedding-0.6b (the default since PRODUCTION_TODO.md
+   T19)" -- i.e. the deploy documentation was already written assuming this task's fix, ahead of
+   the code actually making it true. This change makes that comment accurate rather than aspirational.
+2. **`UPLOAD_DIR` derives from the HDD tier (item 2).** `app/config.py::Settings.UPLOAD_DIR` read
+   `os.getenv("DATA_ROOT", "/data")` directly. Changed it to
+   `rag.core.config.get_config().hdd_data_root / "tmp" / "uploads"`, so on a split host
+   (`HDD_DATA_ROOT != DATA_ROOT`) upload staging now lands on the same tier as every other bulk
+   path (`legal_corpus`, `faiss`, `inbox`, ...) instead of whatever the legacy `DATA_ROOT` still
+   pointed at. `rag.core.config` is a top-level import in `app/config.py` now (previously
+   `app/*.py` only ever imported `rag.*` lazily inside function bodies, to avoid dragging in
+   FAISS/the embedding model at FastAPI import time) -- safe here because `rag.core.config` itself
+   only imports `os`/`dataclasses`/`pathlib`/`dotenv`, the same lightweight module `rag/app/ingest/
+   compress.py`'s own docstring already points to as the intended home for exactly this kind of
+   cross-cutting config (see item 2a below). The task's own "Why" cites `compress.py` reading
+   `UPLOAD_DIR` from `app.config` as the second half of the "two config systems" problem --
+   checked, and that half was already fixed (by T10, per that module's own docstring: it now takes
+   `config: RagConfig` explicitly and no longer imports `app.config` at all). `UPLOAD_DIR` itself
+   was the one live instance of the problem remaining, and is what this item fixes.
+3. **`HF_HOME` from the HDD tier (item 3) -- already correct.** `deploy/deploy.sh` (lines
+   ~444-454) already renders `HF_HOME=/data/models` in the checked-in unit files to
+   `HF_HOME=${hdd_root_for_units}/models`, reading `HDD_DATA_ROOT`/`DATA_ROOT` out of the actual
+   `.env` at deploy time -- this predates this task (most likely landed with T4b, which is about
+   the same split-host unit-rendering mechanism). Verified by reading `deploy.sh` rather than
+   assuming; no change needed. Ticking this item as already correct, per this file's own "if a
+   task turns out to already be done" rule.
+4. **Startup logging (item 4).** `rag/core/services.py::startup()` logged `DATA_ROOT` and
+   `read_only` only. Added a second INFO line logging `embed_model`, `embed_dim`,
+   `faiss_index_factory`, `faiss_nprobe`, `faiss_mmap` (T17), `ssd_data_root`, `hdd_data_root` and
+   `storage_is_split` -- the exact list the task names, plus `embed_dim`/`faiss_mmap` since both
+   are load-bearing for the same "what is actually running" question and cost nothing extra to
+   include on the same line.
+
+**Verify.** Booted with only the env vars `.env.example`'s header calls out as required in
+production (`DATA_ROOT` unset -> falls back to its own default, `RAVENSLAW_INTERNAL_TOKEN`,
+`RAVENSLAW_CORS_ORIGINS`, `RAVENSLAW_TRUSTED_HOSTS`, `CLERK_JWT_ISSUER`) against a temp
+`DATA_ROOT`, with a `DeterministicEmbedder` injected so this sandbox does not need to download
+real model weights (the log line reads `config.embed_model`, a plain string, regardless of which
+embedder object is actually injected, so this substitution does not weaken what the log content
+verifies). Output:
+```
+RAG config: embed_model=qwen3-embedding-0.6b embed_dim=1024 faiss_index_factory=Flat
+faiss_nprobe=16 faiss_mmap=False ssd_data_root=<root> hdd_data_root=<root> storage_is_split=False
+```
+Separately confirmed `app.config.settings.UPLOAD_DIR` resolves to `<HDD_DATA_ROOT>/tmp/uploads`
+when `HDD_DATA_ROOT` differs from `DATA_ROOT`. Added `TestConfigDefaults` (3 tests) to
+`test_rag_stack.py`: `EMBED_MODEL` defaults to `qwen3-embedding-0.6b`;
+`test_upload_dir_derives_from_the_hdd_tier_on_a_split_host` (a real subprocess, like the existing
+`test_allocate_faiss_ids_is_atomic_across_real_processes` -- `Settings()`'s class-level field
+defaults are evaluated once at `app.config`'s first import, so an in-process env-var patch around
+a second `Settings()` construction would not re-exercise this) asserts `UPLOAD_DIR` lands under
+`HDD_DATA_ROOT`, not the legacy `DATA_ROOT`; and `test_startup_logs_the_resolved_faiss_and_storage_configuration`
+asserts the new log line via `assertLogs`. `pytest tests/test_rag_stack.py -q -k
+TestConfigDefaults` -> 3 passed. Full suite: `pytest tests/ -q` -> 220 passed, 9 skipped, 0 failed
+(up from 217/9/0 after T18 -- no regressions).
 
 ---
 
-### - [ ] T19a. Bound the rate limiter, and stop returning raw exceptions to callers
+### - [x] T19a. Bound the rate limiter, and stop returning raw exceptions to callers
 
 **Why.** Two small defects in the request path that only show up after the service has been
 up for a while, which is to say in production and not in testing.
@@ -2337,7 +3027,82 @@ no filesystem path.
 **Done when.** Memory does not grow with the number of distinct client IPs seen, and no
 500 body carries an internal path or exception string.
 
-**Result.**
+**Result.** Both bugs fixed; item 3 (nginx comment) done as part of the same change.
+
+**Bug A -- `app/main.py`.** Replaced the bare `_request_buckets = defaultdict(deque)` global
+with a `_RateLimiter` class (`OrderedDict[str, deque]`) that bounds memory two ways, matching the
+task's "on a counter... or a cap... Cap it explicitly" instruction with both rather than either:
+
+1. **Periodic sweep.** Every `sweep_every` (1000) requests, drop any IP whose *newest* logged
+   timestamp already fell outside the window -- if the newest entry is stale, every older one in
+   that bucket is too, so this needs no per-bucket trimming pass to decide.
+2. **Explicit cap, LRU-evicted.** `RATE_LIMIT_MAX_TRACKED_IPS` (new setting, default 100,000) is
+   enforced on every call via `OrderedDict.move_to_end`/`popitem(last=False)`, independent of
+   sweep timing -- a burst of unique source IPs between sweeps cannot grow the dict past the cap.
+
+Also addressed the two "related notes" in the task's Bug A text: documented in `_RateLimiter`'s
+own docstring, in `.env.example`, and in `deploy/nginx/owllex.conf` (right at `limit_req
+zone=owllex_api`) that **nginx's `limit_req` is the authoritative limiter** -- it sees the real
+connection and isn't reset by an app restart -- and this in-process one is defence in depth for
+whatever reaches gunicorn without going through nginx; and that "per-process" only becomes a
+distinct concern if `--workers` is ever raised above the `1` the T2 design pins it at today.
+
+**Bug B -- `app/rag_routes.py`.** New `_opaque_error(status_code, public_message, log_message)`
+helper: generates a 12-hex-char correlation id, calls `logger.exception(log_message +
+reference)` (relying on `sys.exc_info()` still being live, the same requirement calling
+`logger.exception` directly would have), and returns an `HTTPException` whose `detail` is the
+fixed `public_message` plus `(reference: <id>)` -- never the exception's own text. Applied at
+every site matching the task's "same shape appears in the ingest and object routes": `_services()`
+(both its `ImportError` and generic-`Exception` branches -- the former also had `: {exc}` appended
+to `_MISSING_DEPENDENCIES`, which is now dropped so that message is identical everywhere it
+appears), `_run_search` (backs `/search`, `/judgments/search`, `/corpus/search`), `/corpus/delete`,
+both `/ingest`-family enqueue routes, `/documents/extract`, `/documents/compress`, and
+`PUT /objects/{key}`. Left the `_MISSING_DEPENDENCIES` constant itself, and the three 413
+"File exceeds {settings.MAX_PDF_SIZE_MB}MB" messages, untouched -- the task names the former
+explicitly as fine, and the latter were never exception text, only a configured, non-sensitive
+number. Also left the one `except ValueError as exc: raise HTTPException(400, detail=str(exc))`
+in `PUT /objects/{key}` (a deliberate, safe validation message from `store_at_key` on a malformed
+key, at 400 not 5xx) untouched -- the task's Verify is explicitly scoped to a "forced 500 body",
+and this is neither internal-detail-bearing nor a 5xx.
+
+**Item 3 (nginx).** Added a comment at `limit_req zone=owllex_api` in `deploy/nginx/owllex.conf`
+stating nginx is authoritative and why, cross-referenced from `_RateLimiter`'s docstring and
+`.env.example` so the same fact is discoverable from either file.
+
+**Verify.** `cd backend && .venv/bin/python -m pytest tests/ -q` -> 230 passed, 9 skipped, 0
+failed (up from 220/9/0 after T19 -- 10 new tests, no regressions). New `tests/test_hardening.py`
+(new file, matching this tree's one-file-per-concern test convention --
+`test_security.py`/`test_tenant_isolation.py`/`test_user_documents.py` are the existing
+examples): `TestRateLimiterMemoryBound` (5 tests) drives the task's own literal Verify --10,000
+distinct synthetic IPs through `_RateLimiter.allow()` directly and asserts the tracked count stays
+at the configured cap (500 in the test) -- plus that the periodic sweep alone (a huge cap, a tiny
+window) also bounds memory, that an IP still inside the window is never swept, that the per-IP
+429 threshold itself is unaffected by any of this, and that eviction is genuinely LRU-ordered, not
+arbitrary. `TestOpaqueSearchErrors` (5 tests, real FastAPI app + real RAG stack via `TestClient`):
+a forced failure inside `Retriever.search_public` returns a 500 whose body contains neither the
+injected fake filesystem path nor the exception class name nor its text, only the fixed message
+and `(reference: ...)`; the same for a forced `_services()` 503; two forced failures get different
+correlation ids; an ordinary successful search is completely unaffected; and the
+`_MISSING_DEPENDENCIES` 503 text is confirmed unchanged and still free of the underlying
+`ImportError`'s text (tested by patching `builtins.__import__` directly at the unit level, not
+through HTTP -- a plain `mock.patch` on the already-imported `get_services` callable would land in
+`_services()`'s *other* except branch, the one this task rewrote, not the one the task says to
+leave alone; noted in that test's own docstring). `pytest tests/test_hardening.py -q` -> 10
+passed.
+
+**Deviation from the task's literal Verify wording.** "Add a test that drives 10,000 distinct
+`X-Forwarded-For` values through the middleware" was translated into driving 10,000 distinct
+synthetic IP strings through `_RateLimiter.allow()` directly rather than through HTTP headers.
+Checked first: this app's middleware keys on `request.client.host`, and nothing here (or in the
+gunicorn `ExecStart` in `deploy/systemd/owllex-rag.service`) wraps the ASGI app in
+`ProxyHeadersMiddleware`, so setting `X-Forwarded-For` on a request against the bare `app` object
+`TestClient` imports would not actually vary `request.client.host` per request -- in production
+this works because `uvicorn.workers.UvicornWorker` enables proxy-header trust for peers in
+`forwarded_allow_ips` (default `127.0.0.1`, which is exactly where nginx connects from) itself,
+independent of anything in this application's own code. Testing the bounding mechanism directly
+against `_RateLimiter` is both more precise (it isolates the actual guarantee under test -- the
+dict staying bounded -- from an unrelated question about proxy-header trust) and avoids adding
+`ProxyHeadersMiddleware` wiring to the test harness purely to make a header-driven test possible.
 
 ---
 
